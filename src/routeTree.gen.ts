@@ -27,6 +27,10 @@ import { Route as ApiPeopleIdRouteImport } from './routes/api/people.$id'
 import { Route as ApiRewardRecordsPeriodRouteImport } from './routes/api/reward-records.$period'
 import { Route as ApiRosterPeriodRouteImport } from './routes/api/roster.$period'
 import { Route as ApiTargetCellsIdRouteImport } from './routes/api/target-cells.$id'
+import { Route as ApiChangesRouteImport } from './routes/api/changes'
+import { Route as ApiEKindRouteImport } from './routes/api/e.$kind'
+import { Route as ApiEKindK1RouteImport } from './routes/api/e.$kind.$k1'
+import { Route as ApiEKindK1K2RouteImport } from './routes/api/e.$kind.$k1.$k2'
 import { Route as ApiMonthRecordsPeriodPersonIdRouteImport } from './routes/api/month-records.$period.$personId'
 import { Route as ApiOrgKindIdRouteImport } from './routes/api/org.$kind.$id'
 import { Route as ApiRewardRecordsPeriodPersonIdRouteImport } from './routes/api/reward-records.$period.$personId'
@@ -126,6 +130,26 @@ const ApiTargetCellsIdRoute = ApiTargetCellsIdRouteImport.update({
   path: '/api/target-cells/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChangesRoute = ApiChangesRouteImport.update({
+  id: '/api/changes',
+  path: '/api/changes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEKindRoute = ApiEKindRouteImport.update({
+  id: '/api/e/$kind',
+  path: '/api/e/$kind',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEKindK1Route = ApiEKindK1RouteImport.update({
+  id: '/api/e/$kind/$k1',
+  path: '/api/e/$kind/$k1',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEKindK1K2Route = ApiEKindK1K2RouteImport.update({
+  id: '/api/e/$kind/$k1/$k2',
+  path: '/api/e/$kind/$k1/$k2',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMonthRecordsPeriodPersonIdRoute =
   ApiMonthRecordsPeriodPersonIdRouteImport.update({
     id: '/$personId',
@@ -191,6 +215,10 @@ export interface FileRoutesByFullPath {
   '/api/reward-records/$period': typeof ApiRewardRecordsPeriodRouteWithChildren
   '/api/roster/$period': typeof ApiRosterPeriodRouteWithChildren
   '/api/target-cells/$id': typeof ApiTargetCellsIdRoute
+  '/api/changes': typeof ApiChangesRoute
+  '/api/e/$kind': typeof ApiEKindRoute
+  '/api/e/$kind/$k1': typeof ApiEKindK1Route
+  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
   '/api/month-records/$period/$personId': typeof ApiMonthRecordsPeriodPersonIdRoute
   '/api/org/$kind/$id': typeof ApiOrgKindIdRoute
   '/api/reward-records/$period/$personId': typeof ApiRewardRecordsPeriodPersonIdRoute
@@ -219,6 +247,10 @@ export interface FileRoutesByTo {
   '/api/reward-records/$period': typeof ApiRewardRecordsPeriodRouteWithChildren
   '/api/roster/$period': typeof ApiRosterPeriodRouteWithChildren
   '/api/target-cells/$id': typeof ApiTargetCellsIdRoute
+  '/api/changes': typeof ApiChangesRoute
+  '/api/e/$kind': typeof ApiEKindRoute
+  '/api/e/$kind/$k1': typeof ApiEKindK1Route
+  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
   '/api/month-records/$period/$personId': typeof ApiMonthRecordsPeriodPersonIdRoute
   '/api/org/$kind/$id': typeof ApiOrgKindIdRoute
   '/api/reward-records/$period/$personId': typeof ApiRewardRecordsPeriodPersonIdRoute
@@ -248,6 +280,10 @@ export interface FileRoutesById {
   '/api/reward-records/$period': typeof ApiRewardRecordsPeriodRouteWithChildren
   '/api/roster/$period': typeof ApiRosterPeriodRouteWithChildren
   '/api/target-cells/$id': typeof ApiTargetCellsIdRoute
+  '/api/changes': typeof ApiChangesRoute
+  '/api/e/$kind': typeof ApiEKindRoute
+  '/api/e/$kind/$k1': typeof ApiEKindK1Route
+  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
   '/api/month-records/$period/$personId': typeof ApiMonthRecordsPeriodPersonIdRoute
   '/api/org/$kind/$id': typeof ApiOrgKindIdRoute
   '/api/reward-records/$period/$personId': typeof ApiRewardRecordsPeriodPersonIdRoute
@@ -278,6 +314,10 @@ export interface FileRouteTypes {
     | '/api/reward-records/$period'
     | '/api/roster/$period'
     | '/api/target-cells/$id'
+    | '/api/changes'
+    | '/api/e/$kind'
+    | '/api/e/$kind/$k1'
+    | '/api/e/$kind/$k1/$k2'
     | '/api/month-records/$period/$personId'
     | '/api/org/$kind/$id'
     | '/api/reward-records/$period/$personId'
@@ -306,6 +346,10 @@ export interface FileRouteTypes {
     | '/api/reward-records/$period'
     | '/api/roster/$period'
     | '/api/target-cells/$id'
+    | '/api/changes'
+    | '/api/e/$kind'
+    | '/api/e/$kind/$k1'
+    | '/api/e/$kind/$k1/$k2'
     | '/api/month-records/$period/$personId'
     | '/api/org/$kind/$id'
     | '/api/reward-records/$period/$personId'
@@ -334,6 +378,10 @@ export interface FileRouteTypes {
     | '/api/reward-records/$period'
     | '/api/roster/$period'
     | '/api/target-cells/$id'
+    | '/api/changes'
+    | '/api/e/$kind'
+    | '/api/e/$kind/$k1'
+    | '/api/e/$kind/$k1/$k2'
     | '/api/month-records/$period/$personId'
     | '/api/org/$kind/$id'
     | '/api/reward-records/$period/$personId'
@@ -361,6 +409,10 @@ export interface RootRouteChildren {
   ApiRewardRecordsPeriodRoute: typeof ApiRewardRecordsPeriodRouteWithChildren
   ApiRosterPeriodRoute: typeof ApiRosterPeriodRouteWithChildren
   ApiTargetCellsIdRoute: typeof ApiTargetCellsIdRoute
+  ApiChangesRoute: typeof ApiChangesRoute
+  ApiEKindRoute: typeof ApiEKindRoute
+  ApiEKindK1Route: typeof ApiEKindK1Route
+  ApiEKindK1K2Route: typeof ApiEKindK1K2Route
   ApiRosterBindKindSubjectIdRoute: typeof ApiRosterBindKindSubjectIdRouteWithChildren
 }
 
@@ -490,6 +542,34 @@ declare module '@tanstack/react-router' {
       path: '/api/target-cells/$id'
       fullPath: '/api/target-cells/$id'
       preLoaderRoute: typeof ApiTargetCellsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/changes': {
+      id: '/api/changes'
+      path: '/api/changes'
+      fullPath: '/api/changes'
+      preLoaderRoute: typeof ApiChangesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/e/$kind': {
+      id: '/api/e/$kind'
+      path: '/api/e/$kind'
+      fullPath: '/api/e/$kind'
+      preLoaderRoute: typeof ApiEKindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/e/$kind/$k1': {
+      id: '/api/e/$kind/$k1'
+      path: '/api/e/$kind/$k1'
+      fullPath: '/api/e/$kind/$k1'
+      preLoaderRoute: typeof ApiEKindK1RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/e/$kind/$k1/$k2': {
+      id: '/api/e/$kind/$k1/$k2'
+      path: '/api/e/$kind/$k1/$k2'
+      fullPath: '/api/e/$kind/$k1/$k2'
+      preLoaderRoute: typeof ApiEKindK1K2RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/month-records/$period/$personId': {
@@ -662,6 +742,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRewardRecordsPeriodRoute: ApiRewardRecordsPeriodRouteWithChildren,
   ApiRosterPeriodRoute: ApiRosterPeriodRouteWithChildren,
   ApiTargetCellsIdRoute: ApiTargetCellsIdRoute,
+  ApiChangesRoute: ApiChangesRoute,
+  ApiEKindRoute: ApiEKindRoute,
+  ApiEKindK1Route: ApiEKindK1Route,
+  ApiEKindK1K2Route: ApiEKindK1K2Route,
   ApiRosterBindKindSubjectIdRoute: ApiRosterBindKindSubjectIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport

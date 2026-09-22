@@ -2,7 +2,7 @@
 
 Product host is **https://apms.alienstattoo.in** (production SPA). `app.alienstattoo.in` is the older tree. This workspace is Aliens APMS, not a new app. Do not scaffold. Do not invent OT / CRDT / Yjs / Automerge / WebRTC. Do not disable multi-user.
 
-Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10 G9 still **0/3**. This tree is **p0as77** (sync; routes p0as72; login-view p0as68; wire p0aw1).
+Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10 G9 still **0/3**. This tree is **p0as78** (ROWS-V2: sync p0as78; routes p0as78; login-view p0as68; server p0aw2).
 
 ## LOCKS
 
@@ -19,6 +19,11 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - **People list** uses GET `/api/people?limit=80` (`q` / `sbu` optional). **Rewards month** uses GET `/api/reward-records/:period?limit=80`. **APMS month index** uses GET `/api/month-records/:period?limit=80`. **APMS scorecard / plan / execution / values** use GET `/api/month-records/:period/:personId`. **Org catalog screens** use GET `/api/org?kind=` / GET `/api/org/:kind/:id`. **org-person** uses GET `/api/people/:id`. **Trash** uses GET `/api/org?kind=trash`. After first hydrate those screens must not GET `/api/company` on focus, tick, or save. Home / People / Rewards must not GET month-records. Home / APMS / Rewards must not GET `/api/org`. Live still GETs the one row from `entities[]` **when that module’s screen is open**. GET `/api/company` is first login / backup / `?books=` / rare full assemble only.
 - **PATCH `/api/company` ignores those four collections.** Entity routes only.
 - **Entity PATCH OCC is row-rev only.** After a row commit: bump SSE/tick gens, invalidate GET wire / ETag (`at` = max(book, liveAt)), do not return 200 until assemble on this process includes that person/lock.
+- **ROWS-V2 (p0as78): every collection is a row.** Everything that is not people / records / rewardRecords / targetCells lives in `entities (kind, id, k1, k2, payload, rev)` — spec in `src/lib/apms-collections.js` (served as `/assets/apms-collections.js`, must load **before** `apms-sync.js`). Writes are `PATCH /api/e/:kind/:k1[/:k2]` with `baseRev`; SQL `where rev = $base returning` → 200 or 409 with the current row. **Book PATCH ignores every entity-owned field.** Row commits mirror into the book (`commitEntityRowToBook`), append to `entity_log`, `pg_notify('apms_entities')`, bump live gens. GET `/api/company` overlays entity rows over books (rows win). Restore re-imports rows from the file with `pruneMissing`. Kill switch `APMS_ENTITY_ROWS=off`.
+- **409 is a merge, never a retry-as-is.** Client `saveOneEntity`: base = last acked row, mine = local, theirs = server → `merge3` (field-level; nested objects and id-arrays recurse; only a same-field clash lets the local value win). Server-deleted row → the delete stands (my edit is dropped, screen corrected); never resurrect. A tombstone is re-created only with `baseRev = tombstone rev`; `baseRev 0` on a tombstone is 409.
+- **Followers use the change feed.** Any tick/SSE whose `at` moved → `GET /api/changes?since=<seq>&payload=1` → rows overlaid per row; a locally dirty row is 3-way merged and stays dirty. Acks of overlaid rows commit only after the UI took the snapshot (`commitPendingAcks`); a refused apply rewinds the cursor. Hydrate takes the cursor from `GET /api/changes?head=1`. `*` in the feed (restore) → full pull.
+- Org node PATCH/GET (`/api/org/:kind/:id`) goes through the row store (was a read-modify-write of the org book outside the lock → lost updates between two admins).
+- Stamp `scripts/stamp-p0as78-rows-v2.mjs`: the SPA `live-entity` apply also takes `pickDataFields(t)` (all row-owned fields), not only the four hot ones.
 - **pullLive** on a non-dirty client must merge the new person / reward row (`mergeKeepPeople` / month overlay). Dirty **other** person/month: still silent overlay. Dirty **same** personId+period: keep local draft, record-level conflict only. Do not skip the people slice because only an entity gen / live `at` changed. No whole-company replace.
 - **No global “Refresh to take their version” bar.** Idle users never see it. Settings / Home / Org never show it. Dismissed row conflict does not reopen on the next tick.
 - SSE `/api/company-live` must include `bookGens` and `entities`, not at-only.
@@ -109,8 +114,11 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - **ROSTER-LOCK** — 20 Sep 2026 08:13 IST. Stamp **p0as44**. Rewards month / APMS month / award instance store `rosterId` on `roster_binds`. Overlay reads that roster only. Org/people edits do not rebind. Admin `POST .../rebind` + audit. Files: `migrations/0007_roster_binds.sql`, `src/lib/company-roster-bind.ts`, `company-roster-bind-http.ts`, `company-roster-bind.test.ts`, `apms-roster.js`. See `REPORT-ROSTER-LOCK.md`.
 - **BOOT-PAREN** — 20 Sep 2026 08:19 IST. Stamp **p0as45**. Preview would not open: `SyntaxError: Unexpected token ')'` from an extra `)` after G9 `handleLiveEvent` in `routes-…p0ar.js`. Also repaired `apms-roster.js` `esc()`. See `REPORT-BOOT-PAREN.md`.
 
+- **ROWS-V2** — 22 Sep 2026 IST. Stamp **p0as78** (sync + routes), server **p0aw2**, migration `0008_entities.sql`. Every remaining collection (org catalog, roles, accessRoles, notices, trash, plans, kpiMaster, apmsPlans, awards, gateUnits, roleMonths, rewardRoleMonths, gateMonths, targets graph, settings scalars) is a row with its own rev. Per-row PATCH `/api/e/:kind/:k1[/:k2]`; 409 → 3-way field merge on the client (no blind retry, no whole-row overwrite); tombstones cannot be resurrected; change feed `/api/changes` replaces the 20-hint cap for these kinds. Org node PATCH race fixed. `invalidateCompanyWire` / `getCompanyWire` were used in `company-notebook.ts` without being imported (restore path would throw) — imported. PERF-TAB cap restored (≤20 row GETs per tick; in-flight hints not double-fetched). Tests: `company-entity-store.test.ts` (real Postgres via `scripts/mini-pg.mjs`), `rows-v2-client.test.ts` (client + real store end to end). See `REPORT-ROWS-V2.md`.
+
 ## OPEN
 
+- ROWS-V2: **done in tree (p0as78 / p0aw2), unit + real-Postgres tests pass. NOT built, NOT browser-tested, NOT on live.** This sandbox had no npm registry access, so `vite build` / two-browser Playwright have not run. Cut to staging (3010 / `aliens_apms_test`) first: first GET imports rows from books once (`[entities] imported from books` in the log).
 - **Live [https://apms.alienstattoo.in](https://apms.alienstattoo.in) is routes p0as39 + sync p0as14.** This tree is **p0as77**. Eng cut when asked (`NITRO_PRESET=node-server`). Keep `.env` + `aliens_apms`. This sandbox has no SSH.
 - G9-LIVE: **done in tree / unit tests. FAIL on live until p0as47/p0as51 is cut.**
 - LIVE-ROWS-PULL / LIVE-ENTITY-HINT: superseded by G9-LIVE (p0as42).
@@ -224,6 +232,8 @@ No fake live G9 pass.
 
 ## KNOWN BROKEN
 
+- ROWS-V2 untested in a browser: the p0as78 routes stamp (`pickDataFields` in the live-entity apply) parses (`node --check`) but has not been exercised in the SPA. If a generic field does not repaint after another user's save, check `window.__apmsSync.pickDataFields` exists and `/assets/apms-collections.js` loaded before `apms-sync.js`.
+- Passwords ride the company snapshot: `people[].password` and `logins{}.password` are in the wire every client downloads. Not touched by ROWS-V2 (out of scope) — should be stripped server-side.
 - Live G9 on p0as14: B entityGets=0 / pulls=55. Fixed in tree p0as69 (hop B: do not drop hints vs lastWireAt; hyphen URL; no company GET). Next LOAD-10 must be LIVE_SEES_HIRE 3/3, LIVE_SEES_LOCK 3/3, B entityGets >= 2.
 - This tree is not on Contabo. Hard refresh on live still loads p0as12/p0as14. Preview must load `routes-e2g7y5q8-13m-p0as72.js` and `apms-sync.js?v=p0as77`.
 - Two-browser Playwright smoke untested here (no signed-in live session in this sandbox).

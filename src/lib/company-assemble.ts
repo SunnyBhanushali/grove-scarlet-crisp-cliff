@@ -6,6 +6,7 @@ import {
   type HotSql,
   type PersonPeriodRow,
 } from "./company-hot-tables.ts";
+import { ENTITY_OWNED_FIELDS } from "./apms-collections.ts";
 
 /** These four collections are owned by hot rows, not book PATCH. */
 export const ROW_OWNED_FIELDS = ["people", "records", "rewardRecords", "targetCells"] as const;
@@ -156,10 +157,16 @@ export function stripRowOwnedFromBooks(
   return out;
 }
 
-/** Strip row-owned incoming writes, but keep stored maps so book PATCH cannot tombstone them. */
+/**
+ * Strip row-owned incoming writes, but keep stored maps so book PATCH cannot
+ * tombstone them. ROWS-V2: every generic-entity field is row-owned too — a
+ * book PATCH from any client is ignored for those fields; the row endpoints
+ * are the only writers.
+ */
 export function prepareBookPatch(
   books: Partial<Record<BookId, Snapshot | undefined>>,
   stored: Snapshot,
+  entityOwned: ReadonlySet<string> = ENTITY_OWNED_FIELDS,
 ): Partial<Record<BookId, Snapshot>> {
   const stripped = stripRowOwnedFromBooks(books);
   if (stripped.targets) {
@@ -171,6 +178,16 @@ export function prepareBookPatch(
       records: stored.records,
       rewardRecords: stored.rewardRecords,
     };
+  }
+  for (const [id, payload] of Object.entries(stripped) as [BookId, Snapshot][]) {
+    let next: Snapshot | null = null;
+    for (const field of Object.keys(payload)) {
+      if (!entityOwned.has(field)) continue;
+      if (!next) next = { ...payload };
+      if (stored[field] === undefined) delete next[field];
+      else next[field] = stored[field];
+    }
+    if (next) stripped[id] = next;
   }
   return stripped;
 }
@@ -313,7 +330,14 @@ export async function assembleForGet(sql: HotSql, snapshot: Snapshot): Promise<{
     lastAssembleMeta = meta;
     return { snapshot: normalizeCompanySnapshot(snapshot), meta };
   }
-  const overlaid = normalizeCompanySnapshot(overlayHotSlices(snapshot, slices));
+  let overlaid = normalizeCompanySnapshot(overlayHotSlices(snapshot, slices));
+  // ROWS-V2: generic entity rows are the authority for the remaining fields.
+  try {
+    const { overlayEntityFields } = await import("./company-entities-v2.ts");
+    overlaid = await overlayEntityFields(sql, overlaid, async () => snapshot);
+  } catch (err) {
+    console.error("[assemble] entity overlay failed; using books for generic fields", err);
+  }
   const assembledPeople = flattenPeople(overlaid.people).length;
   const meta: AssembleMeta = {
     source: "rows",

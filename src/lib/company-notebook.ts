@@ -20,6 +20,8 @@ import {
 import { slimForWire } from "./company-wire-slim";
 import {
   encodeCompanyWire,
+  getCompanyWire,
+  invalidateCompanyWire,
   noteWireAssemble,
   setWireAssembler,
   softInvalidateCompanyWire,
@@ -314,6 +316,35 @@ export async function applyEntityBookSlice(opts: {
   }
 }
 
+/**
+ * ROWS-V2 mirror: after a generic entity row commits, patch that one row into
+ * its book so book readers (backups, org slices, restore) stay coherent.
+ * Serialized on the book; never 409s; does not notify (the caller publishes).
+ */
+export async function commitEntityRowToBook(
+  spec: { field: string; book: BookId; shape: string; kind: string },
+  row: { kind: string; id: string; k1: string | null; k2: string | null; payload: Record<string, unknown>; rev: number; deleted: boolean },
+): Promise<Record<string, number>> {
+  const { collections } = await import("./apms-collections");
+  const run = async () => {
+    const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+    const next: Snapshot = { ...existing };
+    const cspec = collections.specForField(spec.field);
+    if (cspec) {
+      const value = collections.applyRow(cspec, existing[spec.field], row, row.deleted);
+      if (value === undefined) delete next[spec.field];
+      else next[spec.field] = value;
+    }
+    const gens = normalizeBookGens(existing);
+    next.bookGens = { ...gens, [spec.book]: (Number(gens[spec.book]) || 0) + 1 };
+    next.notebookUpdatedAt = Date.now();
+    const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, existing));
+    const assembled = await persistBooks(merged, "replace", [spec.book]);
+    return normalizeBookGens(assembled) as Record<string, number>;
+  };
+  return enqueueBooks([spec.book], run);
+}
+
 /** Org book only — no assembleForGet / no people overlay. */
 export async function readOrgBook(): Promise<Snapshot> {
   const rows = await loadBookRows();
@@ -560,6 +591,13 @@ async function replaceCompanySnapshotUnlocked(
   const importSnap: Snapshot = { ...toWrite };
   if (countTargetCells(importSnap) < 1) delete importSnap.targetCells;
   await importHotTables(await getSql(), importSnap, { updatedBy: "restore" });
+  // ROWS-V2: the restored file is now the authority for every generic row.
+  try {
+    const { importEntitiesFromSnapshot } = await import("./company-entity-store");
+    await importEntitiesFromSnapshot(await getSql(), toWrite, "restore", { pruneMissing: true });
+  } catch (err) {
+    console.error("[entities] restore import failed; books restored, rows may lag", err);
+  }
   if (countTargetCells(incoming) > 0) {
     const { snapshot } = await assembleForGet(await getSql(), assembled);
     const got = new Set(targetCellKeys(snapshot));

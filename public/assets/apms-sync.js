@@ -2,7 +2,7 @@
  * Aliens APMS per-book sync (Google Docs / Zoho grade).
  * PATCH only dirty books with baseGen. 409 rebases that book. Live pulls
  * only clean books whose generation moved. UI nav never rides the wire.
- * Stamp: p0as77 — MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
+ * Stamp: p0as78 — ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
  */
 (function (global) {
   "use strict";
@@ -119,6 +119,197 @@
   var lastSaveMeta = null;
   var lastPullMeta = null;
   var saveQueues = emptyBooks(Promise.resolve());
+
+  // ROWS-V2 — generic row sync for every collection described in apms-collections.js.
+  var C = global.__apmsCollections || null;
+  var liveSeq = 0;
+  var lastChangesAt = 0;
+  var changesInFlight = null;
+  var lastMergeTrace = [];
+
+  function fieldBook(field) {
+    for (var i = 0; i < BOOK_IDS.length; i++) {
+      if (BOOK_FIELDS[BOOK_IDS[i]].indexOf(field) >= 0) return BOOK_IDS[i];
+    }
+    return null;
+  }
+
+  function rowsById(spec, value) {
+    var map = {};
+    if (!C) return map;
+    C.toRows(spec, value).forEach(function (row) {
+      map[row.id] = row;
+    });
+    return map;
+  }
+
+  function isObjArrayWithIds(v) {
+    if (!Array.isArray(v) || !v.length) return false;
+    for (var i = 0; i < v.length; i++) {
+      if (!isPlainObject(v[i]) || v[i].id === undefined || v[i].id === null) return false;
+    }
+    return true;
+  }
+  function idArrayOrEmpty(v) {
+    return Array.isArray(v) && (v.length === 0 || isObjArrayWithIds(v));
+  }
+  function mergeableIdArrays(mine, theirs) {
+    return idArrayOrEmpty(mine) && idArrayOrEmpty(theirs) && (isObjArrayWithIds(mine) || isObjArrayWithIds(theirs));
+  }
+
+  /**
+   * Three-way merge of one row: base = what this client last had acked,
+   * mine = the local edit, theirs = the server's current row.
+   *   - a field only I changed keeps my value
+   *   - a field only they changed takes their value
+   *   - a field we both changed: recurse into objects and id-arrays; on a
+   *     primitive clash the local edit wins (latest writer of that cell), and
+   *     the clash is recorded so the UI can show it if it wants to.
+   * Never drops a field the other side added. Google-Sheets semantics.
+   */
+  function merge3(base, mine, theirs, trace, path) {
+    trace = trace || [];
+    path = path || "";
+    if (eq(mine, theirs)) return mine;
+    if (eq(mine, base)) return theirs;
+    if (eq(theirs, base)) return mine;
+    if (isPlainObject(mine) && isPlainObject(theirs)) {
+      var b = isPlainObject(base) ? base : {};
+      var out = {};
+      var keys = {};
+      Object.keys(mine).forEach(function (k) { keys[k] = 1; });
+      Object.keys(theirs).forEach(function (k) { keys[k] = 1; });
+      Object.keys(keys).forEach(function (k) {
+        var inMine = Object.prototype.hasOwnProperty.call(mine, k);
+        var inTheirs = Object.prototype.hasOwnProperty.call(theirs, k);
+        var inBase = Object.prototype.hasOwnProperty.call(b, k);
+        if (inMine && inTheirs) {
+          out[k] = merge3(b[k], mine[k], theirs[k], trace, path ? path + "." + k : k);
+        } else if (inMine && !inTheirs) {
+          // they removed it, or I added it
+          if (inBase && eq(mine[k], b[k])) return; // they deleted, I did not touch → gone
+          out[k] = mine[k];
+        } else if (!inMine && inTheirs) {
+          if (inBase && eq(theirs[k], b[k])) return; // I deleted, they did not touch → gone
+          out[k] = theirs[k];
+        }
+      });
+      return out;
+    }
+    if (mergeableIdArrays(mine, theirs)) {
+      var bm = {};
+      (Array.isArray(base) ? base : []).forEach(function (r) { if (isPlainObject(r) && r.id != null) bm[String(r.id)] = r; });
+      var mm = {};
+      mine.forEach(function (r) { mm[String(r.id)] = r; });
+      var tm = {};
+      theirs.forEach(function (r) { tm[String(r.id)] = r; });
+      var order = [];
+      var seen = {};
+      mine.concat(theirs).forEach(function (r) {
+        var id = String(r.id);
+        if (seen[id]) return;
+        seen[id] = 1;
+        order.push(id);
+      });
+      var list = [];
+      order.forEach(function (id) {
+        var inM = Object.prototype.hasOwnProperty.call(mm, id);
+        var inT = Object.prototype.hasOwnProperty.call(tm, id);
+        var inB = Object.prototype.hasOwnProperty.call(bm, id);
+        if (inM && inT) list.push(merge3(bm[id], mm[id], tm[id], trace, path + "[" + id + "]"));
+        else if (inM && !inT) {
+          if (inB && eq(mm[id], bm[id])) return;
+          list.push(mm[id]);
+        } else if (!inM && inT) {
+          if (inB && eq(tm[id], bm[id])) return;
+          list.push(tm[id]);
+        }
+      });
+      return list;
+    }
+    trace.push({ path: path, mine: mine, theirs: theirs });
+    return mine;
+  }
+
+  function genericOpsFor(spec, snap, ops) {
+    var book = spec.book;
+    var acked = lastAcked[book] || {};
+    var prev = rowsById(spec, acked[spec.field]);
+    var next = rowsById(spec, snap[spec.field]);
+    Object.keys(next).forEach(function (id) {
+      if (prev[id] && eq(next[id].payload, prev[id].payload)) return;
+      var row = next[id];
+      ops.push({
+        kind: "e:" + spec.kind,
+        spec: spec,
+        field: spec.field,
+        rowId: row.id,
+        k1: row.k1,
+        k2: row.k2,
+        url: C.rowPath(row),
+        payload: row.payload,
+        deleted: false,
+        revKey: "e:" + spec.kind + ":" + row.id,
+      });
+    });
+    Object.keys(prev).forEach(function (id) {
+      if (next[id]) return;
+      var row = prev[id];
+      ops.push({
+        kind: "e:" + spec.kind,
+        spec: spec,
+        field: spec.field,
+        rowId: row.id,
+        k1: row.k1,
+        k2: row.k2,
+        url: C.rowPath(row),
+        payload: row.payload,
+        deleted: true,
+        revKey: "e:" + spec.kind + ":" + row.id,
+      });
+    });
+  }
+
+  function genericRowFromOp(op, payload) {
+    return { kind: op.spec.kind, id: op.rowId, k1: op.k1, k2: op.k2, payload: payload };
+  }
+
+  /**
+   * Apply one generic row into a snapshot. With alsoAck the same row is queued
+   * to be folded into lastAcked — committed only once the UI actually took the
+   * new snapshot (commitPendingAcks), so a blocked apply never leaves the
+   * baseline ahead of the screen (which would make the next save resend the
+   * stale local value over the other user's change).
+   */
+  var pendingAcks = [];
+  function applyGenericRow(snap, spec, row, deleted, alsoAck) {
+    var out = Object.assign({}, snap);
+    var value = C.applyRow(spec, out[spec.field], row, deleted);
+    if (value === undefined) delete out[spec.field];
+    else out[spec.field] = value;
+    if (alsoAck) {
+      pendingAcks.push(function () {
+        var book = spec.book;
+        lastAcked[book] = lastAcked[book] || {};
+        var av = C.applyRow(spec, lastAcked[book][spec.field], row, deleted);
+        if (av === undefined) delete lastAcked[book][spec.field];
+        else lastAcked[book][spec.field] = av;
+        lastHashes[book] = stableStringify(bookPayload(lastAcked[book], book));
+      });
+    }
+    return out;
+  }
+  function commitPendingAcks() {
+    var list = pendingAcks;
+    pendingAcks = [];
+    list.forEach(function (fn) { fn(); });
+    return list.length;
+  }
+  function discardPendingAcks() {
+    var n = pendingAcks.length;
+    pendingAcks = [];
+    return n;
+  }
 
   function emptyBooks(fill) {
     return { org: fill, plans: fill, months: fill, targets: fill };
@@ -331,6 +522,11 @@
     lastApmsMonthFetchAt = 0;
     lastApmsPersonFetchAt = 0;
     lastApmsPersonKey = "";
+    if (C && typeof document !== "undefined") {
+      try {
+        fetchLiveHead();
+      } catch (err) {}
+    }
     try {
       maybeScreenRead();
     } catch (err) {}
@@ -661,8 +857,20 @@
           var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
           if (local && body && body.ok !== false) {
             var next = mergeEntityPayload(local, hint, body, {});
-            if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+            var took = false;
+            if (hooks && typeof hooks.apply === "function") took = hooks.apply(next, "live-entity") !== false;
+            if (took) commitPendingAcks();
+            else {
+              // UI not ready or refused: keep the hint queued so pullLive applies it later.
+              discardPendingAcks();
+              delete seenEntityKeys[key];
+              queueEntityHint(hint);
+            }
             lastPulledAt = Math.max(lastPulledAt, Number(hint.at) || lastRemoteAt || Date.now());
+          } else if (!local) {
+            // via=init: hooks not installed yet. Queue for the first pullLive.
+            delete seenEntityKeys[key];
+            queueEntityHint(hint);
           }
           return body;
         });
@@ -708,14 +916,96 @@
     if (liveTickTimer && typeof liveTickTimer.unref === "function") liveTickTimer.unref();
   }
 
+  /** Cursor for the change feed: taken at hydrate so only later commits are replayed. */
+  function fetchLiveHead() {
+    var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
+    if (!getter || !C) return Promise.resolve(liveSeq);
+    return getter("/api/changes?head=1", { method: "GET", credentials: "include", cache: "no-store" })
+      .then(function (res) { return res && res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (body && Number.isFinite(Number(body.seq))) liveSeq = Math.max(liveSeq, Number(body.seq));
+        return liveSeq;
+      })
+      .catch(function () { return liveSeq; });
+  }
+
+  /**
+   * ROWS-V2 follower: after any live tick that moved, pull every generic row
+   * committed after our cursor, with payloads, in one request, and overlay
+   * them. Idle ticks cost nothing. A `*` change (restore) forces a full pull.
+   */
+  function pollChanges() {
+    if (!C || changesInFlight) return changesInFlight || Promise.resolve(null);
+    var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
+    if (!getter) return Promise.resolve(null);
+    var since = liveSeq;
+    changesInFlight = getter("/api/changes?since=" + since + "&payload=1&limit=500", {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    })
+      .then(function (res) { return res && res.ok ? res.json() : null; })
+      .then(function (body) {
+        changesInFlight = null;
+        if (!body || !Array.isArray(body.changes)) return null;
+        if (Number.isFinite(Number(body.seq))) liveSeq = Math.max(liveSeq, Number(body.seq));
+        if (!body.changes.length) return body;
+        var hooks = liveHooks;
+        var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
+        var resync = false;
+        var next = local;
+        body.changes.forEach(function (ch) {
+          if (!ch || !ch.kind) return;
+          if (ch.kind === "*") { resync = true; return; }
+          if (!next) return;
+          next = mergeGenericRow(next, ch.kind, ch);
+        });
+        if (resync) {
+          discardPendingAcks();
+          scheduleLivePull();
+          return body;
+        }
+        var applied = false;
+        if (next && next !== local && hooks && typeof hooks.apply === "function") {
+          try {
+            applied = hooks.apply(Object.assign({}, next, { bookGens: Object.assign({}, lastGens, remoteGens) }), "live-entity") !== false;
+          } catch (err) {
+            applied = false;
+          }
+        } else if (next === local) {
+          applied = true;
+        }
+        if (applied) commitPendingAcks();
+        else {
+          // UI refused (unsaved edits in flight). Rewind the cursor: replay on the next tick.
+          discardPendingAcks();
+          liveSeq = since;
+          return body;
+        }
+        if (body.changes.length >= 500) return pollChanges();
+        return body;
+      })
+      .catch(function () {
+        changesInFlight = null;
+        return null;
+      });
+    return changesInFlight;
+  }
+
   function handleLiveEvent(tick) {
     if (!tick || typeof tick !== "object") return { queued: 0, shouldPull: false, at: 0 };
     var at = Number(tick.at || tick.notebookUpdatedAt) || 0;
+    if (C && at > lastChangesAt) {
+      lastChangesAt = at;
+      pollChanges();
+    }
     var ents = Array.isArray(tick.entities) ? tick.entities : [];
     var urls = [];
     var fresh = [];
-    for (var ei = 0; ei < ents.length; ei++) {
-      var h = ents[ei];
+    // PERF-TAB: never more than LIVE_ENTITY_CAP row GETs per tick (newest last).
+    var window = ents.length > LIVE_ENTITY_CAP ? ents.slice(-LIVE_ENTITY_CAP) : ents;
+    for (var ei = 0; ei < window.length; ei++) {
+      var h = window[ei];
       var url = entityUrl(h);
       urls.push({ hint: h, url: url });
       if (!h || !h.type || !h.id) continue;
@@ -725,7 +1015,6 @@
       fetchHintNow(h);
       fresh.push(h);
     }
-    if (fresh.length > LIVE_ENTITY_CAP) fresh = fresh.slice(-LIVE_ENTITY_CAP);
     lastLiveTrace = {
       tick: { at: at, bookGens: tick.bookGens || null, entities: ents },
       urls: urls,
@@ -762,7 +1051,7 @@
     if (row.type === "month-records" && !apmsViewOpen()) return;
     if (String(row.type).indexOf("org-") === 0 && !orgViewOpen()) return;
     var key = entityHintKey(row);
-    if (seenEntityKeys[key]) return;
+    if (seenEntityKeys[key] || fetchingHints[key]) return;
     for (var i = 0; i < pendingEntities.length; i++) {
       if (entityHintKey(pendingEntities[i]) === key) return;
     }
@@ -784,13 +1073,55 @@
     if (t.indexOf("org-") === 0) {
       return "/api/org/" + encodeURIComponent(t.slice(4)) + "/" + encodeURIComponent(hint.id);
     }
+    if (t.indexOf("e:") === 0) {
+      var p = "/api/e/" + encodeURIComponent(t.slice(2)) + "/" + encodeURIComponent(hint.id);
+      if (hint.period) p += "/" + encodeURIComponent(hint.period);
+      return p;
+    }
     return "";
+  }
+
+  function genericSpecForHint(kind, id) {
+    if (!C) return null;
+    if (kind === "settings") return C.settingsSpec(id);
+    return C.specForKind(kind);
+  }
+
+  /**
+   * Overlay one server row (from a hint GET or the change feed) into the local
+   * snapshot. A row this client has edited but not yet saved is three-way
+   * merged and left dirty; everything else is applied and acked outright.
+   */
+  function mergeGenericRow(local, kind, body) {
+    var spec = genericSpecForHint(kind, body.k1 || body.id);
+    if (!spec) return local;
+    var k1 = body.k1 != null ? String(body.k1) : String(body.id);
+    var k2 = body.k2 != null ? String(body.k2) : null;
+    var id = spec.shape === "map2" ? k1 + C.SEP + (k2 || "") : k1;
+    var row = { kind: spec.kind, id: id, k1: k1, k2: k2, payload: isPlainObject(body.payload) ? body.payload : {} };
+    var revKey = "e:" + spec.kind + ":" + id;
+    if (Number.isFinite(Number(body.rev))) entityRevs[revKey] = Number(body.rev);
+    var deleted = !!body.deleted;
+    var acked = lastAcked[spec.book] || {};
+    var ackedRow = rowsById(spec, acked[spec.field])[id];
+    var localRow = rowsById(spec, local[spec.field])[id];
+    var localDirty = !eq(localRow ? localRow.payload : undefined, ackedRow ? ackedRow.payload : undefined);
+    if (!localDirty || deleted) {
+      return applyGenericRow(local, spec, row, deleted, true);
+    }
+    // Keep my unsaved edit on top of their change; ack theirs as the new base.
+    var merged = merge3(ackedRow ? ackedRow.payload : undefined, localRow.payload, row.payload, []);
+    applyGenericRow({}, spec, row, false, true); // queues the ack of THEIR row
+    return applyGenericRow(local, spec, { kind: row.kind, id: id, k1: k1, k2: k2, payload: merged }, false, false);
   }
 
   function mergeEntityPayload(local, hint, body, slices) {
     var out = Object.assign({}, local);
     var payload = isPlainObject(body && body.payload) ? body.payload : {};
     var t = normEntityType(hint.type);
+    if (t.indexOf("e:") === 0) {
+      return mergeGenericRow(out, t.slice(2), Object.assign({ k1: hint.id, k2: hint.period || null }, body || {}));
+    }
     if (t === "people") {
       if (body && body.deleted) {
         out.people = (Array.isArray(out.people) ? out.people : []).filter(function (row) {
@@ -1540,56 +1871,21 @@
         revKey: entityRevKey("target_cells", id),
       });
     });
-    function diffOrgList(field, kind, path) {
-      var prev = rowsById((lastAcked.org && lastAcked.org[field]) || []);
-      var next = rowsById(snap[field]);
-      Object.keys(next).forEach(function (id) {
-        if (eq(next[id], prev[id])) return;
-        ops.push({
-          kind: "org-" + kind,
-          url: path + encodeURIComponent(id),
-          payload: next[id],
-          deleted: false,
-          revKey: entityRevKey("org-" + kind, id),
-          orgField: field,
-        });
-      });
-      Object.keys(prev).forEach(function (id) {
-        if (next[id]) return;
-        ops.push({
-          kind: "org-" + kind,
-          url: path + encodeURIComponent(id),
-          payload: prev[id],
-          deleted: true,
-          revKey: entityRevKey("org-" + kind, id),
-          orgField: field,
-        });
+    if (C) {
+      // ROWS-V2: every remaining collection is a per-row PATCH with its own rev.
+      C.SPECS.forEach(function (spec) {
+        genericOpsFor(spec, snap, ops);
       });
     }
-    function rowsById(value) {
-      var map = {};
-      if (Array.isArray(value)) {
-        value.forEach(function (row) {
-          if (isPlainObject(row) && row.id) map[String(row.id)] = row;
-        });
-      } else if (isPlainObject(value)) {
-        Object.keys(value).forEach(function (id) {
-          var row = value[id];
-          if (isPlainObject(row)) map[String(row.id || id)] = row;
-        });
-      }
-      return map;
-    }
-    diffOrgList("companies", "companies", "/api/org/companies/");
-    diffOrgList("brands", "brands", "/api/org/brands/");
-    diffOrgList("businessUnits", "sbus", "/api/org/sbus/");
-    diffOrgList("functions", "functions", "/api/org/functions/");
-    diffOrgList("subFunctions", "subFunctions", "/api/org/subFunctions/");
-    diffOrgList("roles", "roles", "/api/org/roles/");
     return ops;
   }
 
   function ackedSlice(op) {
+    if (op.spec) {
+      var acked = lastAcked[op.spec.book] || {};
+      var prevRows = rowsById(op.spec, acked[op.spec.field]);
+      return prevRows[op.rowId] ? prevRows[op.rowId].payload : undefined;
+    }
     if (op.kind === "people") {
       var rows = (lastAcked.org && lastAcked.org.people) || [];
       var found = null;
@@ -1648,20 +1944,47 @@
       if (result.status === 409 && result.json) {
         var serverRev = Number(result.json.rev);
         var serverPayload = result.json.payload;
-        if (!known && Number.isFinite(serverRev) && eq(serverPayload, ackedSlice(op))) {
-          entityRevs[op.revKey] = serverRev;
-          known = true;
-          baseRev = serverRev;
+        var serverDeleted = !!result.json.deleted;
+        var base = ackedSlice(op);
+        if (!Number.isFinite(serverRev)) {
+          return { ok: false, error: "patch-failed", op: op, status: 409 };
+        }
+        entityRevs[op.revKey] = serverRev;
+        known = true;
+        if (serverRev === baseRev && attempts > 1) {
+          // Same rev twice: nothing we send is accepted. Take theirs.
+          return { ok: true, json: result.json, op: op, adopted: true, deleted: serverDeleted };
+        }
+        baseRev = serverRev;
+        if (serverDeleted && !op.deleted) {
+          if (base === undefined) {
+            // I never had this row: it is a genuine create that collided with
+            // an old tombstone id. Re-create it on top of the tombstone.
+            continue;
+          }
+          // They deleted the row while I edited it. The delete stands; my
+          // edit is dropped rather than resurrecting the row.
+          lastMergeTrace.push({ revKey: op.revKey, kind: "deleted-by-other" });
+          return { ok: true, json: result.json, op: op, adopted: true, deleted: true };
+        }
+        if (serverDeleted && op.deleted) {
+          // Already gone. Nothing to do.
+          return { ok: true, json: result.json, op: op, adopted: true, deleted: true };
+        }
+        if (op.deleted) {
+          // I deleted; they changed it meanwhile. The explicit delete stands.
           continue;
         }
-        if (Number.isFinite(serverRev) && serverRev !== baseRev) {
-          entityRevs[op.revKey] = serverRev;
-          known = true;
-          baseRev = serverRev;
+        if (eq(serverPayload, base)) {
+          // Nobody else touched it; I just did not know the rev. Resend as-is.
           continue;
         }
-        entityRevs[op.revKey] = Number.isFinite(serverRev) ? serverRev : baseRev;
-        return { ok: true, json: result.json || { ok: true, rev: baseRev }, op: op, adopted: true };
+        var trace = [];
+        var merged = merge3(base, op.payload, serverPayload, trace);
+        lastMergeTrace.push({ revKey: op.revKey, kind: "merged", clashes: trace });
+        op.payload = merged;
+        op.merged = true;
+        continue;
       }
       return { ok: false, error: "patch-failed", op: op, status: result && result.status };
     }
@@ -1768,11 +2091,54 @@
       lastAcked.targets.targetCells = snap.targetCells;
       lastHashes.targets = stableStringify(bookPayload(lastAcked.targets, "targets"));
     }
+    // ROWS-V2: generic fields are acked per field so a clean save leaves no dirty book behind.
+    var touchedBooks = {};
+    ops.forEach(function (op) {
+      if (!op.spec) return;
+      var book = op.spec.book;
+      lastAcked[book] = lastAcked[book] || {};
+      if (snap[op.field] === undefined) delete lastAcked[book][op.field];
+      else lastAcked[book][op.field] = snap[op.field];
+      touchedBooks[book] = 1;
+    });
+    Object.keys(touchedBooks).forEach(function (book) {
+      lastHashes[book] = stableStringify(bookPayload(lastAcked[book], book));
+    });
+  }
+
+  /**
+   * Fold server-side outcomes (merged rows, adopted deletes, server versions)
+   * back into the snapshot so the UI and the acked baseline both reflect what
+   * the server actually holds. Returns the corrected snapshot.
+   */
+  function foldEntityResults(snap, results) {
+    var out = snap;
+    var changed = false;
+    results.forEach(function (r) {
+      if (!r || !r.ok || !r.op) return;
+      var op = r.op;
+      var json = r.json || {};
+      if (op.spec) {
+        var serverRow = genericRowFromOp(op, isPlainObject(json.payload) ? json.payload : op.payload);
+        var deleted = r.deleted === true || (r.adopted && json.deleted === true) || (!r.adopted && op.deleted);
+        if (r.adopted || r.merged || op.merged) {
+          out = applyGenericRow(out, op.spec, serverRow, !!deleted, false);
+          changed = true;
+        }
+        return;
+      }
+      if (!(r.adopted || op.merged)) return;
+      var hint = { type: op.kind, id: op.personId || op.rowId || (op.revKey || "").split(":").pop(), period: op.period };
+      if (op.kind === "target_cells") hint.id = op.revKey.slice("target_cells:".length);
+      out = mergeEntityPayload(out, hint, { ok: true, payload: json.payload || op.payload, deleted: !!(r.deleted || json.deleted) }, {});
+      changed = true;
+    });
+    return changed ? out : snap;
   }
 
   async function saveEntities(snap) {
     var ops = collectEntityOps(snap);
-    if (!ops.length) return { ok: true, applied: [], ops: [] };
+    if (!ops.length) return { ok: true, applied: [], ops: [], snapshot: snap };
     var results = await Promise.all(ops.map(function (op) { return saveOneEntity(op, snap); }));
     var conflict = results.find(function (r) { return r && r.error === "person-month-conflict"; });
     if (conflict) {
@@ -1790,6 +2156,10 @@
     }
     var failed = results.find(function (r) { return r && !r.ok; });
     if (failed) {
+      // Rows that did commit are acked so they are not re-sent; the failed op
+      // stays dirty and is retried on the next save.
+      var okOps = results.filter(function (r) { return r && r.ok && r.op; }).map(function (r) { return r.op; });
+      if (okOps.length) markEntityFieldsAcked(foldEntityResults(snap, results), okOps);
       return {
         ok: false,
         error: "patch-failed",
@@ -1800,15 +2170,22 @@
         notebookUpdatedAt: Number(snap.notebookUpdatedAt) || Date.now(),
       };
     }
-    markEntityFieldsAcked(snap, ops);
+    var corrected = foldEntityResults(snap, results);
+    markEntityFieldsAcked(corrected, ops);
+    if (corrected !== snap && liveHooks && typeof liveHooks.apply === "function") {
+      try {
+        liveHooks.apply(Object.assign({}, corrected, { bookGens: Object.assign({}, lastGens) }), "live-entity");
+      } catch (err) {}
+    }
     lastSaveMeta = {
       via: "ENTITY",
       bytes: 0,
       books: ops.map(function (op) { return op.kind; }),
       at: Date.now(),
       applied: ops.map(function (op) { return op.url; }),
+      merged: results.filter(function (r) { return r && (r.adopted || (r.op && r.op.merged)); }).length,
     };
-    return { ok: true, applied: ops.map(function (op) { return op.url; }), ops: ops };
+    return { ok: true, applied: ops.map(function (op) { return op.url; }), ops: ops, snapshot: corrected };
   }
 
   async function save(snapshot) {
@@ -1858,6 +2235,7 @@
       lastSaveMeta = { via: "PATCH-FAIL", bytes: 0, books: dirty.slice(), at: Date.now(), error: "patch-failed" };
       return entityAck;
     }
+    if (entityAck && entityAck.snapshot) snap = entityAck.snapshot;
     dirty = dirtyBooks(snap);
     if (!dirty.length) {
       lastSaveMeta = {
@@ -1866,6 +2244,7 @@
         books: entityAck && entityAck.applied ? entityAck.applied : [],
         at: Date.now(),
         applied: entityAck && entityAck.applied ? entityAck.applied : [],
+        merged: lastSaveMeta && lastSaveMeta.via === "ENTITY" ? lastSaveMeta.merged || 0 : 0,
       };
       return {
         ok: true,
@@ -2174,7 +2553,10 @@
         lastRemoteAt,
         Date.now(),
       );
-      if (typeof opts.apply === "function") opts.apply(local, "live-entity");
+      var tookEntities = true;
+      if (typeof opts.apply === "function") tookEntities = opts.apply(local, "live-entity") !== false;
+      if (tookEntities) commitPendingAcks();
+      else discardPendingAcks();
       if (entityPull.types.people) lastGens.org = Math.max(Number(lastGens.org) || 0, Number(remoteGens.org) || 0);
       if (entityPull.types["reward-records"] || entityPull.types["month-records"] || entityPull.types.reward_records || entityPull.types.month_records) {
         lastGens.months = Math.max(Number(lastGens.months) || 0, Number(remoteGens.months) || 0);
@@ -2412,6 +2794,12 @@
   }
 
   function resetForTests() {
+    liveSeq = 0;
+    lastChangesAt = 0;
+    changesInFlight = null;
+    lastMergeTrace = [];
+    pendingAcks = [];
+    C = global.__apmsCollections || null;
     lastHashes = emptyBooks("");
     lastGens = emptyBooks(0);
     lastAcked = emptyBooks(null);
@@ -2462,7 +2850,28 @@
     }
   }
 
+  /** Data fields the UI store should take from a live/merged snapshot (ROWS-V2 stamp uses this). */
+  function pickDataFields(snap) {
+    var out = {};
+    if (!C || !isPlainObject(snap)) return out;
+    C.FIELDS.forEach(function (field) {
+      if (Object.prototype.hasOwnProperty.call(snap, field)) out[field] = snap[field];
+    });
+    return out;
+  }
+
   var api = {
+    pickDataFields: pickDataFields,
+    merge3: merge3,
+    collectEntityOps: collectEntityOps,
+    mergeGenericRow: mergeGenericRow,
+    pollChanges: pollChanges,
+    commitPendingAcks: commitPendingAcks,
+    liveSeq: function () { return liveSeq; },
+    setLiveSeq: function (n) { liveSeq = Number(n) || 0; lastChangesAt = 0; },
+    entityRevs: function () { return entityRevs; },
+    mergeTrace: function () { return lastMergeTrace.slice(); },
+    lastAckedBooks: function () { return lastAcked; },
     BOOK_IDS: BOOK_IDS,
     LIVE_ENTITY_CAP: LIVE_ENTITY_CAP,
     BOOK_FIELDS: BOOK_FIELDS,

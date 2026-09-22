@@ -49,6 +49,17 @@ const NODE_FIELD: Record<string, string> = {
   subFunctions: "subFunctions",
 };
 
+/** Org node kinds → generic entity kinds (apms-collections.js). */
+const ORG_KIND_TO_ENTITY: Record<string, string> = {
+  companies: "companies",
+  units: "companies",
+  brands: "brands",
+  sbus: "sbus",
+  functions: "functions",
+  roles: "roles",
+  subFunctions: "sub-functions",
+};
+
 function isPlain(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -260,6 +271,29 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
   }
 
   if (!parsed.id) return Response.json({ ok: false, error: "missing-id" }, { status: 400 });
+
+  // ROWS-V2: org nodes are generic entity rows. Reads and writes go through the
+  // row store so two admins editing different nodes never overwrite each other
+  // (the book read-modify-write below raced outside the book lock).
+  const { ENTITY_ROWS_ENABLED, liveEntityHooks } = await import("./company-entities-v2");
+  const entityKind = ORG_KIND_TO_ENTITY[kind];
+  if (ENTITY_ROWS_ENABLED && entityKind) {
+    const { getSql } = await import("./db");
+    const { readLiveSnapshot } = await import("./company-notebook");
+    const { ensureEntitiesFromBooks, entityIdFromParts, patchEntityRow, readEntity } = await import("./company-entity-store");
+    const sql = (await getSql()) as unknown as HotSql;
+    await ensureEntitiesFromBooks(sql, () => readLiveSnapshot());
+    const key = entityIdFromParts(entityKind, parsed.id);
+    const field = NODE_FIELD[kind];
+    if (method === "GET") {
+      const row = await readEntity(sql, key);
+      if (!row || row.deleted) return Response.json({ ok: false, error: "not-found", kind, id: parsed.id }, { status: 404 });
+      return Response.json({ ok: true, kind, id: parsed.id, field, payload: { ...row.payload, rev: row.rev }, rev: row.rev });
+    }
+    const body = await request.json().catch(() => null);
+    const result = await patchEntityRow(sql, key, body, "org-patch", liveEntityHooks());
+    return Response.json({ ...result.body, kind, field }, { status: result.status });
+  }
 
   if (method === "GET") {
     const book = await readOrgBook();

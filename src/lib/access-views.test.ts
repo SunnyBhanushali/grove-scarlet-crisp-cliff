@@ -184,8 +184,9 @@ test("the person can write Self comments while the plan is open or locked", () =
   assert.match(routes, /"data-mgr-notes":`ro`/);
 });
 
-test("stamp p0as68; fallbackPost still absent; G9 path kept", () => {
-  assert.match(html, /routes-e2g7y5q8-13m-p0ar\.js\?v=p0as68/);
+test("stamp p0as78; fallbackPost still absent; G9 path kept", () => {
+  assert.match(html, /routes-e2g7y5q8-13m-p0as78\.js/);
+  assert.match(html, /apms-collections\.js\?v=p0as78/);
   assert.match(routes, /login-view-f2j6t0x4-11a3-p0ar\.js\?v=p0as68/);
   assert.equal(login.includes("fallbackPost"), false);
   assert.equal(routes.includes("fallbackPost"), false);

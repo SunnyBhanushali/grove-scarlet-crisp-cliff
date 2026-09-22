@@ -1,0 +1,166 @@
+/**
+ * ROWS-V2 HTTP surface + server hooks.
+ *
+ *   GET   /api/e/:kind                 list live rows (optional ?k1=)
+ *   GET   /api/e/:kind/:k1[/:k2]       one row
+ *   PATCH /api/e/:kind/:k1[/:k2]       { baseRev, payload | deleted, clientOpId }
+ *   GET   /api/changes?since=<seq>     change feed after a cursor
+ *
+ * Auth: same dual auth as the other entity routes (session token + resolved person).
+ */
+import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
+import type { HotSql } from "./company-hot-tables.ts";
+import type { Snapshot } from "./company-books.ts";
+import { collections, specForKindOrSettings, type CollectionSpec } from "./apms-collections.ts";
+import {
+  changesSince,
+  ensureEntitiesFromBooks,
+  entityBody,
+  entityIdFromParts,
+  latestSeq,
+  listEntities,
+  patchEntityRow,
+  readEntity,
+  type EntityHooks,
+  type StoredEntity,
+} from "./company-entity-store.ts";
+
+export const ENTITY_ROWS_ENABLED = String(process.env.APMS_ENTITY_ROWS || "on").toLowerCase() !== "off";
+
+function decodePart(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+export function parseEntityV2Path(pathname: string): { kind: string; k1?: string; k2?: string; list: boolean } | null {
+  const path = pathname.replace(/\/+$/, "");
+  const m = path.match(/^\/api\/e\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?$/);
+  if (!m) return null;
+  const kind = decodePart(m[1]);
+  if (!m[2]) return { kind, list: true };
+  return { kind, k1: decodePart(m[2]), k2: m[3] !== undefined ? decodePart(m[3]) : undefined, list: false };
+}
+
+/** Live hint type for a generic kind: `e:<kind>`; the client maps it back. */
+export function liveTypeForKind(kind: string): string {
+  return `e:${kind}`;
+}
+
+export function kindFromLiveType(type: string): string | null {
+  return type.startsWith("e:") ? type.slice(2) : null;
+}
+
+/** Book mirror + live publish, wired lazily to avoid import cycles. */
+export function liveEntityHooks(): EntityHooks {
+  return {
+    async mirrorToBook(spec: CollectionSpec, row: StoredEntity) {
+      const { commitEntityRowToBook } = await import("./company-notebook");
+      const gens = await commitEntityRowToBook(spec, row);
+      return gens;
+    },
+    async publish(spec: CollectionSpec, row: StoredEntity, seq: number) {
+      const { notifyCompanyLive, currentLiveGens } = await import("./company-live");
+      const { softInvalidateCompanyWire } = await import("./company-wire-cache");
+      const prev = currentLiveGens() || { org: 0, plans: 0, months: 0, targets: 0 };
+      const gens = { ...prev, [spec.book]: (Number(prev[spec.book]) || 0) + 1 };
+      await notifyCompanyLive(Date.now(), gens, [
+        {
+          type: liveTypeForKind(row.kind),
+          id: row.k1 || row.id,
+          period: row.k2 || undefined,
+          seq,
+        } as { type: string; id: string; period?: string; seq?: number },
+      ]);
+      try {
+        softInvalidateCompanyWire();
+      } catch {
+        /* ignore */
+      }
+      return gens;
+    },
+  };
+}
+
+async function resolvePerson(request: Request): Promise<string | null> {
+  const { getCompanyWire } = await import("./company-notebook");
+  const { personIdForWire } = await import("./company-wire-http");
+  const wire = await getCompanyWire();
+  return personIdForWire(request, wire);
+}
+
+export async function handleEntityV2Http(request: Request): Promise<Response | null> {
+  const url = new URL(request.url);
+  const parsed = parseEntityV2Path(url.pathname);
+  if (!parsed) return null;
+  if (!ENTITY_ROWS_ENABLED) return Response.json({ ok: false, error: "rows-disabled" }, { status: 503 });
+  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  const personId = await resolvePerson(request);
+  if (!personId) return unauthorizedJson();
+
+  const method = request.method.toUpperCase();
+  const { getSql } = await import("./db");
+  const { readLiveSnapshot } = await import("./company-notebook");
+  const sql = (await getSql()) as unknown as HotSql;
+  await ensureEntitiesFromBooks(sql, () => readLiveSnapshot());
+
+  if (parsed.list) {
+    if (method !== "GET") return Response.json({ ok: false, error: "method" }, { status: 405 });
+    if (parsed.kind !== "settings" && !collections.specForKind(parsed.kind)) {
+      return Response.json({ ok: false, error: "unknown-kind", kind: parsed.kind }, { status: 404 });
+    }
+    const k1 = url.searchParams.get("k1") || undefined;
+    const limitRaw = Number(url.searchParams.get("limit") || 0);
+    const rows = await listEntities(sql, parsed.kind, { k1, limit: limitRaw > 0 ? limitRaw : undefined });
+    return Response.json({ ok: true, kind: parsed.kind, rows: rows.map((r) => entityBody(r)), seq: await latestSeq(sql) });
+  }
+
+  const key = entityIdFromParts(parsed.kind, parsed.k1 || "", parsed.k2);
+  const spec = specForKindOrSettings(key.kind, key.k1 || key.id);
+  if (!spec) return Response.json({ ok: false, error: "unknown-kind", kind: parsed.kind }, { status: 404 });
+  if (spec.shape === "map2" && parsed.k2 === undefined) {
+    return Response.json({ ok: false, error: "missing-k2", kind: parsed.kind }, { status: 400 });
+  }
+
+  if (method === "GET") {
+    const row = await readEntity(sql, key);
+    if (!row) return Response.json({ ok: false, error: "not-found", kind: key.kind, id: key.id }, { status: 404 });
+    return Response.json(entityBody(row));
+  }
+  if (method !== "PATCH") return Response.json({ ok: false, error: "method" }, { status: 405 });
+
+  const body = await request.json().catch(() => null);
+  const result = await patchEntityRow(sql, key, body, personId, liveEntityHooks());
+  return Response.json(result.body, { status: result.status });
+}
+
+export async function handleChangesHttp(request: Request): Promise<Response> {
+  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  const personId = await resolvePerson(request);
+  if (!personId) return unauthorizedJson();
+  const url = new URL(request.url);
+  if (url.searchParams.get("head") === "1") {
+    const { getSql } = await import("./db");
+    const sql = (await getSql()) as unknown as HotSql;
+    return Response.json({ ok: true, seq: await latestSeq(sql) }, { headers: { "cache-control": "no-store" } });
+  }
+  const since = Number(url.searchParams.get("since") || 0);
+  const limit = Number(url.searchParams.get("limit") || 200);
+  const { getSql } = await import("./db");
+  const sql = (await getSql()) as unknown as HotSql;
+  const withPayload = url.searchParams.get("payload") === "1";
+  const changes = await changesSince(sql, Number.isFinite(since) ? since : 0, Number.isFinite(limit) ? limit : 200, { withPayload });
+  const seq = changes.length ? changes[changes.length - 1].seq : await latestSeq(sql);
+  return Response.json({ ok: true, since: Number.isFinite(since) ? since : 0, seq, changes });
+}
+
+/** Overlay authority rows over a snapshot (GET assemble / backups). */
+export async function overlayEntityFields(sql: HotSql, snapshot: Snapshot, readBooks: () => Promise<Snapshot | null>): Promise<Snapshot> {
+  if (!ENTITY_ROWS_ENABLED) return snapshot;
+  const { loadEntityFields } = await import("./company-entity-store.ts");
+  await ensureEntitiesFromBooks(sql, readBooks);
+  const fields = await loadEntityFields(sql);
+  return { ...snapshot, ...fields };
+}
