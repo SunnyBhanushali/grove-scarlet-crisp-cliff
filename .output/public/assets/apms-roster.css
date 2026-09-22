@@ -1,0 +1,116 @@
+/* Roster R1 — APMS cream / ink / forest. Loaded only with the Roster module. */
+.apms-roster {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  color: #1a1612;
+  padding: 1.25rem 1.35rem 2.5rem;
+  max-width: 100%;
+}
+.apms-roster h1 {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.7rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.2rem;
+}
+.apms-roster .muted { color: #6b6660; font-size: 0.82rem; }
+.apms-roster-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 0.9rem;
+}
+.apms-roster-month {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.apms-roster-month strong { font-size: 1rem; min-width: 10rem; text-align: center; }
+.apms-roster button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid #d9d0c3;
+  background: #fffaf3;
+  color: #1a1612;
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.8rem;
+}
+.apms-roster button.primary {
+  background: #1f3d34;
+  color: #f4efe6;
+  border-color: #1f3d34;
+}
+.apms-roster button:disabled { opacity: 0.5; cursor: default; }
+.apms-roster .pill {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #d9d0c3;
+}
+.apms-roster .pill.locked { background: #1f3d34; color: #f4efe6; border-color: #1f3d34; }
+.apms-roster .pill.draft { background: #f4efe6; }
+.apms-roster-lock {
+  background: #1f3d34;
+  color: #f4efe6;
+  border-radius: 0.75rem;
+  padding: 0.7rem 1rem;
+  margin: 0 0 0.9rem;
+  font-size: 0.92rem;
+}
+.apms-roster-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+.apms-roster-actions input[type="search"] {
+  font: inherit;
+  border: 1px solid #d9d0c3;
+  background: #fffaf3;
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  min-width: 12rem;
+}
+.apms-roster .ok { color: #1f3d34; font-size: 0.85rem; }
+.apms-roster .err { color: #8a2b1e; font-size: 0.85rem; }
+.apms-roster-table-wrap { overflow: auto; border: 1px solid #d9d0c3; border-radius: 0.85rem; background: #fffaf3; }
+.apms-roster-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.apms-roster-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b6660;
+  padding: 0.65rem 0.7rem;
+  border-bottom: 1px solid #d9d0c3;
+  background: #f4efe6;
+  white-space: nowrap;
+}
+.apms-roster-table td { padding: 0.45rem 0.55rem; border-bottom: 1px solid #efe7da; vertical-align: middle; }
+.apms-roster-table .name { font-weight: 600; }
+.apms-roster-table select, .apms-roster-table input {
+  font: inherit;
+  max-width: 11rem;
+  border: 1px solid #d9d0c3;
+  background: #fff;
+  border-radius: 0.4rem;
+  padding: 0.28rem 0.4rem;
+}
+.apms-roster-table tr.missing { background: #fbf3e6; }
+.apms-roster-banner {
+  margin: 0.75rem 1.1rem 0;
+  background: #fbf3e6;
+  border: 1px solid #e4d4b8;
+  color: #1a1612;
+  border-radius: 0.7rem;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.9rem;
+}
+@media (max-width: 720px) {
+  .apms-roster { padding: 0.85rem 0.7rem 2rem; }
+  .apms-roster-actions input[type="search"] { min-width: 100%; }
+}

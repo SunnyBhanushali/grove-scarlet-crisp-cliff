@@ -1,0 +1,40 @@
+.apms-wordmark {
+  font-family: Poppins, "IBM Plex Sans", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: #1A1612;
+}
+.apms-brand {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.apms-brand--rail {
+  flex-direction: row;
+  align-items: center;
+  padding: 0.85rem 0.9rem 0.55rem;
+}
+.apms-brand img.apms-logo,
+.apms-login-brand img.apms-logo,
+img.apms-logo {
+  display: block;
+  width: auto;
+  height: 28px;
+  max-height: 28px;
+  max-width: 140px;
+  object-fit: contain;
+}
+.apms-brand--rail img.apms-logo {
+  height: 32px;
+  max-height: 32px;
+  max-width: 168px;
+}
+.apms-login-brand img.apms-logo {
+  height: 52px;
+  max-height: 52px;
+  max-width: 280px;
+}

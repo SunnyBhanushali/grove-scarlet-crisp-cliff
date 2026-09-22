@@ -1,0 +1,757 @@
+import { getSql } from "./db";
+import { notifyCompanyLive, currentLiveAt, currentLiveGens } from "./company-live";
+import seed from "./company-seed.json";
+import {
+  assembleSnapshot,
+  BOOK_IDS,
+  bookHash,
+  bookPayload,
+  commitBooks,
+  applyBookPatches,
+  mergeKeepPeople,
+  mergeKeepMonthMaps,
+  normalizeBookGens,
+  peopleCount,
+  splitSnapshot,
+  wouldShrinkLive,
+  type BookId,
+  type Snapshot,
+} from "./company-books";
+import { slimForWire } from "./company-wire-slim";
+import {
+  encodeCompanyWire,
+  noteWireAssemble,
+  setWireAssembler,
+  softInvalidateCompanyWire,
+  type CompanyWire,
+} from "./company-wire-cache";
+import { stripSnapshotUiSession } from "./company-ui-session";
+import { ackFromPatch, parseCompanyPatch, type CompanyPatchAck } from "./company-patch";
+import { dualWriteAfterPatch, importHotTables } from "./company-hot-tables";
+import { assembleForGet, prepareBookPatch, stripRowOwnedFromBooks, normalizeCompanySnapshot } from "./company-assemble";
+import {
+  RestoreRejectedError,
+  keepStoredTargets,
+  normalizeTargetsGraph,
+  restoreTargetsGuard,
+  targetCellKeys,
+  countTargetCells,
+} from "./company-restore-targets";
+
+const NOTEBOOK_ID = "aliens-apms";
+const REV_PREFIX = "rev-";
+
+export type CompanyLoad = {
+  snapshotJson: string | null;
+  personId: string | null;
+  resets: unknown[];
+  bootstrap: boolean;
+  forbidden: boolean;
+};
+
+type BookRow = {
+  book: string;
+  snapshot_json: string;
+  content_hash: string;
+};
+
+type PersistMode = "replace" | "skip-stale" | "fill-missing";
+
+const UAT_USER = /^uat\./i;
+const UAT_ID = /^p-uat-/i;
+
+function isUatPerson(person: unknown): boolean {
+  if (!person || typeof person !== "object") return false;
+  const rec = person as Record<string, unknown>;
+  const id = String(rec.id || "");
+  const username = String(rec.username || "");
+  const email = String(rec.email || "");
+  return UAT_ID.test(id) || UAT_USER.test(username) || UAT_USER.test(email);
+}
+
+/** Keep uat.* / p-uat-* people and logins when an org save would drop them. */
+export function mergePreserveUatFixtures(
+  incoming: Snapshot,
+  stored: Snapshot | null | undefined,
+): Snapshot {
+  if (!stored) return incoming;
+  const storedPeople = Array.isArray(stored.people) ? stored.people : [];
+  const incomingPeople = Array.isArray(incoming.people) ? [...incoming.people] : [];
+  const have = new Set(
+    incomingPeople
+      .map((row) => (row && typeof row === "object" ? String((row as { id?: unknown }).id || "") : ""))
+      .filter(Boolean),
+  );
+  for (const person of storedPeople) {
+    if (!isUatPerson(person)) continue;
+    const id = person && typeof person === "object" ? String((person as { id?: unknown }).id || "") : "";
+    if (!id || have.has(id)) continue;
+    incomingPeople.push(person);
+    have.add(id);
+  }
+  const storedLogins =
+    stored.logins && typeof stored.logins === "object" && !Array.isArray(stored.logins)
+      ? (stored.logins as Record<string, unknown>)
+      : {};
+  const incomingLogins =
+    incoming.logins && typeof incoming.logins === "object" && !Array.isArray(incoming.logins)
+      ? { ...(incoming.logins as Record<string, unknown>) }
+      : {};
+  for (const [key, value] of Object.entries(storedLogins)) {
+    if (!UAT_USER.test(key) && !UAT_ID.test(key)) continue;
+    if (incomingLogins[key] == null) incomingLogins[key] = value;
+  }
+  return { ...incoming, people: incomingPeople, logins: incomingLogins };
+}
+
+function seedSnapshot(): Snapshot {
+  return JSON.parse(JSON.stringify(seed)) as Snapshot;
+}
+
+function parseSnapshot(json: string | null): Snapshot | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json) as Snapshot;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function extractSnapshot(input: unknown): Snapshot | null {
+  let value: unknown = input;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+      value = JSON.parse(trimmed);
+    } catch {
+      return parseSnapshot(trimmed);
+    }
+  }
+  if (!value || typeof value !== "object") return null;
+  const rec = value as Record<string, unknown>;
+  if (rec.state && typeof rec.state === "object" && !Array.isArray(rec.state)) {
+    return normalizeCompanySnapshot(rec.state as Snapshot);
+  }
+  if (typeof rec.snapshotJson === "string") return extractSnapshot(rec.snapshotJson);
+  if (typeof rec.json === "string") return extractSnapshot(rec.json);
+  if (Array.isArray(rec.people) && rec.roles && typeof rec.roles === "object") {
+    return normalizeCompanySnapshot(rec as Snapshot);
+  }
+  const parsed = parseSnapshot(JSON.stringify(rec));
+  return parsed ? normalizeCompanySnapshot(parsed) : null;
+}
+
+function isThinSnapshot(snapshot: Snapshot | null): boolean {
+  return !snapshot || peopleCount(snapshot) < 10;
+}
+
+function isThin(json: string | null): boolean {
+  return isThinSnapshot(parseSnapshot(json));
+}
+
+function payload(row: CompanyLoad): CompanyLoad {
+  return {
+    snapshotJson: row.snapshotJson,
+    personId: null,
+    resets: [],
+    bootstrap: false,
+    forbidden: false,
+  };
+}
+
+async function loadBookRows() {
+  const sql = await getSql();
+  return sql<BookRow>`
+    select book, snapshot_json, content_hash from company_books
+  `;
+}
+
+function rowsToBooks(rows: BookRow[]): Partial<Record<BookId, Snapshot>> {
+  const books: Partial<Record<BookId, Snapshot>> = {};
+  for (const row of rows) {
+    if (!(BOOK_IDS as readonly string[]).includes(row.book)) continue;
+    const snap = parseSnapshot(row.snapshot_json);
+    if (snap) books[row.book as BookId] = snap;
+  }
+  return books;
+}
+
+async function writeBook(book: BookId, snap: Snapshot, hash: string) {
+  const sql = await getSql();
+  const json = JSON.stringify(snap);
+  await sql`
+    insert into company_books (book, snapshot_json, content_hash, updated_at)
+    values (${book}, ${json}, ${hash}, now())
+    on conflict (book) do update
+      set snapshot_json = excluded.snapshot_json,
+          content_hash = excluded.content_hash,
+          updated_at = now()
+  `;
+  await sql`
+    insert into company_book_hashes (book, content_hash, seen_at)
+    values (${book}, ${hash}, now())
+    on conflict (book, content_hash) do update
+      set seen_at = now()
+  `;
+}
+
+async function recentHashes(book: BookId): Promise<Set<string>> {
+  const sql = await getSql();
+  const rows = await sql<{ content_hash: string }>`
+    select content_hash from company_book_hashes
+    where book = ${book}
+    order by seen_at desc
+    limit 80
+  `;
+  return new Set(rows.map((r) => r.content_hash));
+}
+
+async function writeCombined(snapshot: Snapshot) {
+  const sql = await getSql();
+  const json = JSON.stringify(snapshot);
+  await sql`
+    insert into company_notebook (id, snapshot_json, updated_at)
+    values (${NOTEBOOK_ID}, ${json}, now())
+    on conflict (id) do update
+      set snapshot_json = excluded.snapshot_json,
+          updated_at = now()
+  `;
+}
+
+async function persistBooks(snapshot: Snapshot, mode: PersistMode, only?: readonly BookId[]) {
+  const incoming = splitSnapshot(snapshot);
+  const existing = rowsToBooks(await loadBookRows());
+  const writeIds = only?.length ? only : BOOK_IDS;
+  for (const book of writeIds) {
+    const next = incoming[book];
+    const hash = bookHash(next);
+    const stored = existing[book];
+    if (!stored) {
+      await writeBook(book, next, hash);
+      continue;
+    }
+    const storedHash = bookHash(stored);
+    if (storedHash === hash) continue;
+    if (mode === "fill-missing") continue;
+    if (mode === "skip-stale") {
+      const seen = await recentHashes(book);
+      if (seen.has(hash) && hash !== storedHash) continue;
+    }
+    await writeBook(book, next, hash);
+  }
+  const assembled = assembleSnapshot(rowsToBooks(await loadBookRows()));
+  try {
+    if (!isThinSnapshot(assembled) || mode === "replace") await writeCombined(assembled);
+  } catch (err) {
+    console.error("[company-notebook] writeCombined failed after book persist", err);
+  }
+  return assembled;
+}
+
+async function importHotTablesAfterCommit(snapshot: Snapshot, updatedBy: string) {
+  if (isThinSnapshot(snapshot)) return;
+  try {
+    await importHotTables(await getSql(), snapshot, { updatedBy });
+  } catch (err) {
+    console.error("[hot-tables] import after commit failed", err);
+  }
+}
+
+/** Merge one entity slice into the matching book. Union only — never 409 on book gen. */
+export async function applyEntityBookSlice(opts: {
+  book: BookId;
+  payload: Snapshot;
+  extraTombs?: unknown;
+}): Promise<{ ok: boolean; snapshot: Snapshot }> {
+  const run = async (): Promise<{ ok: boolean; snapshot: Snapshot }> => {
+    const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+    const stored = existing;
+    const next: Snapshot = { ...stored };
+    const payload = opts.payload || {};
+    if (opts.book === "org" && "people" in payload) {
+      next.people = mergeKeepPeople(stored.people, payload.people);
+    }
+    if (opts.book === "months") {
+      if ("records" in payload) {
+        next.records = mergeKeepMonthMaps(stored.records, payload.records);
+      }
+      if ("rewardRecords" in payload) {
+        next.rewardRecords = mergeKeepMonthMaps(stored.rewardRecords, payload.rewardRecords);
+      }
+    }
+    if (opts.book === "targets" && "targetCells" in payload) {
+      next.targetCells = {
+        ...(isPlainSnap(stored.targetCells) ? stored.targetCells : {}),
+        ...(isPlainSnap(payload.targetCells) ? payload.targetCells : {}),
+      };
+    }
+    next.tombstones = unionTombMaps(stored.tombstones, opts.extraTombs);
+    stripEntityTombs(next, opts.extraTombs);
+    const gens = normalizeBookGens(stored);
+    next.bookGens = { ...gens, [opts.book]: (Number(gens[opts.book]) || 0) + 1 };
+    next.notebookUpdatedAt = Date.now();
+    const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, stored));
+    const assembled = await persistBooks(merged, "replace", [opts.book]);
+    await notifyCompanyLive(
+      Number(assembled.notebookUpdatedAt) || Date.now(),
+      normalizeBookGens(assembled),
+    );
+    return { ok: true, snapshot: assembled };
+  };
+  try {
+    return await enqueueBooks([opts.book], run);
+  } catch (err) {
+    console.error("[hot-tables] book merge after entity win failed; retrying", err);
+    try {
+      return await enqueueBooks([opts.book], run);
+    } catch (err2) {
+      console.error("[hot-tables] book merge retry failed; row win stands", err2);
+      const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+      return { ok: false, snapshot: existing };
+    }
+  }
+}
+
+/** Org book only — no assembleForGet / no people overlay. */
+export async function readOrgBook(): Promise<Snapshot> {
+  const rows = await loadBookRows();
+  const books = rowsToBooks(rows);
+  return books.org && typeof books.org === "object" ? books.org : {};
+}
+
+/** Replace named org collections. Does not touch people/records hot overlay. */
+export async function commitOrgFields(fields: Record<string, unknown>): Promise<Snapshot> {
+  const run = async () => {
+    const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+    const next: Snapshot = { ...existing, ...fields };
+    const gens = normalizeBookGens(existing);
+    next.bookGens = { ...gens, org: (Number(gens.org) || 0) + 1 };
+    next.notebookUpdatedAt = Date.now();
+    const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, existing));
+    return persistBooks(merged, "replace", ["org"]);
+  };
+  return enqueueBooks(["org"], run);
+}
+
+function isPlainSnap(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function unionTombMaps(stored: unknown, extra: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = isPlainSnap(stored) ? { ...stored } : {};
+  if (!isPlainSnap(extra)) return out;
+  for (const [field, keys] of Object.entries(extra)) {
+    const prev = isPlainSnap(out[field]) ? { ...out[field] } : {};
+    if (isPlainSnap(keys)) Object.assign(prev, keys);
+    out[field] = prev;
+  }
+  return out;
+}
+
+function stripEntityTombs(next: Snapshot, extra: unknown) {
+  if (!isPlainSnap(extra)) return;
+  const peopleTombs = isPlainSnap(extra.people) ? extra.people : {};
+  if (Object.keys(peopleTombs).length && Array.isArray(next.people)) {
+    next.people = next.people.filter((row) => {
+      if (!row || typeof row !== "object") return true;
+      const id = String((row as { id?: string }).id || "");
+      return !peopleTombs[id] && !peopleTombs[`id:${id}`];
+    });
+  }
+  const cells = isPlainSnap(extra.targetCells) ? extra.targetCells : {};
+  if (Object.keys(cells).length && isPlainSnap(next.targetCells)) {
+    const map = { ...next.targetCells };
+    for (const id of Object.keys(cells)) delete map[id];
+    next.targetCells = map;
+  }
+  for (const [field, keys] of Object.entries(extra)) {
+    if (!field.includes("/") || !isPlainSnap(keys)) continue;
+    const [root, period] = field.split("/");
+    if ((root !== "records" && root !== "rewardRecords") || !period) continue;
+    const tree = isPlainSnap(next[root]) ? { ...next[root] } : {};
+    const month = isPlainSnap(tree[period]) ? { ...tree[period] } : {};
+    for (const pid of Object.keys(keys)) delete month[pid];
+    tree[period] = month;
+    next[root] = tree;
+  }
+}
+
+async function writeRev(snapshot: Snapshot) {
+  const at = Number(snapshot.notebookUpdatedAt) || 0;
+  if (!at) return;
+  const sql = await getSql();
+  const id = `${REV_PREFIX}${at}`;
+  const json = JSON.stringify(snapshot);
+  await sql`
+    insert into company_notebook (id, snapshot_json, updated_at)
+    values (${id}, ${json}, now())
+    on conflict (id) do nothing
+  `;
+  const extra = await sql<{ id: string }>`
+    select id from company_notebook
+    where id like ${`${REV_PREFIX}%`}
+    order by updated_at desc
+    offset 80
+  `;
+  for (const row of extra) {
+    await sql`delete from company_notebook where id = ${row.id}`;
+  }
+}
+
+async function readRev(at: number): Promise<Snapshot | null> {
+  if (!at) return null;
+  const sql = await getSql();
+  const rows = await sql<{ snapshot_json: string }>`
+    select snapshot_json from company_notebook where id = ${`${REV_PREFIX}${at}`} limit 1
+  `;
+  return parseSnapshot(rows[0]?.snapshot_json ?? null);
+}
+
+let saveChain: Promise<unknown> = Promise.resolve();
+const bookChains: Record<BookId, Promise<unknown>> = {
+  org: Promise.resolve(),
+  plans: Promise.resolve(),
+  months: Promise.resolve(),
+  targets: Promise.resolve(),
+};
+
+function allBookChains(): Promise<unknown[]> {
+  return Promise.all(BOOK_IDS.map((id) => bookChains[id]));
+}
+
+function enqueueBooks<T>(ids: readonly BookId[], fn: () => Promise<T>): Promise<T> {
+  const unique = [...new Set(ids.length ? ids : BOOK_IDS)];
+  const run = Promise.all(unique.map((id) => bookChains[id])).then(fn);
+  const tracked = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  for (const id of unique) bookChains[id] = tracked;
+  saveChain = tracked;
+  return run;
+}
+
+export async function readLiveSnapshot(): Promise<Snapshot | null> {
+  const rows = await loadBookRows();
+  const books = rowsToBooks(rows);
+  const haveAny = BOOK_IDS.some((id) => books[id]);
+  if (haveAny) return assembleSnapshot(books);
+  const sql = await getSql();
+  const legacy = await sql<{ snapshot_json: string }>`
+    select snapshot_json from company_notebook where id = ${NOTEBOOK_ID} limit 1
+  `;
+  return parseSnapshot(legacy[0]?.snapshot_json ?? null);
+}
+
+export async function loadCompanySnapshot(): Promise<CompanyLoad> {
+  const rows = await loadBookRows();
+  const books = rowsToBooks(rows);
+  const haveAny = BOOK_IDS.some((id) => books[id]);
+  const haveAll = BOOK_IDS.every((id) => books[id]);
+  const live = haveAny ? assembleSnapshot(books) : null;
+
+  if (!isThinSnapshot(live)) {
+    if (haveAll) {
+      return payload({ snapshotJson: JSON.stringify(live) } as CompanyLoad);
+    }
+    try {
+      const assembled = await persistBooks(live!, "fill-missing");
+      return payload({ snapshotJson: JSON.stringify(assembled) } as CompanyLoad);
+    } catch (err) {
+      console.error("[company-notebook] fill-missing failed", err);
+      return payload({ snapshotJson: JSON.stringify(live) } as CompanyLoad);
+    }
+  }
+
+  const sql = await getSql();
+  const legacy = await sql<{ snapshot_json: string }>`
+    select snapshot_json from company_notebook where id = ${NOTEBOOK_ID} limit 1
+  `;
+  let snapshot = parseSnapshot(legacy[0]?.snapshot_json ?? null);
+  if (isThinSnapshot(snapshot)) snapshot = seedSnapshot();
+
+  try {
+    const assembled = await persistBooks(snapshot!, haveAny ? "fill-missing" : "replace");
+    return payload({ snapshotJson: JSON.stringify(assembled) } as CompanyLoad);
+  } catch (err) {
+    console.error("[company-notebook] book migrate failed", err);
+    return payload({ snapshotJson: JSON.stringify(snapshot) } as CompanyLoad);
+  }
+}
+
+export async function saveCompanySnapshot(
+  json: string,
+): Promise<{ ok: true; bookGens?: unknown; notebookUpdatedAt?: number }> {
+  return enqueueBooks(BOOK_IDS, () => saveCompanySnapshotUnlocked(json));
+}
+
+async function saveCompanySnapshotUnlocked(
+  json: string,
+): Promise<{ ok: true; bookGens?: unknown; notebookUpdatedAt?: number }> {
+  const parsed = parseSnapshot(json) || extractSnapshot(json);
+  if (isThinSnapshot(parsed)) return { ok: true };
+  const incoming = stripSnapshotUiSession(parsed!);
+  const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+  const stored = isThinSnapshot(existing) ? null : existing;
+  if (wouldShrinkLive(incoming!, stored)) {
+    console.error(
+      "[company-notebook] refused save: incoming people",
+      peopleCount(incoming!),
+      "< stored",
+      peopleCount(existing),
+    );
+    return { ok: true, bookGens: stored?.bookGens, notebookUpdatedAt: Number(stored?.notebookUpdatedAt) || 0 };
+  }
+  const concurrent = stored ? commitBooks(stored, incoming) : incoming;
+  const merged = stripSnapshotUiSession(mergePreserveUatFixtures(concurrent, stored));
+  let assembled = merged;
+  try {
+    assembled = await persistBooks(merged, "replace");
+  } catch (err) {
+    console.error("[company-notebook] book save failed", err);
+    if (wouldShrinkLive(incoming!, existing)) {
+      return { ok: true, bookGens: stored?.bookGens, notebookUpdatedAt: Number(stored?.notebookUpdatedAt) || 0 };
+    }
+    const sql = await getSql();
+    await sql`
+      insert into company_notebook (id, snapshot_json, updated_at)
+      values (${NOTEBOOK_ID}, ${JSON.stringify(merged)}, now())
+      on conflict (id) do update
+        set snapshot_json = excluded.snapshot_json,
+            updated_at = now()
+    `;
+    assembled = merged;
+  }
+  void notifyCompanyLive(
+    Number(assembled.notebookUpdatedAt) || Date.now(),
+    normalizeBookGens(assembled),
+  ).catch((err) =>
+    console.error("[company-live] notify failed", err),
+  );
+  invalidateCompanyWire();
+  await importHotTablesAfterCommit(assembled, "restore");
+  return {
+    ok: true,
+    bookGens: assembled.bookGens,
+    notebookUpdatedAt: Number(assembled.notebookUpdatedAt) || Date.now(),
+  };
+}
+
+export async function replaceCompanySnapshot(json: string): Promise<{ ok: true; snapshotJson: string }> {
+  return enqueueBooks(BOOK_IDS, () => replaceCompanySnapshotUnlocked(json));
+}
+
+async function replaceCompanySnapshotUnlocked(
+  json: string,
+): Promise<{ ok: true; snapshotJson: string }> {
+  const extracted = extractSnapshot(json);
+  if (!extracted) {
+    throw new Error("That file is not an Aliens APMS snapshot.");
+  }
+  const incoming = normalizeTargetsGraph(stripSnapshotUiSession(extracted));
+  const guard = restoreTargetsGuard(incoming);
+  if (!guard.ok) throw new RestoreRejectedError(guard.error);
+  const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+  const stored = isThinSnapshot(existing) ? null : existing;
+  const toWrite = keepStoredTargets(incoming, stored);
+  const assembled = await persistBooks(toWrite, "replace");
+  const importSnap: Snapshot = { ...toWrite };
+  if (countTargetCells(importSnap) < 1) delete importSnap.targetCells;
+  await importHotTables(await getSql(), importSnap, { updatedBy: "restore" });
+  if (countTargetCells(incoming) > 0) {
+    const { snapshot } = await assembleForGet(await getSql(), assembled);
+    const got = new Set(targetCellKeys(snapshot));
+    const want = targetCellKeys(incoming);
+    if (want.some((id) => !got.has(id))) {
+      throw new RestoreRejectedError();
+    }
+  }
+  void notifyCompanyLive(
+    Number(assembled.notebookUpdatedAt) || Date.now(),
+    normalizeBookGens(assembled),
+  ).catch((err) =>
+    console.error("[company-live] notify failed", err),
+  );
+  invalidateCompanyWire();
+  return { ok: true, snapshotJson: JSON.stringify(assembled) };
+}
+
+export function isAdminRestorePost(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const rec = body as Record<string, unknown>;
+  const inner =
+    rec.data && typeof rec.data === "object" && !Array.isArray(rec.data)
+      ? (rec.data as Record<string, unknown>)
+      : rec;
+  return inner.restore === true || inner.allowEmpty === true || inner.adminRestore === true;
+}
+
+export async function patchCompanyBooks(input: unknown): Promise<{ status: number; body: CompanyPatchAck }> {
+  const parsed = parseCompanyPatch(input);
+  const ids = parsed ? BOOK_IDS.filter((id) => parsed.books?.[id]) : [...BOOK_IDS];
+  return enqueueBooks(ids.length ? ids : BOOK_IDS, () => patchCompanyBooksUnlocked(input));
+}
+
+/** After books commit. Failures must never fail the PATCH or write rows on 409. */
+async function dualWriteAfterCommit(
+  parsed: NonNullable<ReturnType<typeof parseCompanyPatch>>,
+  result: ReturnType<typeof applyBookPatches>,
+) {
+  try {
+    await dualWriteAfterPatch(await getSql(), result, stripRowOwnedFromBooks(parsed.books || {}), {
+      clientOpId: parsed.clientOpId,
+      updatedBy: "patch",
+    });
+  } catch (err) {
+    console.error("[hot-tables] dual-write failed", err);
+  }
+}
+
+async function patchCompanyBooksUnlocked(
+  input: unknown,
+): Promise<{ status: number; body: CompanyPatchAck }> {
+  const parsed = parseCompanyPatch(input);
+  if (!parsed) {
+    return {
+      status: 400,
+      body: {
+        ok: false,
+        error: "missing books",
+        applied: [],
+        conflict: [],
+        skipped: [...BOOK_IDS],
+        bookGens: { org: 0, plans: 0, months: 0, targets: 0 },
+        notebookUpdatedAt: 0,
+      },
+    };
+  }
+  const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+  const stored = isThinSnapshot(existing) ? null : existing;
+  if (!stored) {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        error: "empty",
+        applied: [],
+        conflict: [...BOOK_IDS],
+        skipped: [],
+        bookGens: { org: 0, plans: 0, months: 0, targets: 0 },
+        notebookUpdatedAt: 0,
+      },
+    };
+  }
+  const incoming = prepareBookPatch(parsed.books || {}, stored);
+  const result = applyBookPatches(stored, incoming, parsed.baseGens || {}, parsed.tombstones);
+  if (result.applied.includes("org") && wouldShrinkLive(result.snapshot, stored)) {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        error: "would-shrink",
+        applied: [],
+        conflict: ["org"],
+        skipped: result.skipped,
+        bookGens: normalizeBookGens(stored),
+        notebookUpdatedAt: Number(stored.notebookUpdatedAt) || 0,
+        books: { org: bookPayload(stored, "org") },
+      },
+    };
+  }
+  let assembled = stored;
+  if (result.applied.length) {
+    const merged = stripSnapshotUiSession(mergePreserveUatFixtures(result.snapshot, stored));
+    assembled = await persistBooks(merged, "replace", result.applied);
+    await dualWriteAfterCommit(parsed, result);
+    void notifyCompanyLive(
+      Number(assembled.notebookUpdatedAt) || Date.now(),
+      normalizeBookGens(assembled),
+    ).catch((err) => console.error("[company-live] notify failed", err));
+    softInvalidateCompanyWire();
+  }
+  const ack = ackFromPatch(result.applied.length ? assembled : stored, {
+    ...result,
+    snapshot: result.applied.length ? assembled : stored,
+  });
+  return { status: ack.ok ? 200 : 409, body: ack };
+}
+
+export async function loadRequestedBooks(ids: BookId[]): Promise<{
+  books: Partial<Record<BookId, Record<string, unknown>>>;
+  bookGens: Record<BookId, number>;
+  notebookUpdatedAt: number;
+}> {
+  const wire = await getCompanyWire();
+  const slim = parseSnapshot(wire.snapshotJson) || {};
+  const books: Partial<Record<BookId, Record<string, unknown>>> = {};
+  for (const id of ids) books[id] = bookPayload(slim, id);
+  return {
+    books,
+    bookGens: wire.bookGens || normalizeBookGens(slim),
+    notebookUpdatedAt: wire.at,
+  };
+}
+
+async function overlaySnapshotForGet(snapshot: Snapshot): Promise<Snapshot> {
+  try {
+    const { snapshot: next, meta } = await assembleForGet(await getSql(), snapshot);
+    if (meta.source === "books-fallback") {
+      console.error("[assemble] GET using books fallback; People would have been empty");
+    }
+    return next;
+  } catch (err) {
+    console.error("[assemble] GET overlay failed; using books", err);
+    return snapshot;
+  }
+}
+
+export async function companyIsEmpty(): Promise<boolean> {
+  const loaded = await loadCompanySnapshot();
+  return isThin(loaded.snapshotJson);
+}
+
+export { isThin, wouldShrinkLive };
+
+export type { CompanyWire } from "./company-wire-cache";
+export {
+  WIRE_GZIP_LEVEL,
+  awaitWireIdleForTests,
+  getCompanyWire,
+  invalidateCompanyWire,
+  patchCompanyWireEntity,
+  peekCompanyWire,
+  resetWireForTests,
+  setCompanyWireForTests,
+  setWireBuildForTests,
+  softInvalidateCompanyWire,
+  warmCompanyWire,
+  wireAssembleCalls,
+} from "./company-wire-cache";
+
+export { slimForWire };
+
+async function buildCompanyWireFromDb(): Promise<CompanyWire> {
+  noteWireAssemble();
+  await allBookChains();
+  const loaded = await loadCompanySnapshot();
+  const parsed = parseSnapshot(loaded.snapshotJson);
+  const base = parsed ? slimForWire(parsed) : {};
+  const slim = parsed ? slimForWire(await overlaySnapshotForGet(base)) : {};
+  const liveGens = currentLiveGens();
+  const gens = normalizeBookGens(slim);
+  if (liveGens) {
+    slim.bookGens = {
+      org: Math.max(gens.org, Number(liveGens.org) || 0),
+      plans: Math.max(gens.plans, Number(liveGens.plans) || 0),
+      months: Math.max(gens.months, Number(liveGens.months) || 0),
+      targets: Math.max(gens.targets, Number(liveGens.targets) || 0),
+    };
+  }
+  const bookGens = normalizeBookGens(slim);
+  const at = Math.max(Number(slim.notebookUpdatedAt) || 0, currentLiveAt() || 0);
+  return encodeCompanyWire(slim, at, bookGens);
+}
+
+setWireAssembler(buildCompanyWireFromDb);

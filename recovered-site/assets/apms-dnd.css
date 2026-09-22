@@ -1,0 +1,64 @@
+/* APMS theme. Slot physics from ReportingTree; no their fonts/colors/avatars. */
+
+[data-drop] {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.apms-rt--dragging [data-drop] {
+  transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: transform;
+}
+
+/* Dragged chrome stays in flow as an empty slot. Subtree is hidden so it is not a target. */
+.apms-dnd-src > [data-dnd-row] > * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.apms-dnd-src > [data-dnd-row] {
+  position: relative;
+}
+.apms-dnd-src > [data-dnd-row]::after {
+  content: "";
+  position: absolute;
+  inset: 4px 8px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--foreground, #1a1612) 6%, transparent);
+}
+.apms-dnd-src [data-drop] {
+  display: none !important;
+}
+
+.apms-dnd-ghost {
+  pointer-events: none !important;
+  position: fixed !important;
+  z-index: 400 !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+  box-shadow: 0 1px 2px rgba(26, 22, 18, 0.06) !important;
+  border-radius: 12px !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
+  -webkit-user-drag: none !important;
+  background: var(--card, #f4efe6) !important;
+  color: var(--foreground, #1a1612) !important;
+  overflow: hidden !important;
+  will-change: transform;
+}
+.apms-dnd-ghost.is-lifted {
+  box-shadow: 0 2px 4px rgba(26, 22, 18, 0.06), 0 16px 32px -8px rgba(26, 22, 18, 0.28) !important;
+}
+.apms-dnd-ghost.is-settling {
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.apms-rt--dragging-kra [data-drop^="kra:"] .plan-kra-body {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apms-rt--dragging [data-drop],
+  .apms-dnd-ghost.is-settling {
+    transition: none;
+  }
+}

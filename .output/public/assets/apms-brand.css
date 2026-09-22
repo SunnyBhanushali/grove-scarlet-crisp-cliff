@@ -1,0 +1,41 @@
+.apms-wordmark {
+  font-family: Poppins, "IBM Plex Sans", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: #1A1612;
+}
+.apms-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.apms-brand--rail {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.75rem 0.75rem 0.5rem;
+}
+.apms-brand img,
+.apms-login-brand img,
+img[src="/aliens-mark.png"] {
+  display: block;
+  width: auto;
+  height: 28px;
+  max-height: 28px;
+  max-width: 72px;
+  object-fit: contain;
+}
+.apms-brand--rail img {
+  height: 32px;
+  max-height: 32px;
+  max-width: 80px;
+}
+.apms-login-brand img {
+  height: 44px;
+  max-height: 44px;
+  max-width: 110px;
+}

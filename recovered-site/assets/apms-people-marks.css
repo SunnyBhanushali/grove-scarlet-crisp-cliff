@@ -1,0 +1,36 @@
+/* People-list multi-reporting marks. Colors are inline too — this file is the visible fallback. */
+.apms-mr {
+  display: inline-block;
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #2563eb !important;
+  line-height: 1;
+}
+.apms-mgr-sq,
+.apms-mgr-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+.apms-mgr-sq {
+  background: #2563eb !important;
+  border-radius: 2px;
+}
+.apms-mgr-dot {
+  background: #e25a3c !important;
+  border-radius: 999px;
+}
+.apms-mr-row {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  margin-left: 0.4rem;
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.2;
+  vertical-align: middle;
+}

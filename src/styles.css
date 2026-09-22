@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Safari native <select> is a system menulist (double caret). Match our fields. */
+  select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    font: inherit;
+    color: inherit;
+    line-height: 1.25;
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  select:not([multiple]):not([size]),
+  select[size="1"] {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b6660' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    background-size: 0.9rem 0.9rem;
+    padding-right: 2.1rem;
+  }
+  select[multiple],
+  select[size]:not([size="1"]) {
+    background-image: none;
+    cursor: default;
+    overflow: auto;
+  }
+  select:disabled {
+    cursor: default;
+  }
+  select::-ms-expand {
+    display: none;
+  }
+}

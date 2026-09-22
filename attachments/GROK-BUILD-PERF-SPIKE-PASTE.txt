@@ -1,0 +1,86 @@
+Fix APMS lag under 10 concurrent users TODAY. Product host is https://apms.alienstattoo.in (production). Do not call it staging. Do not touch app.alienstattoo.in. Not Step 8. Not G9 (separate). Do not invent OT/CRDT.
+
+SOURCE
+- Use the latest workspace zip Sunny attaches (continue from tJT7 / sync p0as51 + routes p0as59 lineage).
+- Read LOAD-10-SPEED-REPORT.md (20 Sep 2026 ~3:21 pm IST), REPORT-PERF-FIX.md, APMS-BUILD-CONTRACT.md.
+- Wire cache already exists (getCompanyWire / invalidateCompanyWire). PERF p0as12 helped idle INM — it does NOT stop multi-second stalls when many people save at once.
+
+LIVE EVIDENCE (Eng LOAD-10 SPEED on apms. p0as51)
+- Cold GET /api/company gzip TTFB: **1.53s** (was **0.25s** on p0as14 baseline) — ~210KB gzip / ~5.8MB inflate
+- During 10 users: typical TTFB <1s, but spikes **4.38s** and **8.58s** on GET /api/company
+- INM unchanged:true still works when etag stable (tiny ~500B)
+- Under write load etag churn → full rebuilds; 0 × 5xx
+- Team lag = sudden hangs while several people hire/lock/save — matches those spikes
+
+ROOT CAUSE (fix this — do not hand-wave)
+Every successful entity PATCH calls publishEntityWrite → invalidateCompanyWire() which nulls wireCache AND wireInflight.
+Then N concurrent GET /api/company each miss cache and run full loadCompanySnapshot + overlay/assembleForGet + JSON.stringify + gzipSync (~5.8MB).
+Invalidating mid-flight cancels single-flight coalescing → rebuild stampede under 10 writers+readers.
+That is the lag. Idle INM is fine; concurrent write+read is not.
+
+════════════════════════════════════
+THE FIX (implement exactly — this is the product)
+════════════════════════════════════
+
+### Fix 1 — Stale-while-revalidate wire (stops the spike)
+Change invalidateCompanyWire behavior for hot entity writes (people / reward-records / month-records / target-cells):
+
+1. Keep serving the **previous** wireCache to GET /api/company while a rebuild is in flight.
+   - Do NOT set wireCache = null on every entity PATCH.
+   - Do NOT cancel an in-flight rebuild by nulling wireInflight mid-flight.
+2. Mark the cache dirty (bump a dirtyGen / needsRebuild flag). Coalesce: at most **one** rebuild runs; if more writes arrive during rebuild, run **one** more rebuild after it finishes (never N parallel assembles).
+3. When rebuild completes, atomically swap wireCache + etag/at/bookGens.
+4. Readers that already have the new etag get unchanged:true; readers with old etag get the new wire once — still one assemble for the whole fleet, not one per request.
+
+Acceptance: under a test that does 10 parallel entity PATCHes + 20 parallel GET /api/company, max GET TTFB stays **< 2.0s** and there is **≤ 2** full assemble/gzip builds (not 20).
+
+### Fix 2 — Patch-in-place for single-entity writes (preferred when cache warm)
+When wireCache is warm and the write is a single entity PATCH:
+
+- People: merge that one person into slim.people (or soft-delete), bump notebookUpdatedAt / org bookGen, re-stringify + gzip **from the patched slim** — skip full assembleForGet / loadCompanySnapshot.
+- Reward-records / month-records: merge that one period+personId cell into the slim maps the same way; bump months gen.
+- Target-cells: same for targets.
+- Fall back to full rebuild only if cache is cold, slim missing that collection, or restore/admin paths.
+
+Acceptance: after a people PATCH with warm cache, GET /api/company does not re-query all hot tables; unit test proves assembleForGet was NOT called (spy) for that path.
+
+### Fix 3 — publishEntityWrite must not stampede
+In company-live.ts publishEntityWrite:
+- Still bump live at + bookGens + entities[] for SSE/tick (needed for live).
+- Call a new softInvalidateCompanyWire() / scheduleWireRebuild() from Fix 1 — **not** the hard nulling invalidate used today on every entity write.
+- Hard invalidateCompanyWire() only for restore, book-wide PATCH, admin wipe, or cold start.
+
+### Fix 4 — Cold GET still too slow (1.5s → target ≤ 0.5s on Contabo-class)
+Without breaking correctness:
+- Never run importHotTables on the GET path (already supposed to be once — verify locked).
+- Parallelize hot-table reads inside assembleForGet / overlaySnapshotForGet (people + reward_records + month_records + target_cells + tombstones) — no N+1.
+- Keep gzip; optional: gzip level 4–5 for wire if level 6 dominates CPU (measure).
+- After server boot / PM2 start, warm getCompanyWire() once in background so first user is not the cold path.
+
+Acceptance: document cold TTFB before/after on preview; aim **≤ 0.5s** gzip TTFB or ≥50% faster than 1.5s. During 10-writer soak: **p95 GET TTFB ≤ 1.5s**, **max ≤ 2.5s** (no 8s stalls).
+
+### Fix 5 — Keep what already works
+- Idle If-None-Match → unchanged:true tiny body
+- POST /api/company stays 410 unless restore
+- No fallbackPost; Remix OFF; Nitro node-server; UI keys never in DB
+- Do not force full GET on every tick to “fix” live (kills PERF; G9 is a separate chat)
+- Do not disable multi-user
+
+STAMP
+- Bump server/client cache-bust past current (e.g. sync p0as60+ or server-only is fine if no SPA change; if SPA changes, stamp sync). Update APMS-BUILD-CONTRACT.md changelog.
+
+TESTS / REPORT
+1. New test: concurrent invalidate+GET stampede — before would build N times; after ≤2 builds and GET never waits on a null cache with no stale body.
+2. New test: warm-cache people PATCH uses patch-in-place (assembleForGet not called).
+3. Keep company-perf, company-books, apms-sync, three-team, entities, assemble, live-visibility green.
+4. Write REPORT-PERF-SPIKE.md: root cause, what you changed, before/after numbers (cite LOAD-10-SPEED 4.38s/8.58s → your soak max), stamp.
+5. Update APMS-BUILD-CONTRACT.md.
+
+DO NOT
+- Do not “fix” lag by telling teams to refresh less.
+- Do not remove wire cache or gzip.
+- Do not start G9 / Step 8 / roster in this drop.
+- Do not deploy Contabo — Eng rebuilds NITRO_PRESET=node-server and cuts apms.
+
+DELIVER
+Clean source zip. Eng cuts https://apms.alienstattoo.in then re-runs LOAD-10 SPEED. Gate: during 10 users, GET /api/company **max TTFB ≤ 2.5s** and **p95 ≤ 1.5s**; cold gzip TTFB **≤ 0.5s** or ≥50% better than 1.53s; INM unchanged still tiny; durability still PASS.

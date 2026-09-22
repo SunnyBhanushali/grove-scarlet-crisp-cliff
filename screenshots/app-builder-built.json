@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Aliens APMS",
+      "hasCanvas": false,
+      "bodyTextLen": 140,
+      "bodyTextHash": "ccb30d013bd2b984190289766b71b7c7967eaef975000e0091feef66e716dc02",
+      "bodyTextPrefix": "A Sign in Aliens APMS — username and password. Username Password",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Aliens APMS",
+      "hasCanvas": false,
+      "bodyTextLen": 140,
+      "bodyTextHash": "ccb30d013bd2b984190289766b71b7c7967eaef975000e0091feef66e716dc02",
+      "bodyTextPrefix": "A Sign in Aliens APMS — username and password. Username Password",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": false,
+  "baselineReasons": []
+}
