@@ -14,6 +14,8 @@ export type CompanyWire = {
   people: Array<Record<string, unknown>>;
   bookGens: Record<BookId, number>;
   slim?: Snapshot;
+  /** slim/people/bookGens/at are current; snapshotJson + bodies not re-encoded yet. */
+  encodePending?: boolean;
 };
 
 export const WIRE_GZIP_LEVEL = 5;
@@ -70,6 +72,7 @@ export function softInvalidateCompanyWire() {
 }
 
 export function peekCompanyWire(): CompanyWire | null {
+  flushEncode();
   return wireCache;
 }
 
@@ -198,9 +201,38 @@ export function patchCompanyWireEntity(
   }
 
   wireSeq += 1;
-  wireCache = encodeCompanyWire(next, Date.now(), gens);
+  // Re-encoding (JSON + gzip of the whole company) on every row write made a
+  // burst of writes (a month lock saves ~20 cells) CPU-bound for seconds.
+  // Keep the object current now; encode once for the burst.
+  const people = Array.isArray(next.people) ? (next.people as Array<Record<string, unknown>>) : [];
+  wireCache = { ...(wireCache as CompanyWire), slim: next, people, bookGens: gens, at: Date.now(), encodePending: true };
   wireBuiltGen = wireDirtyGen;
+  scheduleEncode();
   return true;
+}
+
+let encodeTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleEncode() {
+  if (encodeTimer) return;
+  encodeTimer = setTimeout(() => {
+    encodeTimer = null;
+    flushEncode();
+  }, 30);
+  if (encodeTimer && typeof encodeTimer.unref === "function") encodeTimer.unref();
+}
+
+function flushEncode() {
+  if (!wireCache || !wireCache.encodePending || !wireCache.slim) return;
+  wireCache = encodeCompanyWire(wireCache.slim, wireCache.at, wireCache.bookGens);
+}
+
+/**
+ * For resolving the signed-in person only (reads `people`): the cached wire as
+ * it is, without forcing a pending re-encode. Falls back to getCompanyWire().
+ */
+export async function getCompanyWireForAuth(): Promise<CompanyWire> {
+  if (wireCache) return wireCache;
+  return getCompanyWire();
 }
 
 function scheduleWireRebuild() {
@@ -244,6 +276,7 @@ export function warmCompanyWire(): void {
 
 export async function getCompanyWire(): Promise<CompanyWire> {
   if (wireCache) {
+    flushEncode();
     if (wireDirtyGen !== wireBuiltGen) scheduleWireRebuild();
     return wireCache;
   }

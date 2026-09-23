@@ -4,7 +4,7 @@
  *   open plans   — Fawaz Ghansar July 2026, Ameesha Karnani September 2026
  *   locked plans — Allan Gois / Fawaz Ghansar / Hetal Soni September 2026
  */
-import { ScreenResult, realWrites, brief } from "./harness.mjs";
+import { ScreenResult, realWrites, brief, rejections } from "./harness.mjs";
 import {
   openPerson, openPlansList, expandMonth, personRow, textareaAfter, setInput, kpiWeight, behaviourBox,
   addPriority, deletePersonMonth, pageHas, actualInputs, execSelects, scoreButton, scoreSelected, headerButton,
@@ -72,7 +72,22 @@ export async function endChecks(ctx, R, m) {
   const banners = await ctx.anyBanner(m.at);
   const fives = ["A", "B", "C"].flatMap((t) => brief(m.fives(t)).map((s) => `${t}: ${s}`));
   const errs = ["A", "B", "C"].flatMap((t) => m.errors(t).map((e) => `${t}: ${e.msg}`));
-  if (errs.length) R.note(`page errors: ${[...new Set(errs)].join(" | ").slice(0, 300)}`);
+  if (errs.length) {
+    const why = [];
+    let fonts = 0;
+    for (const t of ["A", "B", "C"]) {
+      for (const r of await rejections(ctx[t], m.at)) {
+        // The test sandbox has no internet: the Google Fonts stylesheet fails to load.
+        if (/fonts\.googleapis\.com/.test(r.target || "")) fonts++;
+        else why.push(`${t}: ${r.type || ""} ${r.target || r.what}`.trim());
+      }
+    }
+    if (fonts && !why.length && errs.every((e) => /: Event$/.test(e))) {
+      R.note("Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors");
+      return R.expect(6, !banners && !fives.length, banners ? `banner: ${JSON.stringify(banners).slice(0, 400)}` : fives.length ? `5xx: ${fives.join("; ")}` : "no writes on open, no banner, no 5xx");
+    }
+    R.note(`page errors: ${[...new Set(errs)].join(" | ").slice(0, 300)}${why.length ? ` (rejections: ${[...new Set(why)].join(" | ").slice(0, 400)})` : ""}`);
+  }
   R.expect(6, !banners && !fives.length, banners ? `banner: ${JSON.stringify(banners).slice(0, 400)}` : fives.length ? `5xx: ${fives.join("; ")}` : "no writes on open, no banner, no 5xx");
 }
 

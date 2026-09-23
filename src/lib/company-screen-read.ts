@@ -163,9 +163,9 @@ export async function handleScreenReadHttp(request: Request): Promise<Response |
   if (!parsed) return null;
   if (!hasSessionToken(request.headers)) return unauthorizedJson();
 
-  const { getCompanyWire } = await import("./company-notebook");
+  const { getCompanyWireForAuth } = await import("./company-wire-cache");
   const { personIdForWire } = await import("./company-wire-http");
-  const wire = await getCompanyWire();
+  const wire = await getCompanyWireForAuth();
   const personId = await personIdForWire(request, wire);
   if (!personId) return unauthorizedJson();
 

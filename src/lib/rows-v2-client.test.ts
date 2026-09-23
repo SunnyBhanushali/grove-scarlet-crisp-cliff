@@ -621,6 +621,36 @@ test("reordering a target group's members is saved (pos) and replayed in order; 
   assert.deepEqual(g1, ["c", "a", "b"], "another screen shows the saved order");
 });
 
+test("a stale screen adding a target to a month another user deleted: the month stays deleted, nothing new is written into it", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = { ...baseSnap(), targetNodes: { n1: { id: "n1", name: "One" } }, targetRootOrder: { "2088-04": ["n1"] } };
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    sync.resetForTests();
+    sync.noteLoaded(base);
+    // A deletes the month (its order row).
+    const del = await patchEntityRow(sql, entityIdFromParts("target-root-order", "2088-04"), { baseRev: 1, deleted: true }, "A");
+    assert.equal(del.status, 200);
+    const log: Array<{ method: string; url: string }> = [];
+    sync.install(storeFetch(sql, log));
+    // B's stale screen: New target n2 in that month.
+    const stale = {
+      ...base,
+      targetNodes: { ...base.targetNodes, n2: { id: "n2", name: "Stale" } },
+      targetRootOrder: { "2088-04": ["n1", "n2"] },
+      targetCells: { "n2::2088-04": { nodeId: "n2", month: "2088-04", mode: "set" } },
+    };
+    await sync.save(stale);
+    const writes = log.filter((l) => l.method === "PATCH").map((l) => l.url);
+    assert.ok(!writes.some((u) => u.includes("target-cells/n2")), "no cell written into the deleted month: " + writes.join(", "));
+    assert.ok(!writes.some((u) => u.includes("target-nodes/n2")), "no orphan target created");
+    const order = await readEntity(sql, entityIdFromParts("target-root-order", "2088-04"));
+    assert.equal(order?.deleted, true, "the month stays deleted");
+  } finally {
+    db.end();
+  }
+});
+
 test("a row another user deleted is not re-created when stale screen state re-adds it", skip, async () => {
   const { sql, db } = await openSql();
   try {

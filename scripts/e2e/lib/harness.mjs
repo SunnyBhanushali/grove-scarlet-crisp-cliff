@@ -17,6 +17,8 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
   const errs = { A: [], B: [], C: [] };
   for (const [tag, p] of Object.entries(pages)) attach(p, tag, base, net, errs);
   for (const p of Object.values(pages)) await watchBanners(p);
+  // Reads of a re-rendering row should fail fast, not wait the default 30 s.
+  for (const p of Object.values(pages)) p.setDefaultTimeout(10000);
 
   const ctx = {
     A, B, C, pages, base, net, errs,
@@ -40,7 +42,12 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
       const t0 = Date.now();
       for (;;) {
         let ok = false;
-        try { ok = await fn(); } catch { ok = false; }
+        // One probe must not outlive the budget (a locator waiting on a row
+        // that is re-rendering would otherwise block for its own timeout).
+        const left = Math.max(300, ms - (Date.now() - t0) + 200);
+        try {
+          ok = await Promise.race([fn(), new Promise((r) => setTimeout(() => r(false), Math.min(left, 1500)))]);
+        } catch { ok = false; }
         if (ok) return Date.now() - t0;
         if (Date.now() - t0 > ms) return null;
         await new Promise((r) => setTimeout(r, step));
@@ -161,11 +168,35 @@ const BANNER_WATCH = `(() => {
   else document.addEventListener("DOMContentLoaded", start);
 })();`;
 
+/** What an unhandled rejection was (the SPA sometimes rejects with a DOM Event). */
+const REJECT_WATCH = `(() => {
+  if (window.__e2eRejectWatch) return;
+  window.__e2eRejectWatch = true;
+  window.__e2eRejections = [];
+  window.addEventListener("unhandledrejection", (ev) => {
+    const r = ev.reason;
+    const tgt = r && r.target;
+    window.__e2eRejections.push({
+      t: Date.now(),
+      what: r instanceof Error ? String(r.stack || r.message).slice(0, 300) : String(r),
+      type: r && r.type,
+      target: tgt ? (tgt.tagName || (tgt.constructor && tgt.constructor.name) || "") + " " + String(tgt.src || tgt.url || tgt.href || "").slice(0, 120) : "",
+    });
+  });
+})();`;
+
 async function watchBanners(p) {
   if (p.__bannerWatch) return;
   p.__bannerWatch = true;
   await p.addInitScript(BANNER_WATCH);
   await p.evaluate(BANNER_WATCH).catch(() => {});
+  await p.addInitScript(REJECT_WATCH);
+  await p.evaluate(REJECT_WATCH).catch(() => {});
+}
+
+/** Unhandled rejections a page recorded since `since`. */
+export async function rejections(p, since = 0) {
+  return p.evaluate((t) => (window.__e2eRejections || []).filter((x) => x.t >= t), since).catch(() => []);
 }
 
 function attach(p, tag, base, net, errs) {

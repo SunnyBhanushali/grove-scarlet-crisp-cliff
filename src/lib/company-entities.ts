@@ -10,7 +10,6 @@ import {
   type HotSql,
 } from "./company-hot-tables.ts";
 import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
-import { loadHotSlices } from "./company-assemble.ts";
 import { publishEntityWrite, hintFromEntityTable, liveTypeFromTable } from "./company-live.ts";
 import { appendHotTableChange } from "./company-entity-store.ts";
 
@@ -335,20 +334,12 @@ async function entityVisibleInAssemble(
   key: EntityKey,
   deleted: boolean,
 ): Promise<boolean> {
-  const slices = await loadHotSlices(sql);
-  if (key.table === "people") {
-    const has = slices.people.some((row) => String(row.id) === key.id);
-    return deleted ? !has : has;
-  }
-  if (key.table === "month_records") {
-    const has = Boolean(slices.records[key.period]?.[key.personId]);
-    return deleted ? !has : has;
-  }
-  if (key.table === "reward_records") {
-    const has = Boolean(slices.rewardRecords[key.period]?.[key.personId]);
-    return deleted ? !has : has;
-  }
-  const has = Boolean(slices.targetCells[key.id]);
+  // The assembled GET reads live hot rows (deleted_at is null), so "visible in
+  // assemble" is exactly "this row is live". One row lookup instead of loading
+  // every hot row for every PATCH (a month lock writes ~20 cells: that full
+  // load per cell held each save for seconds).
+  const row = await readRow(sql, key);
+  const has = !!row && !row.deleted;
   return deleted ? !has : has;
 }
 
@@ -363,12 +354,21 @@ async function seenWriteId(sql: HotSql, clientOpId: string | undefined): Promise
 }
 
 /** If hot tables are empty and books have people, import once. */
+// Every write asks "are the hot tables filled?" (five count(*) queries).
+// Once they are, the answer holds; re-check at most once a minute.
+const hotTablesFilledAt = new WeakMap<object, number>();
+
 export async function ensureHotTablesFromBooks(
   sql: HotSql,
   read: () => Promise<Snapshot | null>,
 ): Promise<void> {
+  const seen = hotTablesFilledAt.get(sql as object);
+  if (seen && Date.now() - seen < 60_000) return;
   const counts = await liveHotTableCounts(sql);
-  if (counts.people > 0) return;
+  if (counts.people > 0) {
+    hotTablesFilledAt.set(sql as object, Date.now());
+    return;
+  }
   const snap = await read();
   const n = flattenPeople(snap?.people).length;
   if (!snap || n < 1) return;
@@ -483,21 +483,20 @@ async function patchEntityUnlocked(
     console.error("[hot-tables] publish after entity row failed; still returning after assemble check", err);
   }
 
-  let bookGens: Record<string, number> | undefined = liveGens;
-  try {
-    const snap = (await books.read()) || {};
-    const slice = bookAndPayload(snap, key, payload, parsed.deleted);
-    let applied = await books.applySlice(slice.book, slice.payload, slice.extraTombs);
-    if (!applied.ok) {
-      applied = await books.applySlice(slice.book, slice.payload, slice.extraTombs);
+  // Mirror the row into its book in the background (group-committed and
+  // serialized per book). The row is committed and on the feed already; the
+  // reply no longer waits ~200 ms per row for the book rewrite, which made a
+  // burst of writes (a month lock saves every target cell) take seconds.
+  const bookGens: Record<string, number> | undefined = liveGens;
+  const slice = bookAndPayload({}, key, payload, parsed.deleted);
+  void (async () => {
+    try {
+      let applied = await books.applySlice(slice.book, slice.payload, slice.extraTombs);
+      if (!applied.ok) applied = await books.applySlice(slice.book, slice.payload, slice.extraTombs);
+    } catch (err) {
+      console.error("[hot-tables] book merge after row win failed; row stands", err);
     }
-    const gens = applied.snapshot && (applied.snapshot as Snapshot).bookGens;
-    if (gens && typeof gens === "object") {
-      bookGens = gens as Record<string, number>;
-    }
-  } catch (err) {
-    console.error("[hot-tables] book merge after row win failed; row stands", err);
-  }
+  })();
 
   let visible = await entityVisibleInAssemble(sql, key, parsed.deleted);
   if (!visible) {
@@ -571,9 +570,9 @@ export async function handleEntityHttp(request: Request): Promise<Response> {
   if (!key) {
     return Response.json({ ok: false, error: "not-found" }, { status: 404 });
   }
-  const { getCompanyWire } = await import("./company-notebook");
+  const { getCompanyWireForAuth } = await import("./company-wire-cache");
   const { personIdForWire } = await import("./company-wire-http");
-  const wire = await getCompanyWire();
+  const wire = await getCompanyWireForAuth();
   const personId = await personIdForWire(request, wire);
   if (!personId) return unauthorizedJson();
 

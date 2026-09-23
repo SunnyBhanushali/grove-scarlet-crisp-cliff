@@ -23,9 +23,22 @@ export async function openTargetsList(ctx, p) {
   await ctx.nav(p, "Rewards", "Targets");
 }
 
+/** Month rows of other years sit under a collapsed year group ("2088 | 1 month"). */
+async function showMonthRow(p, monthLabel) {
+  const row = p.locator("main button", { hasText: new RegExp("^" + monthLabel) }).first();
+  if (await row.count()) return row;
+  const year = monthLabel.split(" ").pop();
+  const grp = p.locator("main button", { hasText: new RegExp("^" + year) }).first();
+  if (await grp.count()) {
+    await grp.click();
+    await p.waitForTimeout(500);
+  }
+  return row;
+}
+
 export async function openTargetMonth(ctx, p, monthLabel = SEP) {
   await openTargetsList(ctx, p);
-  await p.locator("main button", { hasText: new RegExp("^" + monthLabel) }).first().click();
+  await (await showMonthRow(p, monthLabel)).click();
   await p.locator("main").getByText(`Targets · ${monthLabel}`).first().waitFor({ timeout: 15000 });
   await p.waitForTimeout(1000);
 }
@@ -531,6 +544,108 @@ export async function targetsDrag(ctx, run) {
     if (v !== vm[0].n || n !== nm[0].n) bad.push(`${t}: Vishal ${v}/${vm[0].n}, Nikhil ${n}/${nm[0].n}`);
   }
   R.expect(5, !bad.length, bad.length ? bad.join("; ") : `nested counts on all screens = DB (Vishal ${vm[0].n}, Nikhil ${nm[0].n})`);
+  await endChecks(ctx, R, m0);
+  return R;
+}
+
+export async function monthBadge(p, monthLabel = SEP) {
+  const t = await p.locator("main").innerText();
+  const m = t.match(new RegExp(`Targets · ${monthLabel}\\n([^\\n]+)`));
+  return m ? m[1].trim() : null;
+}
+export async function monthStatus(ctx, month) {
+  const r = await ctx.sql("select payload, deleted_at from entities where kind = 'target-month-status' and id = $1", [month]);
+  return r[0] && !r[0].deleted_at ? r[0].payload?.value : null;
+}
+async function changeLog(p) {
+  await p.getByRole("button", { name: "Change log" }).click();
+  const d = await dialog(p, "Change log");
+  const t = await d.innerText();
+  await p.mouse.click(6, 994);
+  await p.waitForTimeout(250);
+  return t;
+}
+
+// ---------------------------------------------------------------------------
+// Month status (Unlock / Lock plan), Change log, a second month, month delete
+// ---------------------------------------------------------------------------
+export async function targetsMonthStatus(ctx, run) {
+  const R = new ScreenResult("Targets", "targets-month-status", "Month status: Unlock / Lock plan · Change log · month delete");
+  const { A, B, C } = ctx;
+  const tag = run.slice(-5);
+  const LBL = { plan_open: "Plan open", plan_locked: "Plan locked", closed: "Closed" };
+  const m0 = await openWithoutWrites(ctx, R, "the Targets month page (status)", (p) => openTargetMonth(ctx, p));
+
+  // Check 2 + 3: A unlocks September while B edits Goa's M3 there; C idle (page + change log).
+  await Promise.all([
+    (async () => { await A.getByRole("button", { name: "Unlock plan" }).click(); await A.waitForTimeout(400); })(),
+    setCell(B, "Goa", 3, 1400000),
+  ]);
+  const t0 = Date.now();
+  const shows = async (p) => (await monthBadge(p)) === "Plan open" && (await cellValue(p, "Goa", 3)) === 1400000;
+  const cSeen = await ctx.waitUntil(() => shows(C), 12000);
+  const tC = cSeen === null ? null : Date.now() - t0;
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const st1 = await monthStatus(ctx, "2026-09");
+  const goa = (await cellRow(ctx, NODE.goa))?.payload;
+  const aT = await ctx.waitUntil(() => shows(A), 5000);
+  const bT = await ctx.waitUntil(() => shows(B), 5000);
+  R.expect(2, st1 === "plan_open" && Number(goa?.ladder?.M3) === 1400000 && aT !== null && bT !== null, `DB: September ${st1}, Goa M3 ${goa?.ladder?.M3}; A shows both ${aT !== null}, B shows both ${bT !== null}`);
+  const log = await changeLog(C);
+  const logOk = /Locked → Unlocked|Unlocked plan/.test(log);
+  R.expect(3, tC !== null && tC <= 5000 && logOk, tC === null ? `C did not show both within 12 s (badge ${await monthBadge(C)}, M3 ${await cellValue(C, "Goa", 3)})` : `C showed both ${(tC / 1000).toFixed(1)} s after; C's change log has the unlock: ${logOk}`);
+
+  // Check 1: A locks September again while B adds a target to April 2088 (another month).
+  await openTargetMonth(ctx, B, "April 2088");
+  const T88 = `E2E 2088 ${tag}`;
+  await Promise.all([
+    (async () => { await A.getByRole("button", { name: "Lock plan" }).first().click(); await A.waitForTimeout(400); })(),
+    newTarget(B, T88),
+  ]);
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const st2 = await monthStatus(ctx, "2026-09");
+  const n88 = await nodeByName(ctx, T88);
+  const in88 = n88 ? await inMonth(ctx, n88.id, "2088-04") : false;
+  const cL = await ctx.waitUntil(async () => (await monthBadge(C)) === "Plan locked", 5000);
+  R.expect(1, st2 === "plan_locked" && in88, `DB: September ${st2}; ${T88} on April 2088 ${in88}; C saw the lock ${cL === null ? "no" : `in ${(cL / 1000).toFixed(1)} s`}`);
+
+  // Check 4: A deletes the April 2088 month from the list; B (feed held, on that month) adds another target.
+  await ctx.holdFeed(B, /\/api\/(target-cells|e\/target)/);
+  await openTargetsList(ctx, A);
+  const row = await showMonthRow(A, "April 2088");
+  await row.locator("xpath=..").getByRole("button", { name: "Delete", exact: true }).click();
+  await A.waitForTimeout(400);
+  const conf = A.locator("div.fixed.inset-0 button", { hasText: /^Delete/ }).last();
+  if (await conf.count()) await conf.click();
+  await ctx.sleep(1500);
+  const s88 = await monthStatus(ctx, "2088-04");
+  const bStill = (await monthBadge(B, "April 2088")) !== null;
+  let err = "";
+  try { await newTarget(B, `STALE ${tag}`); } catch (e) { err = String(e).slice(0, 80); }
+  await ctx.sleep(3000);
+  await ctx.releaseFeed(B);
+  await ctx.sleep(3000);
+  const s88b = await monthStatus(ctx, "2088-04");
+  const staleNode = await nodeByName(ctx, `STALE ${tag}`);
+  const staleIn = staleNode ? await inMonth(ctx, staleNode.id, "2088-04") : false;
+  await ctx.reloadAll();
+  const listed = [];
+  for (const p of [A, B, C]) {
+    await openTargetsList(ctx, p);
+    listed.push(await (await showMonthRow(p, "April 2088")).count());
+  }
+  R.expect(4, !s88 && bStill && !s88b && !staleIn && listed.every((n) => n === 0), `A's delete: April 2088 status gone ${!s88}; B still on it ${bStill}; after B's stale New target${err ? " (" + err + ")" : ""}: month still gone ${!s88b}, stale target on it ${staleIn}; listed after reload A/B/C ${listed.join("/")}`);
+
+  // Check 5: September's status on all screens = DB.
+  const want = LBL[await monthStatus(ctx, "2026-09")];
+  const got = [];
+  for (const p of [A, B, C]) {
+    await openTargetMonth(ctx, p);
+    got.push(await monthBadge(p));
+  }
+  R.expect(5, got.every((g) => g === want), `DB ${want}; screens ${got.join(" / ")}`);
   await endChecks(ctx, R, m0);
   return R;
 }

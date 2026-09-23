@@ -184,9 +184,10 @@ test("the person can write Self comments while the plan is open or locked", () =
   assert.match(routes, /"data-mgr-notes":`ro`/);
 });
 
-test("stamp p0as78; fallbackPost still absent; G9 path kept", () => {
-  assert.match(html, /routes-e2g7y5q8-13m-p0as78\.js/);
-  assert.match(html, /apms-collections\.js\?v=p0as78/);
+test("stamp p0as80 (on p0as78); fallbackPost still absent; G9 path kept", () => {
+  assert.match(html, /routes-e2g7y5q8-13m-p0as80\.js/);
+  assert.match(html, /apms-collections\.js\?v=p0as80/);
+  assert.match(html, /apms-sync\.js\?v=p0as80/);
   assert.match(routes, /login-view-f2j6t0x4-11a3-p0ar\.js\?v=p0as68/);
   assert.equal(login.includes("fallbackPost"), false);
   assert.equal(routes.includes("fallbackPost"), false);
@@ -202,4 +203,15 @@ test("p0as78 routes: a live (book pull) apply clears its own dirty flag so later
   assert.equal(stamped.includes("let ok=h(t,`live`);setTimeout("), false, "no live apply left without the reset");
   assert.equal(stamped.split("window.__apmsSync.pickDataFields(t)").length - 1, 3);
   assert.equal(stamped.includes("function _(){D.current=!0;l.current&&("), true, "edits during an apply window still schedule a save");
+});
+
+test("p0as80 routes: a live-entity (feed) apply clears the dirty flag its own setState raised", () => {
+  const stamped = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as80.js", import.meta.url), "utf8");
+  const base = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as78.js", import.meta.url), "utf8");
+  assert.equal(stamped.split("notebookUpdatedAt:t.notebookUpdatedAt}));D.current=!1;p.current&&(clearTimeout(p.current),p.current=0);return!0}").length - 1, 3);
+  assert.equal(stamped.split("let ok=h(t,`live`);D.current=!1;").length - 1, 3, "p0as78 live apply reset kept");
+  assert.equal(stamped.length - base.length, 3 * "D.current=!1;p.current&&(clearTimeout(p.current),p.current=0);".length, "nothing else changed");
+  const index = readFileSync(new URL("../../public/assets/index-f4j9a7t3-11v-p0ar.js", import.meta.url), "utf8");
+  assert.equal(index.includes("routes-e2g7y5q8-13m-p0as80.js"), true);
+  assert.equal(index.includes("routes-e2g7y5q8-13m-p0as78.js"), false);
 });

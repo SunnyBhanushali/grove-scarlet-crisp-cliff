@@ -771,13 +771,31 @@
     return path === "/api/company" || path.indexOf(LOAD_FN) === 0;
   }
 
+  /**
+   * Read-only look at the screen for view / month / person / record checks.
+   * `exportSnapshot` copies the whole company, and a burst of feed ticks used
+   * to take several per tick (seconds of frozen screen on a lock). One copy
+   * serves every read-only caller in the same task; never mutate it.
+   */
+  var peekCache = null;
+  function peekSnapshot() {
+    if (!liveHooks || typeof liveHooks.getSnapshot !== "function") return null;
+    if (peekCache && peekCache.hooks === liveHooks) return peekCache.snap;
+    var snap = liveHooks.getSnapshot();
+    peekCache = { hooks: liveHooks, snap: snap };
+    Promise.resolve().then(function () {
+      peekCache = null;
+    });
+    return snap;
+  }
+
   function uiView() {
     try {
       var nav = global.__apmsNavUi && typeof global.__apmsNavUi.loadSession === "function" ? global.__apmsNavUi.loadSession() : null;
       if (nav && nav.view) return String(nav.view);
     } catch (err) {}
     if (liveHooks && typeof liveHooks.getSnapshot === "function") {
-      var snap = liveHooks.getSnapshot();
+      var snap = peekSnapshot();
       if (snap && snap.view) return String(snap.view);
     }
     return "";
@@ -789,7 +807,7 @@
       if (nav && (nav.currentMonth || nav.selectedMonth)) return String(nav.currentMonth || nav.selectedMonth);
     } catch (err) {}
     if (liveHooks && typeof liveHooks.getSnapshot === "function") {
-      var snap = liveHooks.getSnapshot();
+      var snap = peekSnapshot();
       if (snap) return String(snap.currentMonth || snap.selectedMonth || "");
     }
     return "";
@@ -800,7 +818,7 @@
       var nav = global.__apmsNavUi && typeof global.__apmsNavUi.loadSession === "function" ? global.__apmsNavUi.loadSession() : null;
       if (nav && nav.selectedPersonId) return String(nav.selectedPersonId);
     } catch (err) {}
-    return apmsPersonId(liveHooks && liveHooks.getSnapshot ? liveHooks.getSnapshot() : null);
+    return apmsPersonId(peekSnapshot());
   }
 
   function isApmsView(view) {
@@ -908,7 +926,7 @@
     } catch (err) {
       if (typeof console !== "undefined" && console.warn) console.warn("[apms-sync] clearGhosts", err);
     }
-    var snap = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
+    var snap = peekSnapshot();
     var view = uiView();
     if (!view && snap && snap.view) view = String(snap.view);
     var month = uiMonth() || (snap ? String(snap.currentMonth || snap.selectedMonth || "") : "");
@@ -1015,6 +1033,8 @@
     if (liveHooks && (pendingEntities.length > 0 || lastRemoteAt > lastPulledAt)) {
       scheduleLivePull();
     }
+    // The SPA re-installs its hooks on every feed message; the screen read
+    // takes one (shared) snapshot copy, see peekSnapshot.
     try {
       maybeScreenRead();
     } catch (err) {}
@@ -1143,11 +1163,19 @@
    * committed after our cursor, with payloads, in one request, and overlay
    * them. Idle ticks cost nothing. A `*` change (restore) forces a full pull.
    */
+  // A tick that arrives while a poll is in flight must not be lost: that poll's
+  // request may predate the commit the tick announces. Poll once more after it.
+  var pollAgain = false;
+  var pollRefused = false;
+  var feedLog = [];
   function pollChanges() {
+    if (changesInFlight) pollAgain = true;
     if (!C || changesInFlight) return changesInFlight || Promise.resolve(null);
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     if (!getter) return Promise.resolve(null);
     var since = liveSeq;
+    pollAgain = false;
+    pollRefused = false;
     changesInFlight = getter("/api/changes?since=" + since + "&payload=1&limit=500", {
       method: "GET",
       credentials: "include",
@@ -1156,6 +1184,8 @@
       .then(function (res) { return res && res.ok ? res.json() : null; })
       .then(function (body) {
         changesInFlight = null;
+        feedLog.push({ at: Date.now(), since: since, n: body && Array.isArray(body.changes) ? body.changes.length : -1, seq: body && body.seq });
+        if (feedLog.length > 40) feedLog.shift();
         if (!body || !Array.isArray(body.changes)) return null;
         var hooks = liveHooks;
         var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
@@ -1197,6 +1227,8 @@
         else {
           // UI refused (unsaved edits in flight). Rewind the cursor: replay on the next tick
           // (even if that tick's `at` has not moved again).
+          pollRefused = true;
+          if (feedLog.length) feedLog[feedLog.length - 1].refused = true;
           liveSeq = since;
           lastChangesAt = 0;
           return body;
@@ -1207,6 +1239,18 @@
       .catch(function () {
         changesInFlight = null;
         return null;
+      })
+      .then(function (body) {
+        // Refused applies rewind the cursor and wait for the next tick instead.
+        if (pollAgain && !pollRefused) {
+          pollAgain = false;
+          setTimeout(function () {
+            try {
+              pollChanges();
+            } catch (err) {}
+          }, 0);
+        }
+        return body;
       });
     return changesInFlight;
   }
@@ -1214,6 +1258,8 @@
   function handleLiveEvent(tick) {
     if (!tick || typeof tick !== "object") return { queued: 0, shouldPull: false, at: 0 };
     var at = Number(tick.at || tick.notebookUpdatedAt) || 0;
+    feedLog.push({ at: Date.now(), tick: at, poll: !!(C && at > lastChangesAt) });
+    if (feedLog.length > 40) feedLog.shift();
     if (C && at > lastChangesAt) {
       lastChangesAt = at;
       pollChanges();
@@ -2412,7 +2458,7 @@
   function flagStaleReadd() {
     var entry = noteScreenEntry();
     if (entry.view !== "scorecard" || !(entry.fromLoad || entry.hadRecord)) return;
-    var snap = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
+    var snap = peekSnapshot();
     if (!snap) return;
     var field = entry.kind === "rewards" ? "rewardRecords" : "records";
     var tree = (lastAcked.months && lastAcked.months[field]) || {};
@@ -2782,7 +2828,50 @@
   async function saveEntities(snap) {
     var ops = collectEntityOps(snap);
     if (!ops.length) return { ok: true, applied: [], ops: [], snapshot: snap };
-    // Target cells first: a re-added target re-creates its cell before its
+    // A target month's order row goes first. If another user deleted that
+    // month (this screen still had it), whatever this save adds to it (new
+    // cells, memberships, targets) is stale: dropped, so the month stays gone.
+    var orderOps = ops.filter(function (op) { return op.kind === "e:target-root-order"; });
+    var orderResults = [];
+    var deadMonths = {};
+    if (orderOps.length && ops.length > orderOps.length) {
+      orderResults = await Promise.all(orderOps.map(function (op) { return saveOneEntity(op, snap); }));
+      orderResults.forEach(function (r) {
+        if (r && r.ok && r.adopted && r.deleted && r.op && !r.op.deleted) deadMonths[String(r.op.rowId)] = 1;
+      });
+      ops = ops.filter(function (op) { return op.kind !== "e:target-root-order"; });
+    }
+    var dropped = [];
+    if (Object.keys(deadMonths).length) {
+      var droppedNodes = {};
+      ops = ops.filter(function (op) {
+        if (op.deleted) return true;
+        var month = null;
+        var node = null;
+        if (op.kind === "target_cells") {
+          var cid = op.revKey.slice("target_cells:".length);
+          month = cid.split("::")[1];
+          node = cid.split("::")[0];
+        } else if (op.kind === "e:target-members" || op.kind === "e:target-month-status") {
+          month = op.kind === "e:target-members" ? String((op.payload || {}).month || "") : String(op.rowId);
+        }
+        if (month && deadMonths[month] && ackedSlice(op) === undefined) {
+          if (node) droppedNodes[node] = 1;
+          dropped.push({ ok: true, json: { ok: true, deleted: true, payload: op.payload }, op: op, adopted: true, deleted: true });
+          return false;
+        }
+        return true;
+      });
+      ops = ops.filter(function (op) {
+        if (op.kind === "e:target-nodes" && !op.deleted && droppedNodes[String(op.rowId)] && ackedSlice(op) === undefined) {
+          dropped.push({ ok: true, json: { ok: true, deleted: true, payload: op.payload }, op: op, adopted: true, deleted: true });
+          return false;
+        }
+        return true;
+      });
+      lastMergeTrace.push({ kind: "stale-month-content-dropped", months: Object.keys(deadMonths), ops: dropped.length });
+    }
+    // Target cells next: a re-added target re-creates its cell before its
     // group membership, which the server refuses while the cell is deleted.
     var cellOps = ops.filter(function (op) { return op.kind === "target_cells"; });
     var otherOps = ops.filter(function (op) { return op.kind !== "target_cells"; });
@@ -2790,8 +2879,8 @@
       ? await Promise.all(cellOps.map(function (op) { return saveOneEntity(op, snap); }))
       : null;
     var restResults = await Promise.all((cellResults ? otherOps : ops).map(function (op) { return saveOneEntity(op, snap); }));
-    var results = cellResults ? cellResults.concat(restResults) : restResults;
-    if (cellResults) ops = cellOps.concat(otherOps);
+    var results = orderResults.concat(dropped, cellResults ? cellResults.concat(restResults) : restResults);
+    ops = orderOps.length && orderResults.length ? orderOps.concat(dropped.map(function (r) { return r.op; }), cellResults ? cellOps.concat(otherOps) : ops) : (cellResults ? cellOps.concat(otherOps) : ops);
     var conflict = results.find(function (r) { return r && r.error === "person-month-conflict"; });
     if (conflict) {
       return {
@@ -3243,11 +3332,21 @@
     }
     var local = typeof opts.getSnapshot === "function" ? opts.getSnapshot() : null;
     if (!isPlainObject(local)) return { pulled: [] };
-    var dirty = dirtyBooks(local);
-    var dirtySet = {};
-    dirty.forEach(function (id) {
-      dirtySet[id] = 1;
-    });
+    // Hashing every book is the costliest step of a live tick; it only
+    // decides whether a changed non-row book (plans, settings…) may be pulled.
+    var dirty = null;
+    var dirtySet = null;
+    var firstLocal = local;
+    function isDirty(id) {
+      if (!dirtySet) {
+        dirty = dirtyBooks(firstLocal);
+        dirtySet = {};
+        dirty.forEach(function (d) {
+          dirtySet[d] = 1;
+        });
+      }
+      return !!dirtySet[id];
+    }
     var slices = dirtySlices(local);
     if (opts.entities && Array.isArray(opts.entities)) {
       opts.entities.forEach(function (hint) {
@@ -3289,7 +3388,7 @@
         if (id === "org" && (entityPull.types.people || skipCompanyFile)) return;
         if (id === "months" && (entityPull.types["reward-records"] || entityPull.types["month-records"] || entityPull.types.reward_records || entityPull.types.month_records || skipCompanyFile)) return;
         if (id === "targets" && (entityPull.types["target-cells"] || entityPull.types.target_cells || skipCompanyFile)) return;
-        if (!dirtySet[id] || id === "org" || id === "months" || id === "targets") toPull.push(id);
+        if (id === "org" || id === "months" || id === "targets" || !isDirty(id)) toPull.push(id);
       }
     });
     if (!toPull.length && lastRemoteAt > lastPulledAt && !lastTickHadGens && !entityFetched.length && !skipCompanyFile) {
@@ -3303,7 +3402,7 @@
       return {
         pulled: [],
         entities: entityFetched,
-        dirty: dirty,
+        dirty: dirty || [],
         blocked: blocked(),
         rowConflicts: lastRowConflicts.slice(),
         banner: false,
@@ -3314,7 +3413,7 @@
     if (!pulled) return { pulled: [], error: "pull-failed", banner: false, rowConflicts: [] };
     if (blocked()) {
       remember();
-      return { pulled: [], dirty: dirty, blocked: true, deferred: toPull, banner: false, rowConflicts: [] };
+      return { pulled: [], dirty: dirty || [], blocked: true, deferred: toPull, banner: false, rowConflicts: [] };
     }
     local = typeof opts.getSnapshot === "function" ? opts.getSnapshot() : local;
     dirty = dirtyBooks(local);
@@ -3587,6 +3686,18 @@
     mergeGenericRow: mergeGenericRow,
     mergeHotRow: mergeHotRow,
     /** Read-only diagnostics: what the next save would send for the screen as it is now. */
+    /** Read-only diagnostics: is the UI refusing live applies right now (SPA dirty/saving)? */
+    /** Read-only diagnostics: the last change-feed polls (time, cursor, rows, refused). */
+    feedLog: function () {
+      return feedLog.slice();
+    },
+    liveBlocked: function () {
+      try {
+        return liveHooks && typeof liveHooks.isBlocked === "function" ? !!liveHooks.isBlocked() : null;
+      } catch (err) {
+        return null;
+      }
+    },
     /** Read-only diagnostics: the screens this page went through (stale re-add rule). */
     screenEntries: function () {
       return screenEntries.slice();

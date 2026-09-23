@@ -27,6 +27,7 @@ type Sync = {
   collectEntityOps(s: Record<string, unknown>): Array<{ url: string; payload: Record<string, unknown>; deleted: boolean }>;
   lastAckedBooks(): Record<string, Record<string, unknown>>;
   save(s: Record<string, unknown>): Promise<Record<string, unknown>>;
+  handleLiveEvent(t: Record<string, unknown>): unknown;
 };
 const sync = (globalThis as unknown as { __apmsSync: Sync }).__apmsSync;
 
@@ -328,6 +329,43 @@ test("an idle screen writing back its older copy of a plan does not undo another
     const row2 = (await sql.query<{ payload: { status: string; notes: string } }>("select payload from month_records where person_id = 'p1' and period = '2026-09'"))[0];
     assert.equal(row2.payload.notes, "C's notes");
     assert.equal(row2.payload.status, "plan_locked");
+  } finally {
+    close();
+  }
+});
+
+test("a tick that arrives while a feed poll is in flight is not lost (burst of writes)", skip, async () => {
+  const { sql, close } = await openSql();
+  try {
+    const books = memoryEntityBooks(base());
+    const { ensureHotTablesFromBooks } = await import("./company-entities.ts");
+    await ensureHotTablesFromBooks(sql, () => books.read());
+    sync.resetForTests();
+    sync.noteLoaded(base());
+    sync.setLiveSeq(await latestSeq(sql));
+    const feed = feedFetch(sql);
+    let release: () => void = () => {};
+    let slowOnce = true;
+    sync.install((async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("/api/changes") && slowOnce) {
+        slowOnce = false;
+        const res = await feed(input); // taken now: before the second commit
+        await new Promise<void>((r) => { release = r; });
+        return res;
+      }
+      return feed(input);
+    }) as typeof fetch);
+    let local: Record<string, unknown> = base();
+    sync.setLiveHooks({ getSnapshot: () => local, isBlocked: () => false, apply: (s: Record<string, unknown>) => { local = s; return true; }, remember: () => {} });
+    await patchEntity(sql, { table: "target_cells", id: "tn-a::2026-09" }, { baseRev: 1, payload: { nodeId: "tn-a", month: "2026-09", actual: 11 } }, books, "A");
+    const first = sync.pollChanges(); // in flight, sees actual 11
+    await new Promise((r) => setTimeout(r, 20));
+    await patchEntity(sql, { table: "target_cells", id: "tn-a::2026-09" }, { baseRev: 2, payload: { nodeId: "tn-a", month: "2026-09", actual: 12 } }, books, "A");
+    sync.handleLiveEvent({ at: Date.now() + 5000 }); // the tick for the second commit, during the flight
+    release();
+    await first;
+    for (let i = 0; i < 50 && (local.targetCells as Record<string, { actual: number }>)["tn-a::2026-09"]?.actual !== 12; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal((local.targetCells as Record<string, { actual: number }>)["tn-a::2026-09"].actual, 12, "the second commit reached the screen without another tick");
   } finally {
     close();
   }

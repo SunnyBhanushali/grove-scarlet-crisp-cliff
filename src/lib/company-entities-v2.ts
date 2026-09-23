@@ -85,9 +85,9 @@ export function liveEntityHooks(): EntityHooks {
 }
 
 async function resolvePerson(request: Request): Promise<string | null> {
-  const { getCompanyWire } = await import("./company-notebook");
+  const { getCompanyWireForAuth } = await import("./company-wire-cache");
   const { personIdForWire } = await import("./company-wire-http");
-  const wire = await getCompanyWire();
+  const wire = await getCompanyWireForAuth();
   return personIdForWire(request, wire);
 }
 

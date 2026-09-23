@@ -263,58 +263,95 @@ async function importHotTablesAfterCommit(snapshot: Snapshot, updatedBy: string)
 }
 
 /** Merge one entity slice into the matching book. Union only — never 409 on book gen. */
-export async function applyEntityBookSlice(opts: {
-  book: BookId;
-  payload: Snapshot;
-  extraTombs?: unknown;
-}): Promise<{ ok: boolean; snapshot: Snapshot }> {
-  const run = async (): Promise<{ ok: boolean; snapshot: Snapshot }> => {
-    const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
-    const stored = existing;
-    const next: Snapshot = { ...stored };
-    const payload = opts.payload || {};
-    if (opts.book === "org" && "people" in payload) {
-      next.people = mergeKeepPeople(stored.people, payload.people);
+type BookSliceOpts = { book: BookId; payload: Snapshot; extraTombs?: unknown };
+type BookSliceResult = { ok: boolean; snapshot: Snapshot };
+
+/**
+ * Hot-row writes mirror into their book. Each mirror re-reads, merges and
+ * re-writes the whole book, serialized on it; a burst (a month lock saves
+ * every target cell) held the event loop for seconds and every other request
+ * with it. Slices that arrive while a write for the same book is running are
+ * group-committed: applied together in the next single book write.
+ */
+const bookSliceQueues = new Map<BookId, { items: Array<{ opts: BookSliceOpts; resolve: (r: BookSliceResult) => void }>; running: boolean }>();
+
+export async function applyEntityBookSlice(opts: BookSliceOpts): Promise<BookSliceResult> {
+  return new Promise<BookSliceResult>((resolve) => {
+    let q = bookSliceQueues.get(opts.book);
+    if (!q) {
+      q = { items: [], running: false };
+      bookSliceQueues.set(opts.book, q);
     }
-    if (opts.book === "months") {
+    q.items.push({ opts, resolve });
+    if (!q.running) void drainBookSlices(opts.book);
+  });
+}
+
+async function drainBookSlices(book: BookId): Promise<void> {
+  const q = bookSliceQueues.get(book);
+  if (!q || q.running) return;
+  q.running = true;
+  try {
+    while (q.items.length) {
+      const batch = q.items.splice(0);
+      const list = batch.map((b) => b.opts);
+      let result: BookSliceResult;
+      try {
+        result = await enqueueBooks([book], () => applyBookSlices(book, list));
+      } catch (err) {
+        console.error("[hot-tables] book merge after entity win failed; retrying", err);
+        try {
+          result = await enqueueBooks([book], () => applyBookSlices(book, list));
+        } catch (err2) {
+          console.error("[hot-tables] book merge retry failed; row win stands", err2);
+          result = { ok: false, snapshot: assembleSnapshot(rowsToBooks(await loadBookRows())) };
+        }
+      }
+      for (const b of batch) b.resolve(result);
+    }
+  } finally {
+    q.running = false;
+  }
+}
+
+async function applyBookSlices(book: BookId, list: BookSliceOpts[]): Promise<BookSliceResult> {
+  const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+  const stored = existing;
+  const next: Snapshot = { ...stored };
+  let tombs: unknown = undefined;
+  for (const opts of list) {
+    const payload = opts.payload || {};
+    if (book === "org" && "people" in payload) {
+      next.people = mergeKeepPeople(next.people, payload.people);
+    }
+    if (book === "months") {
       if ("records" in payload) {
-        next.records = mergeKeepMonthMaps(stored.records, payload.records);
+        next.records = mergeKeepMonthMaps(next.records, payload.records);
       }
       if ("rewardRecords" in payload) {
-        next.rewardRecords = mergeKeepMonthMaps(stored.rewardRecords, payload.rewardRecords);
+        next.rewardRecords = mergeKeepMonthMaps(next.rewardRecords, payload.rewardRecords);
       }
     }
-    if (opts.book === "targets" && "targetCells" in payload) {
+    if (book === "targets" && "targetCells" in payload) {
       next.targetCells = {
-        ...(isPlainSnap(stored.targetCells) ? stored.targetCells : {}),
+        ...(isPlainSnap(next.targetCells) ? next.targetCells : {}),
         ...(isPlainSnap(payload.targetCells) ? payload.targetCells : {}),
       };
     }
-    next.tombstones = unionTombMaps(stored.tombstones, opts.extraTombs);
-    stripEntityTombs(next, opts.extraTombs);
-    const gens = normalizeBookGens(stored);
-    next.bookGens = { ...gens, [opts.book]: (Number(gens[opts.book]) || 0) + 1 };
-    next.notebookUpdatedAt = Date.now();
-    const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, stored));
-    const assembled = await persistBooks(merged, "replace", [opts.book]);
-    await notifyCompanyLive(
-      Number(assembled.notebookUpdatedAt) || Date.now(),
-      normalizeBookGens(assembled),
-    );
-    return { ok: true, snapshot: assembled };
-  };
-  try {
-    return await enqueueBooks([opts.book], run);
-  } catch (err) {
-    console.error("[hot-tables] book merge after entity win failed; retrying", err);
-    try {
-      return await enqueueBooks([opts.book], run);
-    } catch (err2) {
-      console.error("[hot-tables] book merge retry failed; row win stands", err2);
-      const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
-      return { ok: false, snapshot: existing };
-    }
+    tombs = unionTombMaps(tombs, opts.extraTombs);
   }
+  next.tombstones = unionTombMaps(stored.tombstones, tombs);
+  stripEntityTombs(next, tombs);
+  const gens = normalizeBookGens(stored);
+  next.bookGens = { ...gens, [book]: (Number(gens[book]) || 0) + 1 };
+  next.notebookUpdatedAt = Date.now();
+  const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, stored));
+  const assembled = await persistBooks(merged, "replace", [book]);
+  await notifyCompanyLive(
+    Number(assembled.notebookUpdatedAt) || Date.now(),
+    normalizeBookGens(assembled),
+  );
+  return { ok: true, snapshot: assembled };
 }
 
 /**
