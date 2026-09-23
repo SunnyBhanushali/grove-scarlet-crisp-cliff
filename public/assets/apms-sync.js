@@ -292,12 +292,57 @@
     return out;
   }
 
+  /**
+   * Ordered lists (a target group's members): the order is the array order on
+   * screen, which rows do not carry. Keep each row's `pos`; when the order of a
+   * group's members changed against the baseline, number that group 0..n-1 so
+   * the reorder is saved (and reaches other users) like any field.
+   */
+  function withPositions(spec, list, acked) {
+    if (!Array.isArray(list)) return list;
+    var groupKey = function (x) { return isPlainObject(x) ? String(x.groupId) + "\u0001" + String(x.month) : ""; };
+    var prevPos = {};
+    var prevSeq = {};
+    (Array.isArray(acked) ? C.sortByPos(acked) : []).forEach(function (x, i) {
+      var k = C.rowKey(spec, x, i);
+      if (isPlainObject(x) && typeof x.pos === "number") prevPos[k] = x.pos;
+      var g = groupKey(x);
+      (prevSeq[g] = prevSeq[g] || []).push(k);
+    });
+    var nextSeq = {};
+    list.forEach(function (x, i) {
+      var g = groupKey(x);
+      (nextSeq[g] = nextSeq[g] || []).push(C.rowKey(spec, x, i));
+    });
+    var moved = {};
+    Object.keys(nextSeq).forEach(function (g) {
+      var had = prevSeq[g] || [];
+      var common = nextSeq[g].filter(function (k) { return had.indexOf(k) >= 0; });
+      var was = had.filter(function (k) { return common.indexOf(k) >= 0; });
+      if (common.join("\u0002") !== was.join("\u0002")) moved[g] = 1;
+    });
+    var counters = {};
+    return list.map(function (x, i) {
+      if (!isPlainObject(x)) return x;
+      var g = groupKey(x);
+      var k = C.rowKey(spec, x, i);
+      if (moved[g]) {
+        var n = counters[g] || 0;
+        counters[g] = n + 1;
+        return x.pos === n ? x : Object.assign({}, x, { pos: n });
+      }
+      if (typeof x.pos !== "number" && typeof prevPos[k] === "number") return Object.assign({}, x, { pos: prevPos[k] });
+      return x;
+    });
+  }
+
   function genericOpsFor(spec, snap, ops) {
     // A field the UI snapshot does not carry (e.g. roleKrocs, a book-storage
     // split) is "not held here", never "every row deleted".
     if (snap[spec.field] === undefined) return;
     var prev = rowsById(spec, ackedFieldValue(spec));
-    var next = rowsById(spec, snap[spec.field]);
+    var nextValue = spec.ordered ? withPositions(spec, snap[spec.field], ackedFieldValue(spec)) : snap[spec.field];
+    var next = rowsById(spec, nextValue);
     Object.keys(next).forEach(function (id) {
       if (prev[id] && eq(next[id].payload, prev[id].payload)) return;
       var row = next[id];
@@ -2737,7 +2782,16 @@
   async function saveEntities(snap) {
     var ops = collectEntityOps(snap);
     if (!ops.length) return { ok: true, applied: [], ops: [], snapshot: snap };
-    var results = await Promise.all(ops.map(function (op) { return saveOneEntity(op, snap); }));
+    // Target cells first: a re-added target re-creates its cell before its
+    // group membership, which the server refuses while the cell is deleted.
+    var cellOps = ops.filter(function (op) { return op.kind === "target_cells"; });
+    var otherOps = ops.filter(function (op) { return op.kind !== "target_cells"; });
+    var cellResults = cellOps.length && otherOps.some(function (op) { return op.kind === "e:target-members"; })
+      ? await Promise.all(cellOps.map(function (op) { return saveOneEntity(op, snap); }))
+      : null;
+    var restResults = await Promise.all((cellResults ? otherOps : ops).map(function (op) { return saveOneEntity(op, snap); }));
+    var results = cellResults ? cellResults.concat(restResults) : restResults;
+    if (cellResults) ops = cellOps.concat(otherOps);
     var conflict = results.find(function (r) { return r && r.error === "person-month-conflict"; });
     if (conflict) {
       return {

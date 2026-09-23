@@ -418,6 +418,15 @@ async function rememberOp(sql: HotSql, clientOpId: string, row: StoredEntity, up
   );
 }
 
+async function cellIsTombstone(sql: HotSql, cellId: string): Promise<boolean> {
+  try {
+    const rows = await sql.query<{ deleted_at: unknown }>("select deleted_at from target_cells where id = $1", [cellId]);
+    return rows.length > 0 && rows[0].deleted_at != null;
+  } catch {
+    return false;
+  }
+}
+
 /** Notice kinds the SPA generates on its own (month reminders), not typed by a person. */
 const AUTO_NOTICE_KINDS = new Set(["plan_due", "plan_late", "month_close_due"]);
 
@@ -493,6 +502,19 @@ export async function patchEntityRow(
         return { status: 409, body: { ...entityBody(stored), ok: false, error: "stale" } };
       }
       expectRev = stored.rev;
+    }
+
+    if (key.kind === "target-members" && !parsed.deleted && (!stored || stored.deleted)) {
+      // A new membership for a target that was deleted from that month (its
+      // cell is a tombstone) comes from a stale screen (e.g. dragging a target
+      // someone else just deleted): the delete stands. A real re-add re-creates
+      // the cell first (the client sends cell writes before memberships).
+      const memberId = String(parsed.payload.memberId || "");
+      const month = String(parsed.payload.month || "");
+      if (memberId && month && (await cellIsTombstone(sql, `${memberId}::${month}`))) {
+        const current = stored || { ...key, payload: parsed.payload, rev: 0, deleted: true };
+        return { status: 409, body: { ...entityBody({ ...current, deleted: true }), ok: false, error: "stale", memberDeleted: true } };
+      }
     }
 
     let payload =

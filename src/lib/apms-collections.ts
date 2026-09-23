@@ -8,6 +8,7 @@ export type CollectionSpec = {
   shape: CollectionShape;
   book: "org" | "plans" | "months" | "targets";
   keyFields?: string[];
+  ordered?: boolean;
 };
 
 export type EntityRowShape = {

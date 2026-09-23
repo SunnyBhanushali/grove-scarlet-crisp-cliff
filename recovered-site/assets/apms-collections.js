@@ -69,7 +69,9 @@
     pick("sbuTargets", "sbu-targets", "map", "targets"),
     pick("targetHistory", "target-history", "list", "targets"),
     pick("targetNodes", "target-nodes", "map", "targets"),
-    pick("targetMembers", "target-members", "list", "targets", { keyFields: ["groupId", "memberId", "month"] }),
+    // `ordered`: a group's members keep their order via `pos` on each row (rows
+    // themselves have no order; storage returns them by last update).
+    pick("targetMembers", "target-members", "list", "targets", { keyFields: ["groupId", "memberId", "month"], ordered: true }),
     pick("targetMonthStatus", "target-month-status", "map", "targets"),
     pick("targetRootOrder", "target-root-order", "map", "targets"),
   ];
@@ -161,6 +163,22 @@
     return rows;
   }
 
+  /**
+   * Stable sort by `pos` for ordered lists: rows with a position first, in
+   * position order; rows without one keep their relative order after them.
+   */
+  function sortByPos(list) {
+    if (!list.some(function (x) { return isPlainObject(x) && typeof x.pos === "number"; })) return list;
+    return list
+      .map(function (x, i) { return { x: x, i: i }; })
+      .sort(function (a, b) {
+        var pa = isPlainObject(a.x) && typeof a.x.pos === "number" ? a.x.pos : Infinity;
+        var pb = isPlainObject(b.x) && typeof b.x.pos === "number" ? b.x.pos : Infinity;
+        return pa === pb ? a.i - b.i : pa - pb;
+      })
+      .map(function (w) { return w.x; });
+  }
+
   /** Rebuild the snapshot field from rows (live rows only). */
   function fromRows(spec, rows) {
     if (spec.shape === "scalar") {
@@ -176,7 +194,7 @@
         list.push(r.payload);
       });
       // Keep a stable order: by explicit `order`/`sort` if present, else by insertion
-      return list;
+      return spec.ordered ? sortByPos(list) : list;
     }
     if (spec.shape === "map") {
       var map = {};
@@ -216,7 +234,7 @@
         if (idx >= 0) list.splice(idx, 1);
       } else if (idx >= 0) list[idx] = row.payload;
       else list.push(row.payload);
-      return list;
+      return spec.ordered ? sortByPos(list) : list;
     }
     if (spec.shape === "map") {
       var map = isPlainObject(current) ? Object.assign({}, current) : {};
@@ -276,6 +294,7 @@
     toRows: toRows,
     fromRows: fromRows,
     applyRow: applyRow,
+    sortByPos: sortByPos,
     rowPath: rowPath,
     wrap: wrap,
     unwrap: unwrap,

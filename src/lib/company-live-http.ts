@@ -8,6 +8,7 @@ import {
   encodeSse,
   liveSseHeaders,
   readLiveAt,
+  startEntityListen,
   subscribeCompanyLive,
 } from "./company-live.ts";
 
@@ -42,6 +43,7 @@ export async function handleCompanyTickRequest(request: Request): Promise<Respon
 
 export async function handleCompanyLiveRequest(request: Request): Promise<Response> {
   if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  startEntityListen();
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {

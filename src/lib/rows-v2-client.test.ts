@@ -601,6 +601,26 @@ test("a row the feed applies while a hint GET is in flight stays on screen, and 
   }
 });
 
+test("reordering a target group's members is saved (pos) and replayed in order; an unchanged order writes nothing", () => {
+  sync.resetForTests();
+  const m = (g: string, id: string, extra: Record<string, unknown> = {}) => ({ month: "2026-09", groupId: g, memberId: id, ...extra });
+  const base = { ...baseSnap(), targetMembers: [m("g1", "a"), m("g1", "b"), m("g1", "c"), m("g2", "x")] };
+  sync.noteLoaded(base);
+  assert.deepEqual(sync.collectEntityOps(base).map((o) => o.url), [], "loaded order: nothing to save");
+  const reordered = { ...base, targetMembers: [m("g1", "c"), m("g1", "a"), m("g1", "b"), m("g2", "x")] };
+  const ops = sync.collectEntityOps(reordered);
+  assert.equal(ops.length, 3, "the three g1 rows get positions");
+  const pos = Object.fromEntries(ops.map((o) => [String(o.payload.memberId), o.payload.pos]));
+  assert.deepEqual(pos, { c: 0, a: 1, b: 2 });
+  const C = (globalThis as unknown as { __apmsCollections: { specForField(f: string): unknown; applyRow(s: unknown, cur: unknown, row: unknown, del: boolean): Array<{ memberId: string }> } }).__apmsCollections;
+  const spec = C.specForField("targetMembers");
+  let list: unknown = base.targetMembers;
+  for (const o of ops) list = C.applyRow(spec, list, { id: "x", payload: o.payload }, false);
+  // applyRow keys rows by id; with fresh ids they are appended, then sorted by pos.
+  const g1 = (list as Array<{ groupId: string; memberId: string; pos?: number }>).filter((x) => x.groupId === "g1" && typeof x.pos === "number").map((x) => x.memberId);
+  assert.deepEqual(g1, ["c", "a", "b"], "another screen shows the saved order");
+});
+
 test("a row another user deleted is not re-created when stale screen state re-adds it", skip, async () => {
   const { sql, db } = await openSql();
   try {

@@ -281,3 +281,52 @@ export async function publishEntityWrite(
   }
   return gens;
 }
+
+/**
+ * Row commits `pg_notify('apms_entities')` (ROWS-V2). The SSE stream of this
+ * process only heard commits handled by this same module copy / worker; the
+ * rest arrived through the 2 s tick-row poll. Listening to the notify pushes a
+ * live tick to this process's SSE clients right away; they then read the
+ * change feed. One connection per process, reconnects on error. No-op without
+ * a Postgres DATABASE_URL (PGlite preview has no LISTEN).
+ */
+let entityListenStarted = false;
+export function startEntityListen(): void {
+  if (entityListenStarted) return;
+  entityListenStarted = true;
+  const url = typeof process !== "undefined" ? String(process.env.DATABASE_URL || "").trim() : "";
+  if (!url) return;
+  let pending: ReturnType<typeof setTimeout> | null = null;
+  const onNotify = () => {
+    // Coalesce the burst of rows one save commits into one tick.
+    if (pending) return;
+    pending = setTimeout(() => {
+      pending = null;
+      emitCompanyLive(Date.now(), lastGens, []);
+    }, 60);
+  };
+  const connect = async (): Promise<void> => {
+    try {
+      const pg = (await import("pg")).default;
+      const client = new pg.Client({ connectionString: url });
+      let retried = false;
+      const retry = () => {
+        if (retried) return;
+        retried = true;
+        client.end().catch(() => {});
+        setTimeout(() => void connect(), 2000);
+      };
+      client.on("error", retry);
+      client.on("end", retry);
+      client.on("notification", (msg: { channel: string }) => {
+        if (msg.channel === "apms_entities") onNotify();
+      });
+      await client.connect();
+      await client.query("LISTEN apms_entities");
+    } catch (err) {
+      console.error("[company-live] LISTEN apms_entities failed; retrying", err);
+      setTimeout(() => void connect(), 5000);
+    }
+  };
+  void connect();
+}

@@ -195,6 +195,25 @@ test("store: three screens raising the same month reminder keep one notice", ski
   }
 });
 
+test("store: a new group membership for a target deleted from that month is refused (stale drag); a live or absent cell is fine", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    await importEntitiesFromSnapshot(sql, { targetMembers: [] }, "seed");
+    await sql.query("insert into target_cells (id, payload, rev, updated_at, updated_by, deleted_at) values ('tn-k::2026-09', '{}'::jsonb, 2, now(), 'A', now()), ('tn-p::2026-09', '{}'::jsonb, 1, now(), 'A', null)");
+    const member = (memberId: string) => ({ month: "2026-09", groupId: "tn-g", memberId });
+    const idFor = (memberId: string) => entityIdFromParts("target-members", ["tn-g", memberId, "2026-09"].join("\u001f"));
+    const stale = await patchEntityRow(sql, idFor("tn-k"), { baseRev: 0, payload: member("tn-k") }, "B");
+    assert.equal(stale.status, 409);
+    assert.equal(stale.body.deleted, true, "the delete of Kochi from the month stands");
+    const live = await patchEntityRow(sql, idFor("tn-p"), { baseRev: 0, payload: member("tn-p") }, "B");
+    assert.equal(live.status, 200);
+    const none = await patchEntityRow(sql, idFor("tn-new"), { baseRev: 0, payload: member("tn-new") }, "B");
+    assert.equal(none.status, 200);
+  } finally {
+    db.end();
+  }
+});
+
 test("store: change feed lists every commit after a cursor, in order", skip, async () => {
   const { sql, db } = await openSql();
   try {

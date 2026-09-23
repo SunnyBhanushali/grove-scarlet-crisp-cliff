@@ -402,3 +402,135 @@ export async function targetsGroups(ctx, run) {
   await endChecks(ctx, R, m0);
   return R;
 }
+
+/**
+ * Drag row `name` by its handle to row `onto`: pointer ends on `onto`'s handle
+ * (same indent = same depth), `where` "on" (join its parent group) or "above".
+ */
+export async function dragToRow(p, name, onto, where = "on") {
+  // Pointer drags cannot leave the viewport: make it tall enough for both rows.
+  const vp = p.viewportSize();
+  await p.setViewportSize({ width: vp.width, height: 3200 });
+  await p.evaluate(() => window.scrollTo(0, 0));
+  await p.waitForTimeout(300);
+  try {
+    await dragToRowInView(p, name, onto, where);
+  } finally {
+    await p.setViewportSize(vp);
+  }
+}
+
+async function dragToRowInView(p, name, onto, where) {
+  const hs = p.getByRole("button", { name: `Move ${name}`, exact: true });
+  const ho = p.getByRole("button", { name: `Move ${onto}`, exact: true });
+  let s = await hs.boundingBox();
+  const x0 = s.x + s.width / 2;
+  const y0 = s.y + s.height / 2;
+  await p.mouse.move(x0, y0);
+  await p.mouse.down();
+  await p.waitForTimeout(250);
+  await p.mouse.move(x0, y0 + 8, { steps: 3 });
+  await p.waitForTimeout(150);
+  const o = await ho.boundingBox();
+  const row = await targetRow(p, onto).boundingBox();
+  // Rows are indented 44 px per level on screen; the drag engine counts 28 px
+  // of pointer travel per level (DND_INDENT). Travel just enough levels.
+  const levels = Math.round((o.x - s.x) / 44);
+  const tx = x0 + levels * 28 + 4;
+  const ty = where === "above" ? row.y + 6 : row.y + row.height * 0.55;
+  const steps = 16;
+  for (let i = 1; i <= steps; i++) {
+    await p.mouse.move(x0 + ((tx - x0) * i) / steps, y0 + 8 + ((ty - y0 - 8) * i) / steps);
+    await p.waitForTimeout(35);
+  }
+  await p.waitForTimeout(300);
+  await p.mouse.up();
+  await p.waitForTimeout(600);
+}
+
+async function groupOf(ctx, nodeId, month = "2026-09") {
+  const r = await ctx.sql("select payload->>'groupId' g from entities where kind = 'target-members' and deleted_at is null and payload->>'memberId' = $1 and payload->>'month' = $2", [nodeId, month]);
+  return r.map((x) => x.g);
+}
+
+// ---------------------------------------------------------------------------
+// Reorder and nest by drag
+// ---------------------------------------------------------------------------
+export async function targetsDrag(ctx, run) {
+  const R = new ScreenResult("Targets", "targets-drag", "Reorder and nest by drag");
+  const { A, B, C } = ctx;
+  void run;
+  const VISHAL = "tn-imp-19-y8xqph";
+  const NIKHIL = "tn-imp-14-wwe0e0";
+  const BC = "tn-imp-12-dhplsy"; // Aliens Tattoo School
+  const m0 = await openWithoutWrites(ctx, R, "the Targets month page (drag)", (p) => openTargetMonth(ctx, p));
+
+  // Check 2 + 3: same group (Cluster > Vishal): A nests "Aliens Tattoo School" into it (the first row is fixed) while B switches it to set floors; C idle.
+  const switchFloors = async (p, g) => {
+    await targetRow(p, g).getByRole("button", { name: "Switch to set floors" }).first().click();
+    await p.waitForTimeout(300);
+  };
+  await Promise.all([dragToRow(A, "Aliens Tattoo School", "Pune", "on"), switchFloors(B, "Cluster > Vishal")]);
+  const t0 = Date.now();
+  const shows = async (p) => (await nestedCount(p, "Cluster > Vishal")) === 3 && (await targetRow(p, "Cluster > Vishal").locator('input[aria-label="Value"]').count()) > 0;
+  const cSeen = await ctx.waitUntil(() => shows(C), 12000);
+  const tC = cSeen === null ? null : Date.now() - t0;
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const bcGroups = await groupOf(ctx, BC);
+  const vcell = (await cellRow(ctx, VISHAL))?.payload;
+  const aT = await ctx.waitUntil(() => shows(A), 5000);
+  const bT = await ctx.waitUntil(() => shows(B), 5000);
+  R.expect(2, bcGroups.includes(VISHAL) && vcell?.mode === "set" && aT !== null && bT !== null, `DB: Aliens Tattoo School in ${bcGroups.join(",") || "top level"}, Vishal mode ${vcell?.mode}; A shows both ${aT !== null}, B shows both ${bT !== null}`);
+  R.expect(3, tC !== null && tC <= 5000, tC === null ? `C did not show both within 12 s (Vishal nested ${await nestedCount(C, "Cluster > Vishal")})` : `C showed both ${(tC / 1000).toFixed(1)} s after the drop`);
+
+  // Check 1: A reorders the top level (India above School) while B nests Gurgaon into Nikhil.
+  const GURGAON = "tn-imp-9-7cyman";
+  const before = await rootOrder(ctx);
+  // (A reorders inside Cluster > Nikhil: Chennai above Bangalore.)
+  const memberOrder = async (g) => (await ctx.sql("select jsonb_path_query_array(payload, '$.value') v from entities where kind = 'target-root-order' and id = '2026-09'"))[0]?.v;
+  void memberOrder;
+  const beforeScreen = (await shownTargets(A)).filter((x) => ["Bangalore", "Chennai"].includes(x));
+  await Promise.all([dragToRow(A, "Chennai", "Bangalore", "above"), dragToRow(B, "Gurgaon", "Pune", "on")]);
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const gg = await groupOf(ctx, GURGAON);
+  const afterA = (await shownTargets(A)).filter((x) => ["Bangalore", "Chennai"].includes(x));
+  const afterC = await ctx.waitUntil(async () => JSON.stringify((await shownTargets(C)).filter((x) => ["Bangalore", "Chennai"].includes(x))) === JSON.stringify(afterA), 5000);
+  R.expect(1, afterA[0] === "Chennai" && gg.includes(VISHAL) && afterC !== null, `order in Nikhil ${beforeScreen.join(" › ")} → ${afterA.join(" › ")} (C same: ${afterC !== null}); DB: Gurgaon in ${gg.join(",") || "top level"} (Vishal ${gg.includes(VISHAL)})`);
+  void before;
+
+  // Check 4: A deletes Delhi; B (feed held) drags Delhi into Vishal.
+  const DELHI = "tn-imp-8-ersn4t";
+  await ctx.holdFeed(B, /\/api\/(target-cells|e\/target)/);
+  await rowDelete(A, "Delhi");
+  await ctx.sleep(1500);
+  const kIn = await inMonth(ctx, DELHI);
+  const bStill = (await shownTargets(B)).includes("Delhi");
+  let err = "";
+  try { await dragToRow(B, "Delhi", "Pune", "on"); } catch (e) { err = String(e).slice(0, 80); }
+  await ctx.sleep(3000);
+  await ctx.releaseFeed(B);
+  await ctx.sleep(3000);
+  const kAfter = await inMonth(ctx, DELHI);
+  await ctx.reloadAll();
+  const shown = [];
+  for (const p of [A, B, C]) {
+    await openTargetMonth(ctx, p);
+    shown.push((await shownTargets(p)).includes("Delhi") ? 1 : 0);
+  }
+  R.expect(4, !kIn && bStill && !kAfter && shown.every((n) => n === 0), `A's delete: Delhi off September ${!kIn}; B still saw it ${bStill}; after B's stale drag${err ? " (" + err + ")" : ""} still off ${!kAfter}; shown after reload A/B/C ${shown.join("/")}`);
+
+  // Check 5: nested counts and top-level order on all screens = DB.
+  const vm = await ctx.sql("select count(*)::int n from entities where kind = 'target-members' and deleted_at is null and payload->>'groupId' = $1 and payload->>'month' = '2026-09'", [VISHAL]);
+  const nm = await ctx.sql("select count(*)::int n from entities where kind = 'target-members' and deleted_at is null and payload->>'groupId' = $1 and payload->>'month' = '2026-09'", [NIKHIL]);
+  const bad = [];
+  for (const [t, p] of Object.entries({ A, B, C })) {
+    const v = await nestedCount(p, "Cluster > Vishal");
+    const n = await nestedCount(p, "Cluster > Nikhil");
+    if (v !== vm[0].n || n !== nm[0].n) bad.push(`${t}: Vishal ${v}/${vm[0].n}, Nikhil ${n}/${nm[0].n}`);
+  }
+  R.expect(5, !bad.length, bad.length ? bad.join("; ") : `nested counts on all screens = DB (Vishal ${vm[0].n}, Nikhil ${nm[0].n})`);
+  await endChecks(ctx, R, m0);
+  return R;
+}
