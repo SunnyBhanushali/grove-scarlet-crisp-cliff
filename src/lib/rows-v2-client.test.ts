@@ -488,6 +488,31 @@ test("a person that differs from the baseline only by the server's rev key or hy
   assert.deepEqual(sync.collectEntityOps(edited).map((o) => o.url), ["/api/people/p1"]);
 });
 
+test("opening screens proposes nothing: award prizes / rewardYearSeed are in the baseline and a record's updatedAt stamp alone is not an edit", async () => {
+  sync.resetForTests();
+  const base = {
+    ...baseSnap(),
+    awardPrizeCatalog: [{ id: "pz-nz", kind: "trip", name: "Trip", amount: 0 }],
+    rewardYearSeed: "fy26-v6",
+    records: { "2026-07": { p1: { status: "plan_open", updatedAt: 100, kpis: [] } } },
+  };
+  sync.noteLoaded(base);
+  assert.deepEqual(sync.collectEntityOps(base).map((o) => o.url), [], "nothing to save right after load");
+  const stamped = { ...base, records: { "2026-07": { p1: { status: "plan_open", updatedAt: 200, kpis: [] } } } };
+  assert.deepEqual(sync.collectEntityOps(stamped).map((o) => o.url), [], "updatedAt alone is not written");
+  const calls: string[] = [];
+  sync.install((async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(`${init?.method || "GET"} ${String(input)}`);
+    return json({ ok: true, applied: [], conflict: [], skipped: [], bookGens: { org: 1, plans: 1, months: 1, targets: 1 } });
+  }) as typeof fetch);
+  await sync.save(stamped);
+  assert.deepEqual(calls.filter((c) => !c.startsWith("GET")), [], "…not as a row, and not as a whole months book either");
+  const edited = { ...base, records: { "2026-07": { p1: { status: "plan_locked", updatedAt: 200, kpis: [] } } } };
+  assert.deepEqual(sync.collectEntityOps(edited).map((o) => o.url), ["/api/month-records/2026-07/p1"]);
+  const prize = { ...base, awardPrizeCatalog: [{ id: "pz-nz", kind: "trip", name: "Trip to NZ", amount: 0 }] };
+  assert.deepEqual(sync.collectEntityOps(prize).map((o) => o.url), ["/api/e/award-prizes/pz-nz"]);
+});
+
 test("a book pull (stale-while-revalidate wire) never overwrites row-owned fields on screen", () => {
   sync.resetForTests();
   const base = baseSnap();
@@ -568,7 +593,7 @@ test("a row another user deleted is not re-created when stale screen state re-ad
   }
 });
 
-test("a book PATCH 409 does not pull row-owned fields into the baseline (no revert of a row the screen never took)", async () => {
+test("a row-owned edit sends no book PATCH, and the baseline keeps what the screen has (no revert of a row the screen never took)", async () => {
   sync.resetForTests();
   const base = baseSnap();
   sync.noteLoaded(base);
@@ -590,7 +615,9 @@ test("a book PATCH 409 does not pull row-owned fields into the baseline (no reve
   const ui = { ...base, roles: { ...base.roles, ceo: { ...base.roles.ceo, ags: { "1A": 40 } } } };
   const ack = await sync.save(ui);
   assert.equal(ack.ok, true);
-  assert.equal(bookCalls >= 1, true, "a book PATCH went out");
+  // Every book field is row-owned now: after the row save nothing is left for
+  // a book PATCH (it used to send the whole plans book for the roleKrocs split).
+  assert.equal(bookCalls, 0, "no book PATCH for a row-owned edit");
   const acked = sync.lastAckedBooks().org.roles as Record<string, Record<string, unknown>>;
   assert.equal(acked.ceo.name, "CEO", "baseline still what the screen has");
   assert.deepEqual(sync.collectEntityOps(ui).map((o) => o.url), [], "so the untouched name is not re-sent as an edit");

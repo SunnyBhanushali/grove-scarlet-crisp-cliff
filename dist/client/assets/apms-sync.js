@@ -2,7 +2,7 @@
  * Aliens APMS per-book sync (Google Docs / Zoho grade).
  * PATCH only dirty books with baseGen. 409 rebases that book. Live pulls
  * only clean books whose generation moved. UI nav never rides the wire.
- * Stamp: p0as78 — ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
+ * Stamp: p0as79 — HOT-FEED people/month/reward/cells on /api/changes; id-list removals stick. p0as78 ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
  */
 (function (global) {
   "use strict";
@@ -48,6 +48,11 @@
       "awardMeasures",
       "gateUnits",
       "roleKrocs",
+      // Row-owned (award-prizes rows, settings/rewardYearSeed) and on the wire:
+      // without them here the baseline never held them, so every save
+      // re-proposed all prizes and the seed as new rows (409 probes).
+      "awardPrizeCatalog",
+      "rewardYearSeed",
     ],
     months: [
       "apmsMonths",
@@ -227,8 +232,43 @@
       });
       return list;
     }
+    if (isPrimitiveList(mine) && isPrimitiveList(theirs)) {
+      // Lists of ids (target root order, members, setupDone, …): a removal by
+      // either side sticks, an addition by either side is kept, my order wins.
+      var baseList = isPrimitiveList(base) ? base : [];
+      var inBaseP = {};
+      baseList.forEach(function (x) { inBaseP[pk(x)] = 1; });
+      var inMineP = {};
+      mine.forEach(function (x) { inMineP[pk(x)] = 1; });
+      var inTheirsP = {};
+      theirs.forEach(function (x) { inTheirsP[pk(x)] = 1; });
+      var outP = [];
+      var seenP = {};
+      mine.concat(theirs).forEach(function (x) {
+        var k = pk(x);
+        if (seenP[k]) return;
+        seenP[k] = 1;
+        var removedByMe = inBaseP[k] && !inMineP[k];
+        var removedByThem = inBaseP[k] && !inTheirsP[k];
+        if (removedByMe || removedByThem) return;
+        outP.push(x);
+      });
+      return outP;
+    }
     trace.push({ path: path, mine: mine, theirs: theirs });
     return mine;
+  }
+
+  function isPrimitiveList(v) {
+    if (!Array.isArray(v)) return false;
+    for (var i = 0; i < v.length; i++) {
+      var t = typeof v[i];
+      if (t !== "string" && t !== "number") return false;
+    }
+    return true;
+  }
+  function pk(x) {
+    return typeof x + ":" + String(x);
   }
 
   /**
@@ -568,6 +608,31 @@
       if (hash !== lastHashes[id]) dirty.push(id);
     });
     return dirty;
+  }
+
+  /**
+   * Books that still need a book PATCH after the row saves ran. Row-owned
+   * fields (hot tables + ROWS-V2 collections) are saved row by row and the
+   * book PATCH cannot write them; a difference left there (e.g. a record's
+   * updatedAt stamp the row diff deliberately ignores) must not send the
+   * whole book.
+   */
+  function dirtyBookFields(snapshot) {
+    var books = splitSnapshot(snapshot);
+    var dirty = [];
+    BOOK_IDS.forEach(function (id) {
+      var hash = stableStringify(withoutRowOwned(id, bookPayload(books[id], id)));
+      if (hash !== stableStringify(withoutRowOwned(id, lastAcked[id]))) dirty.push(id);
+    });
+    return dirty;
+  }
+
+  function withoutRowOwned(book, payload) {
+    if (!isPlainObject(payload)) return payload;
+    var out = Object.assign({}, payload);
+    (HOT_BY_BOOK[book] || []).forEach(function (field) { delete out[field]; });
+    if (C) C.SPECS.forEach(function (spec) { if (spec.book === book) delete out[spec.field]; });
+    return out;
   }
 
   function noteLoaded(snapshot) {
@@ -1030,6 +1095,10 @@
           if (!ch || !ch.kind) return;
           if (ch.kind === "*") { resync = true; entityFieldsFromNextPull = true; return; }
           if (!next) return;
+          if (HOT_FEED[ch.kind]) {
+            next = withAcks(feedAcks, function () { return mergeHotRow(next, ch.kind, ch); });
+            return;
+          }
           next = withAcks(feedAcks, function () { return mergeGenericRow(next, ch.kind, ch); });
         });
         if (resync) {
@@ -1197,7 +1266,141 @@
     return applyGenericRow(local, spec, { kind: row.kind, id: id, k1: k1, k2: k2, payload: merged }, false, false);
   }
 
+  var HOT_FEED = { "people": "people", "month-records": "month_records", "reward-records": "reward_records", "target-cells": "target_cells" };
+
+  /** Local + acked copies of one hot-table row, in the shape the SPA store keeps. */
+  function hotRowPair(kind, k1, k2, local) {
+    if (kind === "people") {
+      var lp = peopleById(local.people)[k1];
+      var ap = peopleById((lastAcked.org && lastAcked.org.people) || [])[k1];
+      return { local: lp, acked: ap };
+    }
+    if (kind === "target-cells") {
+      var lc = isPlainObject(local.targetCells) ? local.targetCells[k1] : undefined;
+      var ac = lastAcked.targets && isPlainObject(lastAcked.targets.targetCells) ? lastAcked.targets.targetCells[k1] : undefined;
+      return { local: lc, acked: ac };
+    }
+    var field = kind === "month-records" ? "records" : "rewardRecords";
+    var lt = isPlainObject(local[field]) && isPlainObject(local[field][k2]) ? local[field][k2][k1] : undefined;
+    var at = lastAcked.months && isPlainObject(lastAcked.months[field]) && isPlainObject(lastAcked.months[field][k2]) ? lastAcked.months[field][k2][k1] : undefined;
+    return { local: lt, acked: at };
+  }
+
+  /** Fold one server row into the acked baseline (queued until the UI takes the snapshot). */
+  function ackHotRow(kind, k1, k2, payload, deleted) {
+    pushAck(function () {
+      if (kind === "people") {
+        lastAcked.org = lastAcked.org || {};
+        var rows = Array.isArray(lastAcked.org.people) ? lastAcked.org.people.slice() : [];
+        var idx = -1;
+        for (var i = 0; i < rows.length; i++) if (rows[i] && String(rows[i].id) === k1) { idx = i; break; }
+        if (deleted) { if (idx >= 0) rows.splice(idx, 1); }
+        else if (idx >= 0) rows[idx] = payload;
+        else rows.push(payload);
+        lastAcked.org.people = rows;
+        lastHashes.org = stableStringify(bookPayload(lastAcked.org, "org"));
+        return;
+      }
+      if (kind === "target-cells") {
+        lastAcked.targets = lastAcked.targets || {};
+        var cells = Object.assign({}, isPlainObject(lastAcked.targets.targetCells) ? lastAcked.targets.targetCells : {});
+        if (deleted) delete cells[k1];
+        else cells[k1] = payload;
+        lastAcked.targets.targetCells = cells;
+        lastHashes.targets = stableStringify(bookPayload(lastAcked.targets, "targets"));
+        return;
+      }
+      var field = kind === "month-records" ? "records" : "rewardRecords";
+      lastAcked.months = lastAcked.months || {};
+      var tree = Object.assign({}, isPlainObject(lastAcked.months[field]) ? lastAcked.months[field] : {});
+      var month = Object.assign({}, isPlainObject(tree[k2]) ? tree[k2] : {});
+      if (deleted) delete month[k1];
+      else month[k1] = payload;
+      tree[k2] = month;
+      lastAcked.months[field] = tree;
+      lastHashes.months = stableStringify(bookPayload(lastAcked.months, "months"));
+    });
+  }
+
+  /**
+   * ROWS-V2: a hot-table change (people / month-records / reward-records /
+   * target-cells) arriving on the change feed. Same rules as mergeGenericRow:
+   * clean row → take theirs and ack it; dirty row → 3-way merge, keep dirty;
+   * deleted → gone. The rev is learned only when the UI takes the snapshot.
+   */
+  // A month / reward record's `updatedAt` is a stamp the SPA refreshes when it
+  // re-derives a record (e.g. opening an open APMS plan). On its own it is not
+  // an edit: comparing it made every viewer PATCH the record just by opening it.
+  function recordContent(r) {
+    if (!isPlainObject(r) || !("updatedAt" in r)) return r;
+    var c = Object.assign({}, r);
+    delete c.updatedAt;
+    return c;
+  }
+
+  function personContent(p) {
+    if (!isPlainObject(p)) return p;
+    var c = {};
+    Object.keys(p).forEach(function (k) {
+      var v = p[k];
+      if (k === "rev" || v === "" || v === null || v === undefined) return;
+      if (Array.isArray(v) && v.length === 0) return;
+      c[k] = v;
+    });
+    return c;
+  }
+
+  function mergeHotRow(local, kind, ch) {
+    var table = HOT_FEED[kind];
+    if (!table) return local;
+    var k1 = ch.k1 != null ? String(ch.k1) : String(ch.id || "");
+    var k2 = ch.k2 != null ? String(ch.k2) : null;
+    if (!k1) return local;
+    if ((kind === "month-records" || kind === "reward-records") && !k2) return local;
+    var payload = isPlainObject(ch.payload) ? ch.payload : {};
+    var deleted = !!ch.deleted;
+    var revKey = kind === "people" || kind === "target-cells" ? entityRevKey(table, k1) : entityRevKey(table, k2, k1);
+    if (Number.isFinite(Number(ch.rev))) {
+      var learnedRev = Number(ch.rev);
+      pushAck(function () { entityRevs[revKey] = learnedRev; });
+    }
+    var hint = { type: kind, id: k1, period: k2 || undefined };
+    var pair = hotRowPair(kind, k1, k2, local);
+    var localDirty = kind === "people" ? !eq(personContent(pair.local), personContent(pair.acked)) : kind === "target-cells" ? !eq(pair.local, pair.acked) : !eq(recordContent(pair.local), recordContent(pair.acked));
+    // Baseline in exactly the shape the screen holds (the store normalises
+    // plan records, stamps cell ids, …) so an untouched row never looks dirty.
+    var theirs = deleted ? undefined : hotRowPair(kind, k1, k2, placeEntityPayload({}, hint, { ok: true, payload: payload, deleted: false }, {})).local;
+    if (deleted || !localDirty) {
+      ackHotRow(kind, k1, k2, theirs, deleted);
+      return placeEntityPayload(local, hint, { ok: true, payload: payload, deleted: deleted }, {});
+    }
+    var merged = merge3(pair.acked, pair.local, theirs, []);
+    ackHotRow(kind, k1, k2, theirs, false);
+    return placeEntityPayload(local, hint, { ok: true, payload: merged, deleted: false }, {});
+  }
+
+  /**
+   * A server row (screen read, hint GET, pull) onto the screen. Hot-table rows
+   * go through mergeHotRow so the baseline and rev follow what the screen
+   * took; before, screen reads only placed rows, so the next save probed every
+   * row of the month (a 409 per record on merely opening APMS / Rewards).
+   * A dirty same person+month slice keeps the local draft (contract lock).
+   */
   function mergeEntityPayload(local, hint, body, slices) {
+    var ht = normEntityType(hint.type);
+    if (HOT_FEED[ht] && body && (isPlainObject(body.payload) || body.deleted)) {
+      var hk1 = String(hint.id || body.personId || body.id || "");
+      var hk2 = ht === "people" || ht === "target-cells" ? null : String(hint.period || body.period || "");
+      if (hk2 !== null && slices && slices.months) {
+        var hfield = ht === "reward-records" ? "rewardRecords" : "records";
+        if (slices.months[sliceKey(hfield, hk2, hk1)]) return placeEntityPayload(local, hint, body, slices);
+      }
+      return mergeHotRow(local, ht, { k1: hk1, k2: hk2, payload: body.payload, rev: body.rev, deleted: !!body.deleted });
+    }
+    return placeEntityPayload(local, hint, body, slices);
+  }
+
+  function placeEntityPayload(local, hint, body, slices) {
     var out = Object.assign({}, local);
     var payload = isPlainObject(body && body.payload) ? body.payload : {};
     var t = normEntityType(hint.type);
@@ -1918,17 +2121,6 @@
     // live apply re-saved all people (180 PATCHes holding the save — and the
     // live view — for many seconds). Clearing a field that had a value still
     // differs from the baseline, so real edits are unaffected.
-    function personContent(p) {
-      if (!isPlainObject(p)) return p;
-      var c = {};
-      Object.keys(p).forEach(function (k) {
-        var v = p[k];
-        if (k === "rev" || v === "" || v === null || v === undefined) return;
-        if (Array.isArray(v) && v.length === 0) return;
-        c[k] = v;
-      });
-      return c;
-    }
     Object.keys(nextPeople).forEach(function (id) {
       if (!eq(personContent(nextPeople[id]), personContent(prevPeople[id]))) {
         ops.push({
@@ -1960,7 +2152,7 @@
       walkPersonPeriod(next, function (period, pid, rec) {
         seen[period + "\0" + pid] = 1;
         var before = isPlainObject(prev[period]) ? prev[period][pid] : undefined;
-        if (eq(rec, before)) return;
+        if (eq(recordContent(rec), recordContent(before))) return;
         ops.push({
           kind: table,
           url: path + encodeURIComponent(period) + "/" + encodeURIComponent(pid),
@@ -2080,6 +2272,12 @@
       if (result.status === 200 && result.json && result.json.ok) {
         entityRevs[op.revKey] = Number(result.json.rev) || baseRev;
         if (result.json.bookGens) noteAck({ bookGens: result.json.bookGens }, BOOK_IDS);
+        if (result.json.deleted === true && !op.deleted) {
+          // The server stored my create as a tombstone (a duplicate auto
+          // notice another user's screen already raised): drop it here too.
+          remoteDeletedKeys[op.revKey] = 1;
+          return { ok: true, json: result.json, op: op, adopted: true, deleted: true };
+        }
         return { ok: true, json: result.json, op: op };
       }
       if (result.status === 409 && result.json) {
@@ -2280,7 +2478,7 @@
       if (!(r.adopted || op.merged)) return;
       var hint = { type: op.kind, id: op.personId || op.rowId || (op.revKey || "").split(":").pop(), period: op.period };
       if (op.kind === "target_cells") hint.id = op.revKey.slice("target_cells:".length);
-      out = mergeEntityPayload(out, hint, { ok: true, payload: json.payload || op.payload, deleted: !!(r.deleted || json.deleted) }, {});
+      out = placeEntityPayload(out, hint, { ok: true, payload: json.payload || op.payload, deleted: !!(r.deleted || json.deleted) }, {});
       changed = true;
     });
     return changed ? out : snap;
@@ -2402,7 +2600,7 @@
       return entityAck;
     }
     if (entityAck && entityAck.snapshot) snap = entityAck.snapshot;
-    dirty = dirtyBooks(snap);
+    dirty = C ? dirtyBookFields(snap) : dirtyBooks(snap);
     if (!dirty.length) {
       lastSaveMeta = {
         via: entityAck && entityAck.ops && entityAck.ops.length ? "ENTITY" : "SKIP",
@@ -2472,6 +2670,28 @@
     };
   }
 
+  /**
+   * Screen reads: apply server rows through the merge rules, in their own ack
+   * scope; the baseline and revs move only if the UI took the snapshot.
+   */
+  function applyServerRows(build) {
+    var hooks = liveHooks;
+    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
+    if (!local) return false;
+    var acks = [];
+    var next = withAcks(acks, function () { return build(local); });
+    var took = true;
+    if (next !== local && hooks && typeof hooks.apply === "function") {
+      try {
+        took = hooks.apply(next, "live-entity") !== false;
+      } catch (err) {
+        took = false;
+      }
+    }
+    if (took) runAcks(acks);
+    return took;
+  }
+
   async function openPeopleScreen(opts) {
     opts = opts || {};
     var limit = Number(opts.limit) || 80;
@@ -2488,12 +2708,15 @@
       return null;
     });
     var people = body && Array.isArray(body.people) ? body.people : [];
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && people.length) {
-      var next = Object.assign({}, local);
-      next.people = mergeKeepPeopleClient(local.people, people);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (people.length) {
+      applyServerRows(function (local) {
+        var acc = local;
+        people.forEach(function (p) {
+          if (!p || p.id == null) return;
+          acc = mergeEntityPayload(acc, { type: "people", id: String(p.id) }, { ok: true, payload: p, rev: p.rev }, {});
+        });
+        return acc;
+      });
     }
     if (typeof opts.apply === "function") opts.apply(people, body);
     return { people: people, url: url, total: body && body.total };
@@ -2512,19 +2735,15 @@
       return null;
     });
     var records = body && Array.isArray(body.records) ? body.records : [];
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && records.length) {
-      var tree = {};
-      tree[month] = {};
-      for (var i = 0; i < records.length; i++) {
-        var rec = records[i];
-        if (!rec || !rec.personId) continue;
-        tree[month][rec.personId] = rec.payload || rec;
-      }
-      var next = Object.assign({}, local);
-      next.rewardRecords = mergeKeepMonthMapsClient(local.rewardRecords, tree);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (records.length) {
+      applyServerRows(function (local) {
+        var acc = local;
+        records.forEach(function (rec) {
+          if (!rec || !rec.personId) return;
+          acc = mergeEntityPayload(acc, { type: "reward-records", id: String(rec.personId), period: month }, { ok: true, payload: rec.payload || rec, rev: rec.rev, deleted: !!rec.deleted }, {});
+        });
+        return acc;
+      });
     }
     if (typeof opts.apply === "function") opts.apply(records, body);
     return { records: records, url: url, total: body && body.total, period: month };
@@ -2543,19 +2762,15 @@
       return null;
     });
     var records = body && Array.isArray(body.records) ? body.records : [];
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && records.length) {
-      var tree = {};
-      tree[month] = {};
-      for (var i = 0; i < records.length; i++) {
-        var rec = records[i];
-        if (!rec || !rec.personId) continue;
-        tree[month][rec.personId] = rec.payload || rec;
-      }
-      var next = Object.assign({}, local);
-      next.records = mergeKeepMonthMapsClient(local.records, tree);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (records.length) {
+      applyServerRows(function (local) {
+        var acc = local;
+        records.forEach(function (rec) {
+          if (!rec || !rec.personId) return;
+          acc = mergeEntityPayload(acc, { type: "month-records", id: String(rec.personId), period: month }, { ok: true, payload: rec.payload || rec, rev: rec.rev, deleted: !!rec.deleted }, {});
+        });
+        return acc;
+      });
     }
     if (typeof opts.apply === "function") opts.apply(records, body);
     return { records: records, url: url, total: body && body.total, period: month };
@@ -2574,22 +2789,39 @@
       return null;
     });
     var payload = body && body.payload ? body.payload : body;
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && payload) {
-      var next = mergeEntityPayload(local, { type: "month-records", id: pid, period: month }, body || { payload: payload }, {});
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (payload) {
+      applyServerRows(function (local) {
+        return mergeEntityPayload(local, { type: "month-records", id: pid, period: month }, body && body.payload ? body : { payload: payload }, {});
+      });
     }
     if (typeof opts.apply === "function") opts.apply(payload, body);
     return { payload: payload, url: url, rev: body && body.rev };
   }
 
+  /**
+   * Org slice (rows are served from the entity table): merge row by row so the
+   * baseline follows what the screen took — whole-field replacement left every
+   * row unacked, so the next save probed the whole catalog.
+   */
   function applyOrgFields(local, body) {
     var next = Object.assign({}, local);
     ["companies", "brands", "businessUnits", "functions", "subFunctions", "roles", "sbuMembers", "trash"].forEach(function (field) {
-      if (body && body[field] !== undefined) next[field] = body[field];
+      if (!body || body[field] === undefined) return;
+      var spec = C ? C.specForField(field) : null;
+      if (!spec) {
+        next[field] = body[field];
+        return;
+      }
+      C.toRows(spec, body[field], []).forEach(function (row) {
+        next = mergeGenericRow(next, spec.kind, { k1: row.k1, k2: row.k2, payload: row.payload, deleted: false });
+      });
     });
-    if (body && Array.isArray(body.people)) next.people = mergeKeepPeopleClient(local.people, body.people);
+    if (body && Array.isArray(body.people)) {
+      body.people.forEach(function (p) {
+        if (!p || p.id == null) return;
+        next = mergeEntityPayload(next, { type: "people", id: String(p.id) }, { ok: true, payload: p, rev: p.rev }, {});
+      });
+    }
     return next;
   }
 
@@ -2602,12 +2834,7 @@
     var res = await getter(url, { method: "GET", credentials: "same-origin", cache: "no-store" });
     if (!res || !res.ok) return { url: url, status: res && res.status };
     var body = await res.json().catch(function () { return null; });
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && body) {
-      var next = applyOrgFields(local, body);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
-    }
+    if (body) applyServerRows(function (local) { return applyOrgFields(local, body); });
     return { url: url, body: body };
   }
 
@@ -2656,11 +2883,10 @@
     if (!res || !res.ok) return { url: url, status: res && res.status };
     var body = await res.json().catch(function () { return null; });
     var payload = body && body.payload ? body.payload : body;
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && payload) {
-      var next = mergeEntityPayload(local, { type: "people", id: pid }, body || { payload: payload }, {});
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (payload) {
+      applyServerRows(function (local) {
+        return mergeEntityPayload(local, { type: "people", id: pid }, body && body.payload ? body : { payload: payload }, {});
+      });
     }
     return { url: url, payload: payload, rev: body && body.rev };
   }
@@ -3034,6 +3260,15 @@
     merge3: merge3,
     collectEntityOps: collectEntityOps,
     mergeGenericRow: mergeGenericRow,
+    mergeHotRow: mergeHotRow,
+    /** Read-only diagnostics: what the next save would send for the screen as it is now. */
+    pendingOps: function () {
+      var local = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
+      if (!local) return null;
+      return collectEntityOps(stripUi(local)).map(function (op) {
+        return { url: op.url, deleted: !!op.deleted, payload: op.payload, acked: ackedSlice(op) };
+      });
+    },
     pollChanges: pollChanges,
     commitPendingAcks: commitPendingAcks,
     liveSeq: function () { return liveSeq; },

@@ -169,6 +169,32 @@ test("store: a stale client cannot resurrect a deleted row", skip, async () => {
   }
 });
 
+test("store: three screens raising the same month reminder keep one notice", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    await importEntitiesFromSnapshot(sql, { notices: [] }, "seed");
+    const reminder = { kind: "month_close_due", planKind: "rewards", month: "2026-08", phase: "close", status: "open", title: "Close August 2026 Rewards", toIds: ["p9"] };
+    const results = await Promise.all(
+      ["na", "nb", "nc"].map((id, i) =>
+        patchEntityRow(sql, entityIdFromParts("notices", id), { baseRev: 0, payload: { ...reminder, id } }, `user-${i}`),
+      ),
+    );
+    for (const r of results) assert.equal(r.status, 200);
+    assert.equal(results.filter((r) => r.body.deleted === false).length, 1, "exactly one create stays live");
+    const fields = await loadEntityFields(sql);
+    assert.equal((fields.notices as unknown[]).length, 1);
+    // A different recipient or month, or a person-typed notice, is not a duplicate.
+    const otherTo = await patchEntityRow(sql, entityIdFromParts("notices", "nf"), { baseRev: 0, payload: { ...reminder, id: "nf", toIds: ["p8"] } }, "A");
+    assert.equal(otherTo.body.deleted, false);
+    const other = await patchEntityRow(sql, entityIdFromParts("notices", "nd"), { baseRev: 0, payload: { ...reminder, id: "nd", month: "2026-09" } }, "A");
+    assert.equal(other.body.deleted, false);
+    const typed = await patchEntityRow(sql, entityIdFromParts("notices", "ne"), { baseRev: 0, payload: { id: "ne", kind: "note", title: "Close August 2026 Rewards", month: "2026-08" } }, "A");
+    assert.equal(typed.body.deleted, false);
+  } finally {
+    db.end();
+  }
+});
+
 test("store: change feed lists every commit after a cursor, in order", skip, async () => {
   const { sql, db } = await openSql();
   try {

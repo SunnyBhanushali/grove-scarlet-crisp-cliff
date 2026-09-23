@@ -48,6 +48,11 @@
       "awardMeasures",
       "gateUnits",
       "roleKrocs",
+      // Row-owned (award-prizes rows, settings/rewardYearSeed) and on the wire:
+      // without them here the baseline never held them, so every save
+      // re-proposed all prizes and the seed as new rows (409 probes).
+      "awardPrizeCatalog",
+      "rewardYearSeed",
     ],
     months: [
       "apmsMonths",
@@ -603,6 +608,31 @@
       if (hash !== lastHashes[id]) dirty.push(id);
     });
     return dirty;
+  }
+
+  /**
+   * Books that still need a book PATCH after the row saves ran. Row-owned
+   * fields (hot tables + ROWS-V2 collections) are saved row by row and the
+   * book PATCH cannot write them; a difference left there (e.g. a record's
+   * updatedAt stamp the row diff deliberately ignores) must not send the
+   * whole book.
+   */
+  function dirtyBookFields(snapshot) {
+    var books = splitSnapshot(snapshot);
+    var dirty = [];
+    BOOK_IDS.forEach(function (id) {
+      var hash = stableStringify(withoutRowOwned(id, bookPayload(books[id], id)));
+      if (hash !== stableStringify(withoutRowOwned(id, lastAcked[id]))) dirty.push(id);
+    });
+    return dirty;
+  }
+
+  function withoutRowOwned(book, payload) {
+    if (!isPlainObject(payload)) return payload;
+    var out = Object.assign({}, payload);
+    (HOT_BY_BOOK[book] || []).forEach(function (field) { delete out[field]; });
+    if (C) C.SPECS.forEach(function (spec) { if (spec.book === book) delete out[spec.field]; });
+    return out;
   }
 
   function noteLoaded(snapshot) {
@@ -1298,6 +1328,28 @@
    * clean row → take theirs and ack it; dirty row → 3-way merge, keep dirty;
    * deleted → gone. The rev is learned only when the UI takes the snapshot.
    */
+  // A month / reward record's `updatedAt` is a stamp the SPA refreshes when it
+  // re-derives a record (e.g. opening an open APMS plan). On its own it is not
+  // an edit: comparing it made every viewer PATCH the record just by opening it.
+  function recordContent(r) {
+    if (!isPlainObject(r) || !("updatedAt" in r)) return r;
+    var c = Object.assign({}, r);
+    delete c.updatedAt;
+    return c;
+  }
+
+  function personContent(p) {
+    if (!isPlainObject(p)) return p;
+    var c = {};
+    Object.keys(p).forEach(function (k) {
+      var v = p[k];
+      if (k === "rev" || v === "" || v === null || v === undefined) return;
+      if (Array.isArray(v) && v.length === 0) return;
+      c[k] = v;
+    });
+    return c;
+  }
+
   function mergeHotRow(local, kind, ch) {
     var table = HOT_FEED[kind];
     if (!table) return local;
@@ -1314,20 +1366,41 @@
     }
     var hint = { type: kind, id: k1, period: k2 || undefined };
     var pair = hotRowPair(kind, k1, k2, local);
-    var localDirty = !eq(pair.local, pair.acked);
+    var localDirty = kind === "people" ? !eq(personContent(pair.local), personContent(pair.acked)) : kind === "target-cells" ? !eq(pair.local, pair.acked) : !eq(recordContent(pair.local), recordContent(pair.acked));
     // Baseline in exactly the shape the screen holds (the store normalises
     // plan records, stamps cell ids, …) so an untouched row never looks dirty.
-    var theirs = deleted ? undefined : hotRowPair(kind, k1, k2, mergeEntityPayload({}, hint, { ok: true, payload: payload, deleted: false }, {})).local;
+    var theirs = deleted ? undefined : hotRowPair(kind, k1, k2, placeEntityPayload({}, hint, { ok: true, payload: payload, deleted: false }, {})).local;
     if (deleted || !localDirty) {
       ackHotRow(kind, k1, k2, theirs, deleted);
-      return mergeEntityPayload(local, hint, { ok: true, payload: payload, deleted: deleted }, {});
+      return placeEntityPayload(local, hint, { ok: true, payload: payload, deleted: deleted }, {});
     }
     var merged = merge3(pair.acked, pair.local, theirs, []);
     ackHotRow(kind, k1, k2, theirs, false);
-    return mergeEntityPayload(local, hint, { ok: true, payload: merged, deleted: false }, {});
+    return placeEntityPayload(local, hint, { ok: true, payload: merged, deleted: false }, {});
   }
 
+  /**
+   * A server row (screen read, hint GET, pull) onto the screen. Hot-table rows
+   * go through mergeHotRow so the baseline and rev follow what the screen
+   * took; before, screen reads only placed rows, so the next save probed every
+   * row of the month (a 409 per record on merely opening APMS / Rewards).
+   * A dirty same person+month slice keeps the local draft (contract lock).
+   */
   function mergeEntityPayload(local, hint, body, slices) {
+    var ht = normEntityType(hint.type);
+    if (HOT_FEED[ht] && body && (isPlainObject(body.payload) || body.deleted)) {
+      var hk1 = String(hint.id || body.personId || body.id || "");
+      var hk2 = ht === "people" || ht === "target-cells" ? null : String(hint.period || body.period || "");
+      if (hk2 !== null && slices && slices.months) {
+        var hfield = ht === "reward-records" ? "rewardRecords" : "records";
+        if (slices.months[sliceKey(hfield, hk2, hk1)]) return placeEntityPayload(local, hint, body, slices);
+      }
+      return mergeHotRow(local, ht, { k1: hk1, k2: hk2, payload: body.payload, rev: body.rev, deleted: !!body.deleted });
+    }
+    return placeEntityPayload(local, hint, body, slices);
+  }
+
+  function placeEntityPayload(local, hint, body, slices) {
     var out = Object.assign({}, local);
     var payload = isPlainObject(body && body.payload) ? body.payload : {};
     var t = normEntityType(hint.type);
@@ -2048,17 +2121,6 @@
     // live apply re-saved all people (180 PATCHes holding the save — and the
     // live view — for many seconds). Clearing a field that had a value still
     // differs from the baseline, so real edits are unaffected.
-    function personContent(p) {
-      if (!isPlainObject(p)) return p;
-      var c = {};
-      Object.keys(p).forEach(function (k) {
-        var v = p[k];
-        if (k === "rev" || v === "" || v === null || v === undefined) return;
-        if (Array.isArray(v) && v.length === 0) return;
-        c[k] = v;
-      });
-      return c;
-    }
     Object.keys(nextPeople).forEach(function (id) {
       if (!eq(personContent(nextPeople[id]), personContent(prevPeople[id]))) {
         ops.push({
@@ -2090,7 +2152,7 @@
       walkPersonPeriod(next, function (period, pid, rec) {
         seen[period + "\0" + pid] = 1;
         var before = isPlainObject(prev[period]) ? prev[period][pid] : undefined;
-        if (eq(rec, before)) return;
+        if (eq(recordContent(rec), recordContent(before))) return;
         ops.push({
           kind: table,
           url: path + encodeURIComponent(period) + "/" + encodeURIComponent(pid),
@@ -2210,6 +2272,12 @@
       if (result.status === 200 && result.json && result.json.ok) {
         entityRevs[op.revKey] = Number(result.json.rev) || baseRev;
         if (result.json.bookGens) noteAck({ bookGens: result.json.bookGens }, BOOK_IDS);
+        if (result.json.deleted === true && !op.deleted) {
+          // The server stored my create as a tombstone (a duplicate auto
+          // notice another user's screen already raised): drop it here too.
+          remoteDeletedKeys[op.revKey] = 1;
+          return { ok: true, json: result.json, op: op, adopted: true, deleted: true };
+        }
         return { ok: true, json: result.json, op: op };
       }
       if (result.status === 409 && result.json) {
@@ -2410,7 +2478,7 @@
       if (!(r.adopted || op.merged)) return;
       var hint = { type: op.kind, id: op.personId || op.rowId || (op.revKey || "").split(":").pop(), period: op.period };
       if (op.kind === "target_cells") hint.id = op.revKey.slice("target_cells:".length);
-      out = mergeEntityPayload(out, hint, { ok: true, payload: json.payload || op.payload, deleted: !!(r.deleted || json.deleted) }, {});
+      out = placeEntityPayload(out, hint, { ok: true, payload: json.payload || op.payload, deleted: !!(r.deleted || json.deleted) }, {});
       changed = true;
     });
     return changed ? out : snap;
@@ -2532,7 +2600,7 @@
       return entityAck;
     }
     if (entityAck && entityAck.snapshot) snap = entityAck.snapshot;
-    dirty = dirtyBooks(snap);
+    dirty = C ? dirtyBookFields(snap) : dirtyBooks(snap);
     if (!dirty.length) {
       lastSaveMeta = {
         via: entityAck && entityAck.ops && entityAck.ops.length ? "ENTITY" : "SKIP",
@@ -2602,6 +2670,28 @@
     };
   }
 
+  /**
+   * Screen reads: apply server rows through the merge rules, in their own ack
+   * scope; the baseline and revs move only if the UI took the snapshot.
+   */
+  function applyServerRows(build) {
+    var hooks = liveHooks;
+    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
+    if (!local) return false;
+    var acks = [];
+    var next = withAcks(acks, function () { return build(local); });
+    var took = true;
+    if (next !== local && hooks && typeof hooks.apply === "function") {
+      try {
+        took = hooks.apply(next, "live-entity") !== false;
+      } catch (err) {
+        took = false;
+      }
+    }
+    if (took) runAcks(acks);
+    return took;
+  }
+
   async function openPeopleScreen(opts) {
     opts = opts || {};
     var limit = Number(opts.limit) || 80;
@@ -2618,12 +2708,15 @@
       return null;
     });
     var people = body && Array.isArray(body.people) ? body.people : [];
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && people.length) {
-      var next = Object.assign({}, local);
-      next.people = mergeKeepPeopleClient(local.people, people);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (people.length) {
+      applyServerRows(function (local) {
+        var acc = local;
+        people.forEach(function (p) {
+          if (!p || p.id == null) return;
+          acc = mergeEntityPayload(acc, { type: "people", id: String(p.id) }, { ok: true, payload: p, rev: p.rev }, {});
+        });
+        return acc;
+      });
     }
     if (typeof opts.apply === "function") opts.apply(people, body);
     return { people: people, url: url, total: body && body.total };
@@ -2642,19 +2735,15 @@
       return null;
     });
     var records = body && Array.isArray(body.records) ? body.records : [];
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && records.length) {
-      var tree = {};
-      tree[month] = {};
-      for (var i = 0; i < records.length; i++) {
-        var rec = records[i];
-        if (!rec || !rec.personId) continue;
-        tree[month][rec.personId] = rec.payload || rec;
-      }
-      var next = Object.assign({}, local);
-      next.rewardRecords = mergeKeepMonthMapsClient(local.rewardRecords, tree);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (records.length) {
+      applyServerRows(function (local) {
+        var acc = local;
+        records.forEach(function (rec) {
+          if (!rec || !rec.personId) return;
+          acc = mergeEntityPayload(acc, { type: "reward-records", id: String(rec.personId), period: month }, { ok: true, payload: rec.payload || rec, rev: rec.rev, deleted: !!rec.deleted }, {});
+        });
+        return acc;
+      });
     }
     if (typeof opts.apply === "function") opts.apply(records, body);
     return { records: records, url: url, total: body && body.total, period: month };
@@ -2673,19 +2762,15 @@
       return null;
     });
     var records = body && Array.isArray(body.records) ? body.records : [];
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && records.length) {
-      var tree = {};
-      tree[month] = {};
-      for (var i = 0; i < records.length; i++) {
-        var rec = records[i];
-        if (!rec || !rec.personId) continue;
-        tree[month][rec.personId] = rec.payload || rec;
-      }
-      var next = Object.assign({}, local);
-      next.records = mergeKeepMonthMapsClient(local.records, tree);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (records.length) {
+      applyServerRows(function (local) {
+        var acc = local;
+        records.forEach(function (rec) {
+          if (!rec || !rec.personId) return;
+          acc = mergeEntityPayload(acc, { type: "month-records", id: String(rec.personId), period: month }, { ok: true, payload: rec.payload || rec, rev: rec.rev, deleted: !!rec.deleted }, {});
+        });
+        return acc;
+      });
     }
     if (typeof opts.apply === "function") opts.apply(records, body);
     return { records: records, url: url, total: body && body.total, period: month };
@@ -2704,22 +2789,39 @@
       return null;
     });
     var payload = body && body.payload ? body.payload : body;
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && payload) {
-      var next = mergeEntityPayload(local, { type: "month-records", id: pid, period: month }, body || { payload: payload }, {});
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (payload) {
+      applyServerRows(function (local) {
+        return mergeEntityPayload(local, { type: "month-records", id: pid, period: month }, body && body.payload ? body : { payload: payload }, {});
+      });
     }
     if (typeof opts.apply === "function") opts.apply(payload, body);
     return { payload: payload, url: url, rev: body && body.rev };
   }
 
+  /**
+   * Org slice (rows are served from the entity table): merge row by row so the
+   * baseline follows what the screen took — whole-field replacement left every
+   * row unacked, so the next save probed the whole catalog.
+   */
   function applyOrgFields(local, body) {
     var next = Object.assign({}, local);
     ["companies", "brands", "businessUnits", "functions", "subFunctions", "roles", "sbuMembers", "trash"].forEach(function (field) {
-      if (body && body[field] !== undefined) next[field] = body[field];
+      if (!body || body[field] === undefined) return;
+      var spec = C ? C.specForField(field) : null;
+      if (!spec) {
+        next[field] = body[field];
+        return;
+      }
+      C.toRows(spec, body[field], []).forEach(function (row) {
+        next = mergeGenericRow(next, spec.kind, { k1: row.k1, k2: row.k2, payload: row.payload, deleted: false });
+      });
     });
-    if (body && Array.isArray(body.people)) next.people = mergeKeepPeopleClient(local.people, body.people);
+    if (body && Array.isArray(body.people)) {
+      body.people.forEach(function (p) {
+        if (!p || p.id == null) return;
+        next = mergeEntityPayload(next, { type: "people", id: String(p.id) }, { ok: true, payload: p, rev: p.rev }, {});
+      });
+    }
     return next;
   }
 
@@ -2732,12 +2834,7 @@
     var res = await getter(url, { method: "GET", credentials: "same-origin", cache: "no-store" });
     if (!res || !res.ok) return { url: url, status: res && res.status };
     var body = await res.json().catch(function () { return null; });
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && body) {
-      var next = applyOrgFields(local, body);
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
-    }
+    if (body) applyServerRows(function (local) { return applyOrgFields(local, body); });
     return { url: url, body: body };
   }
 
@@ -2786,11 +2883,10 @@
     if (!res || !res.ok) return { url: url, status: res && res.status };
     var body = await res.json().catch(function () { return null; });
     var payload = body && body.payload ? body.payload : body;
-    var hooks = liveHooks;
-    var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
-    if (local && payload) {
-      var next = mergeEntityPayload(local, { type: "people", id: pid }, body || { payload: payload }, {});
-      if (hooks && typeof hooks.apply === "function") hooks.apply(next, "live-entity");
+    if (payload) {
+      applyServerRows(function (local) {
+        return mergeEntityPayload(local, { type: "people", id: pid }, body && body.payload ? body : { payload: payload }, {});
+      });
     }
     return { url: url, payload: payload, rev: body && body.rev };
   }
@@ -3165,6 +3261,14 @@
     collectEntityOps: collectEntityOps,
     mergeGenericRow: mergeGenericRow,
     mergeHotRow: mergeHotRow,
+    /** Read-only diagnostics: what the next save would send for the screen as it is now. */
+    pendingOps: function () {
+      var local = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
+      if (!local) return null;
+      return collectEntityOps(stripUi(local)).map(function (op) {
+        return { url: op.url, deleted: !!op.deleted, payload: op.payload, acked: ackedSlice(op) };
+      });
+    },
     pollChanges: pollChanges,
     commitPendingAcks: commitPendingAcks,
     liveSeq: function () { return liveSeq; },

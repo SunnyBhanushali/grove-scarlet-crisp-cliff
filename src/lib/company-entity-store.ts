@@ -418,6 +418,31 @@ async function rememberOp(sql: HotSql, clientOpId: string, row: StoredEntity, up
   );
 }
 
+/** Notice kinds the SPA generates on its own (month reminders), not typed by a person. */
+const AUTO_NOTICE_KINDS = new Set(["plan_due", "plan_late", "month_close_due"]);
+
+/** Identity of an auto reminder: same kind/plan/month/phase/recipients/subject = the same notice. */
+export function autoNoticeKey(kind: string, payload: Record<string, unknown>): string | null {
+  if (kind !== "notices" || !AUTO_NOTICE_KINDS.has(String(payload.kind || ""))) return null;
+  if (!payload.month) return null;
+  const to = Array.isArray(payload.toIds) ? payload.toIds.map(String).sort().join(",") : "";
+  return JSON.stringify([payload.kind, payload.planKind || "", payload.month, payload.phase || "", to, payload.subjectId || ""]);
+}
+
+async function liveAutoNoticeExists(sql: HotSql, id: string, noticeKey: string): Promise<boolean> {
+  const [kind, , month] = JSON.parse(noticeKey) as string[];
+  const rows = await sql.query<{ id: string; payload: Record<string, unknown> | string }>(
+    `select id, payload from entities
+      where kind = 'notices' and deleted_at is null and id <> $1
+        and payload->>'kind' = $2 and payload->>'month' = $3`,
+    [id, kind, month],
+  );
+  return rows.some((r) => {
+    const payload = typeof r.payload === "string" ? (JSON.parse(r.payload) as Record<string, unknown>) : r.payload;
+    return autoNoticeKey("notices", payload) === noticeKey;
+  });
+}
+
 export async function patchEntityRow(
   sql: HotSql,
   key: EntityId,
@@ -482,7 +507,16 @@ export async function patchEntityRow(
         payload = { ...payload, password: storedPw };
       }
     }
-    const won = await casWrite(sql, key, payload, expectRev, parsed.deleted, updatedBy);
+    const won =
+      expectRev === 0 && !parsed.deleted && autoNoticeKey(key.kind, payload)
+        ? await enqueue("notices:auto", async () => {
+            // Every signed-in admin's screen derives the same reminder at the
+            // same moment, each with its own random id. The first create wins;
+            // a later one is born as a tombstone so everyone keeps one notice.
+            const dup = await liveAutoNoticeExists(sql, key.id, autoNoticeKey(key.kind, payload)!);
+            return casWrite(sql, key, payload, 0, dup, updatedBy);
+          })
+        : await casWrite(sql, key, payload, expectRev, parsed.deleted, updatedBy);
     if (!won) {
       const current = (await readEntity(sql, key)) || { ...key, payload: {}, rev: 0, deleted: true };
       return { status: 409, body: { ...entityBody(current), ok: false, error: "stale" } };
