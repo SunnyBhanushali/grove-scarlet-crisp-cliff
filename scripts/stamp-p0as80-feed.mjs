@@ -10,6 +10,10 @@
  * echo save it scheduled. It only runs on a clean screen
  * (`if(D.current||f.current||p.current)return!1`) and the change is the server's.
  *
+ * Target value inputs commit on blur only what was typed since focus, and
+ * the Target tab's rename starts from the current name (both wrote a stale
+ * copy over another user's change).
+ *
  * The live hooks also expose the store's state (`stateRef`), so the sync's
  * read-only screen checks copy the screen state once per change instead of
  * once per feed message.
@@ -44,12 +48,44 @@ function must(cond, msg) {
 const HOOK_OLD = "getSnapshot:()=>K.getState().exportSnapshot(),";
 const HOOK_NEW = "getSnapshot:()=>K.getState().exportSnapshot(),stateRef:()=>K.getState(),";
 
+// Target values (actual, M1–M5): the input copies the value when it gets
+// focus and, on blur, wrote that copy back whenever it differed from the
+// store. Tab moves focus into the next value, so a change another user made
+// there meanwhile was written back over on the next click elsewhere — an
+// edit nobody typed. On blur it now commits only if the text changed since
+// focus.
+const VALUE_STATE_OLD = "let[F,setF]=(0,Z.useState)(!1);";
+const VALUE_STATE_NEW = "let[F,setF]=(0,Z.useState)(!1);let F0=(0,Z.useRef)(null);";
+const VALUE_FOCUS_OLD =
+  "onFocus:t=>{setF(!0),a(ld(e,r));try{t.target.select()}catch{}},onBlur:()=>{setF(!1);let t=G(i);a(ld(t,r)),t!==e&&n(t)}";
+const VALUE_FOCUS_NEW =
+  "onFocus:t=>{setF(!0),a(ld(e,r)),F0.current=ld(e,r);try{t.target.select()}catch{}},onBlur:()=>{setF(!1);let t=G(i);a(ld(t,r)),t!==e&&i!==F0.current&&n(t)}";
+// Target / Group tab rename: the draft name was taken when the row first
+// rendered; opening Edit after someone else renamed it and leaving wrote the
+// old name back. It now starts from the current name.
+// …and while it has focus but nothing was typed, it follows the store.
+const VALUE_SYNC_OLD = "return(0,Z.useEffect)(()=>{F||a(ld(e,r))},[e,r,F])";
+const VALUE_SYNC_NEW = "return(0,Z.useEffect)(()=>{if(F&&i!==F0.current)return;let v=ld(e,r);a(v),F&&(F0.current=v)},[e,r,F])";
+const RENAME_OLD = "title:`Edit`,onClick:()=>r(!0),children:(0,Q.jsx)(Ha,{className:`size-3.5`})";
+const RENAME_NEW = "title:`Edit`,onClick:()=>{a(e.name),r(!0)},children:(0,Q.jsx)(Ha,{className:`size-3.5`})";
+
+function once(src, from, to, what) {
+  const n = src.split(from).length - 1;
+  must(n === 1, `${what}: expected 1 site, got ${n}`);
+  return src.split(from).join(to);
+}
+
 export function stampRoutes(src) {
   const n = src.split(ENTITY_OLD).length - 1;
   must(n === 3, `live-entity apply: expected 3 sites, got ${n}`);
   const h = src.split(HOOK_OLD).length - 1;
   must(h === 4, `live hooks: expected 4 sites, got ${h}`);
-  return src.split(ENTITY_OLD).join(ENTITY_NEW).split(HOOK_OLD).join(HOOK_NEW);
+  let out = src.split(ENTITY_OLD).join(ENTITY_NEW).split(HOOK_OLD).join(HOOK_NEW);
+  out = once(out, VALUE_STATE_OLD, VALUE_STATE_NEW, "target value state");
+  out = once(out, VALUE_FOCUS_OLD, VALUE_FOCUS_NEW, "target value focus/blur");
+  out = once(out, VALUE_SYNC_OLD, VALUE_SYNC_NEW, "target value follows the store while untouched");
+  out = once(out, RENAME_OLD, RENAME_NEW, "target tab rename");
+  return out;
 }
 
 export function stampHtml(html) {
