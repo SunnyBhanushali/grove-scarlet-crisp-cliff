@@ -841,6 +841,9 @@
   }
 
   function maybeScreenRead() {
+    try {
+      flagStaleReadd();
+    } catch (err) {}
     var snap = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
     var view = uiView();
     if (!view && snap && snap.view) view = String(snap.view);
@@ -1363,6 +1366,11 @@
     if (Number.isFinite(Number(ch.rev))) {
       var learnedRev = Number(ch.rev);
       pushAck(function () { entityRevs[revKey] = learnedRev; });
+    }
+    if (deleted) remoteDeletedKeys[revKey] = 1;
+    else {
+      delete remoteDeletedKeys[revKey];
+      delete staleReadds[revKey];
     }
     var hint = { type: kind, id: k1, period: k2 || undefined };
     var pair = hotRowPair(kind, k1, k2, local);
@@ -2252,8 +2260,76 @@
     return { status: res.status, json: json };
   }
 
+  /**
+   * Which screen the person is on, and how they got there. The SPA creates a
+   * plan record just by opening a person-month page that has none ("Add APMS
+   * → Create plan" relies on it), so a record that comes back is a deliberate
+   * create only when the person navigated to that page and the record did not
+   * exist when they arrived. A page restored on load, or one that held the
+   * record when they arrived (someone else deleted it meanwhile), is a stale
+   * screen rebuilding a blank record.
+   */
+  var screenEntry = { key: "", at: 0, fromLoad: true, hadRecord: false };
+  var screenEntries = [];
+  function recordScreenKey(kind, pid, month) {
+    return "scorecard|" + kind + "|" + pid + "|" + month;
+  }
+  function noteScreenEntry() {
+    var nav = null;
+    try {
+      nav = global.__apmsNavUi && typeof global.__apmsNavUi.loadSession === "function" ? global.__apmsNavUi.loadSession() : null;
+    } catch (err) {}
+    var view = uiView();
+    var kind = nav && nav.kind ? String(nav.kind) : "apms";
+    var pid = uiPerson();
+    var month = uiMonth();
+    var key = view === "scorecard" ? recordScreenKey(kind, pid, month) : view;
+    if (key === screenEntry.key) return screenEntry;
+    var had = false;
+    if (view === "scorecard") {
+      var tree = (lastAcked.months && lastAcked.months[kind === "rewards" ? "rewardRecords" : "records"]) || {};
+      had = isPlainObject(tree[month]) && tree[month][pid] !== undefined;
+    }
+    screenEntry = { key: key, at: Date.now(), fromLoad: screenEntry.key === "", hadRecord: had, view: view, kind: kind, pid: pid, month: month };
+    if (view === "scorecard" && !screenEntry.fromLoad && !had && typeof staleReadds === "object") {
+      // Navigated here and there is no plan yet: whatever appears now is a create.
+      delete staleReadds[entityRevKey(kind === "rewards" ? "reward_records" : "month_records", month, pid)];
+    }
+    screenEntries.push(screenEntry);
+    if (screenEntries.length > 20) screenEntries.shift();
+    return screenEntry;
+  }
+
+  /**
+   * Flag a blank record the SPA rebuilt on a stale page the moment it shows up
+   * (it may only be saved after the person has moved on to another screen).
+   */
+  var staleReadds = {};
+  function flagStaleReadd() {
+    var entry = noteScreenEntry();
+    if (entry.view !== "scorecard" || !(entry.fromLoad || entry.hadRecord)) return;
+    var snap = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
+    if (!snap) return;
+    var field = entry.kind === "rewards" ? "rewardRecords" : "records";
+    var tree = (lastAcked.months && lastAcked.months[field]) || {};
+    var local = isPlainObject(snap[field]) && isPlainObject(snap[field][entry.month]) ? snap[field][entry.month][entry.pid] : undefined;
+    var acked = isPlainObject(tree[entry.month]) ? tree[entry.month][entry.pid] : undefined;
+    if (local === undefined || acked !== undefined) return;
+    var revKey = entityRevKey(entry.kind === "rewards" ? "reward_records" : "month_records", entry.month, entry.pid);
+    if (remoteDeletedKeys[revKey] || entry.fromLoad) staleReadds[revKey] = 1;
+  }
+
+  /** A month / reward record another user deleted, re-added by a stale page. */
+  function staleHotReadd(op) {
+    if (op.kind !== "month_records" && op.kind !== "reward_records") return false;
+    if (staleReadds[op.revKey]) return true;
+    var entry = noteScreenEntry();
+    if (entry.key !== recordScreenKey(op.kind === "reward_records" ? "rewards" : "apms", String(op.personId), String(op.period))) return false;
+    return entry.fromLoad || entry.hadRecord;
+  }
+
   async function saveOneEntity(op, snap) {
-    if (op.spec && !op.deleted && remoteDeletedKeys[op.revKey] && ackedSlice(op) === undefined) {
+    if (!op.deleted && remoteDeletedKeys[op.revKey] && ackedSlice(op) === undefined && (op.spec || staleHotReadd(op))) {
       // Re-adding a row someone else deleted: stale screen state, not a create.
       lastMergeTrace.push({ revKey: op.revKey, kind: "stale-readd-dropped" });
       return { ok: true, json: { ok: true, deleted: true, payload: op.payload }, op: op, adopted: true, deleted: true };
@@ -2296,7 +2372,7 @@
         }
         baseRev = serverRev;
         if (serverDeleted && !op.deleted) {
-          if (base === undefined && !knownRowKeys[op.revKey]) {
+          if (base === undefined && !knownRowKeys[op.revKey] && !staleHotReadd(op)) {
             // I never had this row: it is a genuine create that collided with
             // an old tombstone id. Re-create it on top of the tombstone.
             continue;
@@ -3188,6 +3264,9 @@
   function resetForTests() {
     knownRowKeys = {};
     remoteDeletedKeys = {};
+    screenEntry = { key: "", at: 0, fromLoad: true, hadRecord: false };
+    screenEntries = [];
+    staleReadds = {};
     entityFieldsFromNextPull = false;
     liveSeq = 0;
     lastChangesAt = 0;
@@ -3262,6 +3341,10 @@
     mergeGenericRow: mergeGenericRow,
     mergeHotRow: mergeHotRow,
     /** Read-only diagnostics: what the next save would send for the screen as it is now. */
+    /** Read-only diagnostics: the screens this page went through (stale re-add rule). */
+    screenEntries: function () {
+      return screenEntries.slice();
+    },
     pendingOps: function () {
       var local = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
       if (!local) return null;

@@ -26,6 +26,7 @@ type Sync = {
   entityRevs(): Record<string, number>;
   collectEntityOps(s: Record<string, unknown>): Array<{ url: string; payload: Record<string, unknown>; deleted: boolean }>;
   lastAckedBooks(): Record<string, Record<string, unknown>>;
+  save(s: Record<string, unknown>): Promise<Record<string, unknown>>;
 };
 const sync = (globalThis as unknown as { __apmsSync: Sync }).__apmsSync;
 
@@ -185,6 +186,77 @@ test("follower: a person deleted by A disappears for B and is not re-sent", skip
     assert.equal((local.people as Array<{ id: string }>).some((p) => p.id === "p2"), false);
     assert.deepEqual(sync.collectEntityOps(local), []);
   } finally {
+    close();
+  }
+});
+
+test("stale page: a plan another user deleted is not re-created by a stale or reloaded page; Add APMS → Create plan re-creates it", skip, async () => {
+  const { sql, close } = await openSql();
+  const g = globalThis as unknown as { __apmsNavUi?: { loadSession(): Record<string, unknown> } };
+  const nav = (s: Record<string, unknown>) => { g.__apmsNavUi = { loadSession: () => s }; };
+  const onPage = { view: "scorecard", kind: "apms", selectedPersonId: "p1", currentMonth: "2026-09" };
+  const onList = { view: "apms", kind: "apms", selectedPersonId: "p1", currentMonth: "2026-09" };
+  try {
+    const books = memoryEntityBooks(base());
+    const { ensureHotTablesFromBooks } = await import("./company-entities.ts");
+    await ensureHotTablesFromBooks(sql, () => books.read());
+    const row = async () => (await sql.query<{ deleted_at: unknown; payload: { notes?: string } }>("select deleted_at, payload from month_records where person_id = 'p1' and period = '2026-09'"))[0];
+    const head = await latestSeq(sql);
+    const del = await patchEntity(sql, { table: "month_records", period: "2026-09", personId: "p1" }, { baseRev: 1, deleted: true }, books, "A");
+    assert.equal(del.status, 200);
+    const feed = feedFetch(sql);
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const m = String(input).match(/^\/api\/month-records\/([^/]+)\/([^/?]+)/);
+      if (m && init?.method === "PATCH") {
+        const r = await patchEntity(sql, { table: "month_records", period: m[1], personId: m[2] }, JSON.parse(String(init.body)), books, "B");
+        return json(r.body, r.status);
+      }
+      return feed(input);
+    }) as typeof fetch;
+    let local: Record<string, unknown> = base();
+    const hooks = { getSnapshot: () => local, isBlocked: () => false, apply: (s: Record<string, unknown>) => { local = s; return true; }, remember: () => {} };
+
+    // 1. B came to p1's page from the list while the plan existed; A deletes it; B types.
+    sync.resetForTests();
+    sync.noteLoaded(base());
+    sync.setLiveSeq(head);
+    sync.install(fetcher);
+    nav(onList);
+    sync.setLiveHooks(hooks);
+    nav(onPage);
+    sync.setLiveHooks(hooks);
+    await sync.pollChanges();
+    assert.equal((local.records as Record<string, Record<string, unknown>>)["2026-09"]?.p1, undefined, "the delete reached B");
+    await sync.save({ ...local, records: { "2026-09": { p1: { status: "plan_open", notes: "stale" } } } });
+    assert.ok((await row()).deleted_at, "stale edit: still deleted");
+
+    // 2. After a reload the session reopens p1's page; the SPA rebuilds a blank plan.
+    sync.resetForTests();
+    const wire = { ...base(), records: {} };
+    sync.noteLoaded(wire);
+    local = wire;
+    sync.install(fetcher);
+    nav(onPage);
+    local = { ...wire, records: { "2026-09": { p1: { status: "plan_open", notes: "" } } } };
+    sync.setLiveHooks(hooks);
+    // …and the person has already moved on to the month list when it is saved.
+    nav(onList);
+    sync.setLiveHooks(hooks);
+    await sync.save(local);
+    assert.ok((await row()).deleted_at, "page restored on load: still deleted");
+    local = wire;
+
+    // 3. Add APMS → Create plan: from the list to p1's page, which has no plan yet.
+    nav(onList);
+    sync.setLiveHooks(hooks);
+    nav(onPage);
+    sync.setLiveHooks(hooks);
+    await sync.save({ ...wire, records: { "2026-09": { p1: { status: "plan_open", notes: "created again" } } } });
+    const again = await row();
+    assert.equal(again.deleted_at, null, "deliberate create re-creates the plan");
+    assert.equal(again.payload.notes, "created again");
+  } finally {
+    delete g.__apmsNavUi;
     close();
   }
 });
