@@ -10,6 +10,10 @@
  * echo save it scheduled. It only runs on a clean screen
  * (`if(D.current||f.current||p.current)return!1`) and the change is the server's.
  *
+ * The live hooks also expose the store's state (`stateRef`), so the sync's
+ * read-only screen checks copy the screen state once per change instead of
+ * once per feed message.
+ *
  * This release also changes apms-sync.js and apms-collections.js: the routes
  * chunk gets a new name and the scripts and index chunk new ?v= so browsers
  * holding p0as78/p0as79 fetch them. Nothing else in the bundle changes.
@@ -35,10 +39,17 @@ function must(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
+// The sync's read-only screen checks (view / month / person) cache one copy
+// of the screen state per store state; the hooks expose that state object.
+const HOOK_OLD = "getSnapshot:()=>K.getState().exportSnapshot(),";
+const HOOK_NEW = "getSnapshot:()=>K.getState().exportSnapshot(),stateRef:()=>K.getState(),";
+
 export function stampRoutes(src) {
   const n = src.split(ENTITY_OLD).length - 1;
   must(n === 3, `live-entity apply: expected 3 sites, got ${n}`);
-  return src.split(ENTITY_OLD).join(ENTITY_NEW);
+  const h = src.split(HOOK_OLD).length - 1;
+  must(h === 4, `live hooks: expected 4 sites, got ${h}`);
+  return src.split(ENTITY_OLD).join(ENTITY_NEW).split(HOOK_OLD).join(HOOK_NEW);
 }
 
 export function stampHtml(html) {

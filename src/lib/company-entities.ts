@@ -376,6 +376,26 @@ export async function ensureHotTablesFromBooks(
   await importHotTables(sql, snap, { updatedBy: "empty-import" });
 }
 
+/**
+ * The books, for the legacy-hydrate check of a row the table does not have.
+ * Every new row (a duplicated month writes one per target) asks; reading and
+ * parsing the whole book per row made such a burst take seconds. Rows only
+ * reach a book after their table row exists (or before the boot import), so
+ * a copy a few seconds old answers "is it in the book?" just as well.
+ */
+const HYDRATE_READ_MS = 2000;
+const hydrateReads = new WeakMap<EntityBooks, { at: number; snap: Promise<Snapshot | null> }>();
+function readBooksForHydrate(books: EntityBooks): Promise<Snapshot | null> {
+  const hit = hydrateReads.get(books);
+  if (hit && Date.now() - hit.at < HYDRATE_READ_MS) return hit.snap;
+  const snap = books.read().catch((err) => {
+    hydrateReads.delete(books);
+    throw err;
+  });
+  hydrateReads.set(books, { at: Date.now(), snap });
+  return snap;
+}
+
 async function hydrateFromBook(
   sql: HotSql,
   key: EntityKey,
@@ -395,7 +415,7 @@ export async function getEntity(
   await ensureHotTablesFromBooks(sql, () => books.read());
   let row = await readRow(sql, key);
   if (!row) {
-    const snap = await books.read();
+    const snap = await readBooksForHydrate(books);
     row = await hydrateFromBook(sql, key, snap);
   }
   if (!row) return { status: 404, body: { ok: false, error: "not-found", table: key.table } };
@@ -425,7 +445,7 @@ async function patchEntityUnlocked(
   await ensureHotTablesFromBooks(sql, () => books.read());
   let row = await readRow(sql, key);
   if (!row) {
-    const snap = await books.read();
+    const snap = await readBooksForHydrate(books);
     row = await hydrateFromBook(sql, key, snap);
   }
   const stored: EntityRow = row || { payload: {}, rev: 0, deleted: false };

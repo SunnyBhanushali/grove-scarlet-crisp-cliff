@@ -778,14 +778,28 @@
    * serves every read-only caller in the same task; never mutate it.
    */
   var peekCache = null;
+  var peekState = null;
   function peekSnapshot() {
     if (!liveHooks || typeof liveHooks.getSnapshot !== "function") return null;
-    if (peekCache && peekCache.hooks === liveHooks) return peekCache.snap;
+    // p0as80 hooks expose the store's state object: the copy stays valid
+    // until the state changes (across feed messages, not just one task).
+    var ref = null;
+    try {
+      ref = typeof liveHooks.stateRef === "function" ? liveHooks.stateRef() : null;
+    } catch (err) {
+      ref = null;
+    }
+    if (ref && peekState && peekState.ref === ref) return peekState.snap;
+    if (!ref && peekCache && peekCache.hooks === liveHooks) return peekCache.snap;
     var snap = liveHooks.getSnapshot();
-    peekCache = { hooks: liveHooks, snap: snap };
-    Promise.resolve().then(function () {
-      peekCache = null;
-    });
+    if (ref) {
+      peekState = { ref: ref, snap: snap };
+    } else {
+      peekCache = { hooks: liveHooks, snap: snap };
+      Promise.resolve().then(function () {
+        peekCache = null;
+      });
+    }
     return snap;
   }
 
@@ -906,6 +920,7 @@
   var liveWatchStarted = false;
   var liveTickTimer = null;
   var liveSource = null;
+  var LIVE_FALLBACK_MS = 5000;
 
   function orgSelectedId(snap, kind) {
     if (!snap) return "";
@@ -926,13 +941,23 @@
     } catch (err) {
       if (typeof console !== "undefined" && console.warn) console.warn("[apms-sync] clearGhosts", err);
     }
-    var snap = peekSnapshot();
+    // The screen state is copied only when a branch below needs it: this runs
+    // on every feed message.
+    var snapMemo;
+    var snap = null;
+    function S() {
+      if (snapMemo === undefined) snapMemo = peekSnapshot();
+      return snapMemo;
+    }
     var view = uiView();
-    if (!view && snap && snap.view) view = String(snap.view);
-    var month = uiMonth() || (snap ? String(snap.currentMonth || snap.selectedMonth || "") : "");
-    var person = uiPerson() || apmsPersonId(snap);
+    if (!view && S() && S().view) view = String(S().view);
+    var needMP = view === "rewards" || view === "apms" || view === "org-person" || isApmsView(view);
+    var needQ = view === "org-people" || view === "people";
+    var month = needMP ? uiMonth() || (S() ? String(S().currentMonth || S().selectedMonth || "") : "") : "";
+    var person = needMP ? uiPerson() || apmsPersonId(S()) : "";
     var orgKind = orgKindForView(view);
-    var orgId = orgSelectedId(snap, orgKind);
+    var orgId = orgKind ? orgSelectedId(S(), orgKind) : "";
+    if (needQ) snap = S();
     if (!orgId) {
       try {
         var nav = global.__apmsNavUi && global.__apmsNavUi.loadSession ? global.__apmsNavUi.loadSession() : null;
@@ -1022,6 +1047,13 @@
 
   function setLiveHooks(hooks) {
     liveHooks = hooks && typeof hooks === "object" ? hooks : null;
+    if (liveHooks && liveSource) {
+      // The SPA's stream is up: drop the fallback one.
+      try {
+        liveSource.close();
+      } catch (err) {}
+      liveSource = null;
+    }
     startScreenReadWatch();
     startLiveWatch();
     if (liveHooks && replayFeedOnHooks) {
@@ -1113,17 +1145,26 @@
     if (typeof document === "undefined") return;
     if (liveWatchStarted) return;
     liveWatchStarted = true;
-    try {
-      if (typeof EventSource === "function") {
-        liveSource = new EventSource("/api/company-live", { withCredentials: true });
-        liveSource.onmessage = function (ev) {
-          try {
-            var data = JSON.parse(ev.data);
-            handleLiveEvent(data);
-          } catch (err) {}
-        };
-      }
-    } catch (err) {}
+    // The SPA keeps its own /api/company-live stream and hands every message
+    // to handleLiveEvent (it installs the live hooks as it does). A second
+    // stream here handled each tick twice and held one of the browser's six
+    // HTTP/1.1 connections per tab, so saves queued behind it. Open ours only
+    // when the SPA's has delivered nothing after a few seconds.
+    if (typeof EventSource === "function") {
+      var fallback = setTimeout(function () {
+        if (liveHooks || liveSource) return;
+        try {
+          liveSource = new EventSource("/api/company-live", { withCredentials: true });
+          liveSource.onmessage = function (ev) {
+            try {
+              var data = JSON.parse(ev.data);
+              handleLiveEvent(data);
+            } catch (err) {}
+          };
+        } catch (err) {}
+      }, LIVE_FALLBACK_MS);
+      if (fallback && typeof fallback.unref === "function") fallback.unref();
+    }
     if (liveTickTimer) return;
     liveTickTimer = setInterval(function () {
       var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
@@ -2431,8 +2472,10 @@
       view = "scorecard";
       kind = "rewards";
     }
-    var pid = uiPerson();
-    var month = uiMonth();
+    // Person and month only matter on a person-month page (reading them may
+    // copy the whole screen state).
+    var pid = view === "scorecard" ? uiPerson() : "";
+    var month = view === "scorecard" ? uiMonth() : "";
     var key = view === "scorecard" ? recordScreenKey(kind, pid, month) : view;
     if (key === screenEntry.key) return screenEntry;
     var had = false;
@@ -3647,6 +3690,8 @@
     lastApmsPersonFetchAt = 0;
     lastApmsPersonKey = "";
     fetchingHints = {};
+    peekCache = null;
+    peekState = null;
     liveWatchStarted = false;
     if (screenReadTimer) {
       clearInterval(screenReadTimer);

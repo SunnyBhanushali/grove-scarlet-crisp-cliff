@@ -24,7 +24,7 @@ export async function openTargetsList(ctx, p) {
 }
 
 /** Month rows of other years sit under a collapsed year group ("2088 | 1 month"). */
-async function showMonthRow(p, monthLabel) {
+export async function showMonthRow(p, monthLabel) {
   const row = p.locator("main button", { hasText: new RegExp("^" + monthLabel) }).first();
   if (await row.count()) return row;
   const year = monthLabel.split(" ").pop();
@@ -93,7 +93,7 @@ export async function inMonth(ctx, nodeId, month = "2026-09") {
   return order.includes(nodeId) || mem.length > 0;
 }
 
-async function rowDelete(p, name) {
+export async function rowDelete(p, name) {
   const row = targetRow(p, name);
   await row.getByRole("button", { name: "Delete", exact: true }).first().click();
   await p.waitForTimeout(400);
@@ -181,7 +181,7 @@ export async function targetsCells(ctx, run) {
   return R;
 }
 
-async function dialog(p, title) {
+export async function dialog(p, title) {
   const d = p.locator("div.fixed.inset-0").filter({ hasText: new RegExp("^" + title) }).last();
   await d.waitFor({ timeout: 10000 });
   return d;
@@ -557,7 +557,7 @@ export async function monthStatus(ctx, month) {
   const r = await ctx.sql("select payload, deleted_at from entities where kind = 'target-month-status' and id = $1", [month]);
   return r[0] && !r[0].deleted_at ? r[0].payload?.value : null;
 }
-async function changeLog(p) {
+export async function changeLog(p) {
   await p.getByRole("button", { name: "Change log" }).click();
   const d = await dialog(p, "Change log");
   const t = await d.innerText();

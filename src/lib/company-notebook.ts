@@ -359,28 +359,65 @@ async function applyBookSlices(book: BookId, list: BookSliceOpts[]): Promise<Boo
  * its book so book readers (backups, org slices, restore) stay coherent.
  * Serialized on the book; never 409s; does not notify (the caller publishes).
  */
-export async function commitEntityRowToBook(
-  spec: { field: string; book: BookId; shape: string; kind: string },
-  row: { kind: string; id: string; k1: string | null; k2: string | null; payload: Record<string, unknown>; rev: number; deleted: boolean },
-): Promise<Record<string, number>> {
-  const { collections } = await import("./apms-collections.ts");
-  const run = async () => {
-    const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
-    const next: Snapshot = { ...existing };
-    const cspec = collections.specForField(spec.field);
-    if (cspec) {
-      const value = collections.applyRow(cspec, existing[spec.field], row, row.deleted);
-      if (value === undefined) delete next[spec.field];
-      else next[spec.field] = value;
+type EntityBookRow = { kind: string; id: string; k1: string | null; k2: string | null; payload: Record<string, unknown>; rev: number; deleted: boolean };
+type EntityBookSpec = { field: string; book: BookId; shape: string; kind: string };
+
+/**
+ * Generic rows mirror into their book like hot rows do: rows that arrive while
+ * a write for the same book is running are applied together in the next
+ * single book write (a duplicated month writes one membership per target;
+ * one whole-book rewrite each made that take seconds).
+ */
+const entityRowQueues = new Map<BookId, { items: Array<{ spec: EntityBookSpec; row: EntityBookRow; resolve: (g: Record<string, number>) => void; reject: (e: unknown) => void }>; running: boolean }>();
+
+export async function commitEntityRowToBook(spec: EntityBookSpec, row: EntityBookRow): Promise<Record<string, number>> {
+  return new Promise<Record<string, number>>((resolve, reject) => {
+    let q = entityRowQueues.get(spec.book);
+    if (!q) {
+      q = { items: [], running: false };
+      entityRowQueues.set(spec.book, q);
     }
-    const gens = normalizeBookGens(existing);
-    next.bookGens = { ...gens, [spec.book]: (Number(gens[spec.book]) || 0) + 1 };
-    next.notebookUpdatedAt = Date.now();
-    const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, existing));
-    const assembled = await persistBooks(merged, "replace", [spec.book]);
-    return normalizeBookGens(assembled) as Record<string, number>;
-  };
-  return enqueueBooks([spec.book], run);
+    q.items.push({ spec, row, resolve, reject });
+    if (!q.running) void drainEntityRows(spec.book);
+  });
+}
+
+async function drainEntityRows(book: BookId): Promise<void> {
+  const q = entityRowQueues.get(book);
+  if (!q || q.running) return;
+  q.running = true;
+  try {
+    while (q.items.length) {
+      const batch = q.items.splice(0);
+      try {
+        const gens = await enqueueBooks([book], () => applyEntityRows(book, batch));
+        for (const b of batch) b.resolve(gens);
+      } catch (err) {
+        for (const b of batch) b.reject(err);
+      }
+    }
+  } finally {
+    q.running = false;
+  }
+}
+
+async function applyEntityRows(book: BookId, batch: Array<{ spec: EntityBookSpec; row: EntityBookRow }>): Promise<Record<string, number>> {
+  const { collections } = await import("./apms-collections.ts");
+  const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
+  const next: Snapshot = { ...existing };
+  for (const { spec, row } of batch) {
+    const cspec = collections.specForField(spec.field);
+    if (!cspec) continue;
+    const value = collections.applyRow(cspec, next[spec.field], row, row.deleted);
+    if (value === undefined) delete next[spec.field];
+    else next[spec.field] = value;
+  }
+  const gens = normalizeBookGens(existing);
+  next.bookGens = { ...gens, [book]: (Number(gens[book]) || 0) + 1 };
+  next.notebookUpdatedAt = Date.now();
+  const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, existing));
+  const assembled = await persistBooks(merged, "replace", [book]);
+  return normalizeBookGens(assembled) as Record<string, number>;
 }
 
 /** Org book only — no assembleForGet / no people overlay. */

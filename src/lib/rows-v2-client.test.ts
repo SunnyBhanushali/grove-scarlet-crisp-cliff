@@ -707,3 +707,40 @@ test("a row-owned edit sends no book PATCH, and the baseline keeps what the scre
   assert.equal(acked.ceo.name, "CEO", "baseline still what the screen has");
   assert.deepEqual(sync.collectEntityOps(ui).map((o) => o.url), [], "so the untouched name is not re-sent as an edit");
 });
+
+test("screen checks copy the screen state once per store state, not once per feed message", () => {
+  const g = globalThis as unknown as { __apmsNavUi?: { loadSession(): Record<string, unknown> } };
+  const prevNav = g.__apmsNavUi;
+  try {
+    sync.resetForTests();
+    let state = { id: 1 };
+    let copies = 0;
+    const hooks = () => ({
+      isBlocked: () => false,
+      getSnapshot: () => {
+        copies++;
+        return { view: "scorecard", selectedPersonId: "p1", currentMonth: "2026-09", records: {} };
+      },
+      stateRef: () => state,
+      apply: () => true,
+      remember: () => {},
+    });
+    // The person-month page: person and month come from the screen state.
+    g.__apmsNavUi = { loadSession: () => ({ view: "scorecard", kind: "apms" }) };
+    for (let i = 0; i < 5; i++) sync.setLiveHooks(hooks()); // the SPA re-installs its hooks per message
+    assert.equal(copies, 1, "one copy while the state is unchanged");
+    state = { id: 2 };
+    sync.setLiveHooks(hooks());
+    sync.setLiveHooks(hooks());
+    assert.equal(copies, 2, "a new state is copied once");
+    // A screen that needs neither person nor month (Targets) copies nothing.
+    copies = 0;
+    state = { id: 3 };
+    g.__apmsNavUi = { loadSession: () => ({ view: "targets-month", kind: "rewards" }) };
+    for (let i = 0; i < 5; i++) sync.setLiveHooks(hooks());
+    assert.equal(copies, 0);
+  } finally {
+    g.__apmsNavUi = prevNav;
+    sync.resetForTests();
+  }
+});

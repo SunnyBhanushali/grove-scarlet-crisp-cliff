@@ -314,7 +314,7 @@ export function startEntityListen(): void {
         if (retried) return;
         retried = true;
         client.end().catch(() => {});
-        setTimeout(() => void connect(), 2000);
+        unrefTimer(setTimeout(() => void connect(), 2000));
       };
       client.on("error", retry);
       client.on("end", retry);
@@ -322,11 +322,20 @@ export function startEntityListen(): void {
         if (msg.channel === "apms_entities") onNotify();
       });
       await client.connect();
+      // The listener must not keep a stopping server alive: without this a
+      // SIGTERM closed the HTTP server but the process never exited.
+      const stream = (client as unknown as { connection?: { stream?: { unref?: () => void } } }).connection?.stream;
+      if (stream && typeof stream.unref === "function") stream.unref();
       await client.query("LISTEN apms_entities");
     } catch (err) {
       console.error("[company-live] LISTEN apms_entities failed; retrying", err);
-      setTimeout(() => void connect(), 5000);
+      unrefTimer(setTimeout(() => void connect(), 5000));
     }
   };
   void connect();
+}
+
+function unrefTimer(t: ReturnType<typeof setTimeout>): void {
+  const u = t as unknown as { unref?: () => void };
+  if (typeof u.unref === "function") u.unref();
 }

@@ -210,7 +210,12 @@ test("p0as80 routes: a live-entity (feed) apply clears the dirty flag its own se
   const base = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as78.js", import.meta.url), "utf8");
   assert.equal(stamped.split("notebookUpdatedAt:t.notebookUpdatedAt}));D.current=!1;p.current&&(clearTimeout(p.current),p.current=0);return!0}").length - 1, 3);
   assert.equal(stamped.split("let ok=h(t,`live`);D.current=!1;").length - 1, 3, "p0as78 live apply reset kept");
-  assert.equal(stamped.length - base.length, 3 * "D.current=!1;p.current&&(clearTimeout(p.current),p.current=0);".length, "nothing else changed");
+  assert.equal(stamped.split("getSnapshot:()=>K.getState().exportSnapshot(),stateRef:()=>K.getState(),").length - 1, 4, "live hooks expose the store state");
+  assert.equal(
+    stamped.length - base.length,
+    3 * "D.current=!1;p.current&&(clearTimeout(p.current),p.current=0);".length + 4 * "stateRef:()=>K.getState(),".length,
+    "nothing else changed",
+  );
   const index = readFileSync(new URL("../../public/assets/index-f4j9a7t3-11v-p0ar.js", import.meta.url), "utf8");
   assert.equal(index.includes("routes-e2g7y5q8-13m-p0as80.js"), true);
   assert.equal(index.includes("routes-e2g7y5q8-13m-p0as78.js"), false);

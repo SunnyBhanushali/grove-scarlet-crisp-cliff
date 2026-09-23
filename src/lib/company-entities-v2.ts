@@ -57,9 +57,14 @@ export function kindFromLiveType(type: string): string | null {
 export function liveEntityHooks(): EntityHooks {
   return {
     async mirrorToBook(spec: CollectionSpec, row: StoredEntity) {
+      // The row is committed and on the feed; the book copy follows in the
+      // background (group-committed per book), as for hot-table rows. The
+      // reply's bookGens come from publish.
       const { commitEntityRowToBook } = await import("./company-notebook");
-      const gens = await commitEntityRowToBook(spec, row);
-      return gens;
+      void commitEntityRowToBook(spec, row).catch((err) => {
+        console.error("[entities] book mirror failed; row stands", row.kind, row.id, err);
+      });
+      return undefined;
     },
     async publish(spec: CollectionSpec, row: StoredEntity, seq: number) {
       const { notifyCompanyLive, currentLiveGens } = await import("./company-live");
