@@ -214,7 +214,8 @@ test("stale page: a plan another user deleted is not re-created by a stale or re
       return feed(input);
     }) as typeof fetch;
     let local: Record<string, unknown> = base();
-    const hooks = { getSnapshot: () => local, isBlocked: () => false, apply: (s: Record<string, unknown>) => { local = s; return true; }, remember: () => {} };
+    let refuse = false;
+    const hooks = { getSnapshot: () => local, isBlocked: () => false, apply: (s: Record<string, unknown>) => { if (refuse) return false; local = s; return true; }, remember: () => {} };
 
     // 1. B came to p1's page from the list while the plan existed; A deletes it; B types.
     sync.resetForTests();
@@ -234,16 +235,23 @@ test("stale page: a plan another user deleted is not re-created by a stale or re
     sync.resetForTests();
     const wire = { ...base(), records: {} };
     sync.noteLoaded(wire);
+    sync.setLiveSeq(await latestSeq(sql)); // the reloaded wire already reflects the delete
     local = wire;
     sync.install(fetcher);
     nav(onPage);
     local = { ...wire, records: { "2026-09": { p1: { status: "plan_open", notes: "" } } } };
     sync.setLiveHooks(hooks);
-    // …and the person has already moved on to the month list when it is saved.
+    // …and the person has already moved on to the month list when it is saved,
+    // while the UI is busy and refuses the corrected screen.
     nav(onList);
+    refuse = true;
     sync.setLiveHooks(hooks);
     await sync.save(local);
     assert.ok((await row()).deleted_at, "page restored on load: still deleted");
+    assert.ok((local.records as Record<string, Record<string, unknown>>)["2026-09"]?.p1, "UI refused the correction");
+    refuse = false;
+    sync.setLiveHooks(hooks); // next screen tick
+    assert.equal((local.records as Record<string, Record<string, unknown>>)["2026-09"]?.p1, undefined, "the blank plan leaves the screen");
     local = wire;
 
     // 3. Add APMS → Create plan: from the list to p1's page, which has no plan yet.
@@ -257,6 +265,70 @@ test("stale page: a plan another user deleted is not re-created by a stale or re
     assert.equal(again.payload.notes, "created again");
   } finally {
     delete g.__apmsNavUi;
+    close();
+  }
+});
+
+test("reload on a stale wire: the feed is replayed from the wire's position, so a delete it missed still leaves the screen", skip, async () => {
+  const { sql, close } = await openSql();
+  try {
+    const books = memoryEntityBooks(base());
+    const { ensureHotTablesFromBooks } = await import("./company-entities.ts");
+    await ensureHotTablesFromBooks(sql, () => books.read());
+    const wireSeq = await latestSeq(sql); // the cached wire was built here…
+    await patchEntity(sql, { table: "month_records", period: "2026-09", personId: "p1" }, { baseRev: 1, deleted: true }, books, "A"); // …then A deleted the plan
+    sync.resetForTests();
+    sync.install(feedFetch(sql));
+    let local: Record<string, unknown> = base();
+    sync.setLiveSeq(await latestSeq(sql)); // a head read already past the delete
+    sync.noteLoaded({ ...base(), feedSeq: wireSeq });
+    sync.setLiveHooks({ getSnapshot: () => local, isBlocked: () => false, apply: (s: Record<string, unknown>) => { local = s; return true; }, remember: () => {} });
+    await sync.pollChanges();
+    assert.equal((local.records as Record<string, Record<string, unknown>>)["2026-09"]?.p1, undefined, "the delete reached the reloaded screen");
+    assert.ok(sync.liveSeq() > wireSeq);
+  } finally {
+    close();
+  }
+});
+
+test("an idle screen writing back its older copy of a plan does not undo another user's lock", skip, async () => {
+  const { sql, close } = await openSql();
+  try {
+    const books = memoryEntityBooks(base());
+    const { ensureHotTablesFromBooks } = await import("./company-entities.ts");
+    await ensureHotTablesFromBooks(sql, () => books.read());
+    const key = { table: "month_records" as const, period: "2026-09", personId: "p1" };
+    const v1 = { status: "plan_open", kras: [{ id: "k1", weight: 0.5 }], notes: "B's notes", updatedAt: 711 };
+    await patchEntity(sql, key, { baseRev: 1, payload: v1 }, books, "B");
+    sync.resetForTests();
+    sync.install((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const m = String(input).match(/^\/api\/month-records\/([^/]+)\/([^/?]+)/);
+      if (m && init?.method === "PATCH") {
+        const r = await patchEntity(sql, { table: "month_records", period: m[1], personId: m[2] }, JSON.parse(String(init.body)), books, "C");
+        return json(r.body, r.status);
+      }
+      return feedFetch(sql)(input);
+    }) as typeof fetch);
+    const loaded = { ...base(), records: { "2026-09": { p1: v1 } } };
+    sync.noteLoaded(loaded);
+    sync.setLiveSeq(await latestSeq(sql));
+    let local: Record<string, unknown> = loaded;
+    sync.setLiveHooks({ getSnapshot: () => local, isBlocked: () => false, apply: (s: Record<string, unknown>) => { local = s; return true; }, remember: () => {} });
+    // A locks the plan; C (idle) receives it.
+    await patchEntity(sql, key, { baseRev: 2, payload: { ...v1, status: "plan_locked", updatedAt: 720 } }, books, "A");
+    await sync.pollChanges();
+    assert.equal((local.records as Record<string, Record<string, { status: string }>>)["2026-09"].p1.status, "plan_locked");
+    // C's page writes its older copy back (same updatedAt as before the lock).
+    await sync.save({ ...local, records: { "2026-09": { p1: v1 } } });
+    const row = (await sql.query<{ payload: { status: string } }>("select payload from month_records where person_id = 'p1' and period = '2026-09'"))[0];
+    assert.equal(row.payload.status, "plan_locked", "A's lock stands");
+    assert.equal((local.records as Record<string, Record<string, { status: string }>>)["2026-09"].p1.status, "plan_locked", "C's screen shows the lock again");
+    // A real edit by C (fresh stamp) still saves, on top of the lock.
+    await sync.save({ ...local, records: { "2026-09": { p1: { ...v1, status: "plan_locked", notes: "C's notes", updatedAt: 730 } } } });
+    const row2 = (await sql.query<{ payload: { status: string; notes: string } }>("select payload from month_records where person_id = 'p1' and period = '2026-09'"))[0];
+    assert.equal(row2.payload.notes, "C's notes");
+    assert.equal(row2.payload.status, "plan_locked");
+  } finally {
     close();
   }
 });

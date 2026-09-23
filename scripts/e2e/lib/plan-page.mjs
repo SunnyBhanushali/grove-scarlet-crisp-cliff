@@ -17,9 +17,10 @@ export function personRow(p, name, monthLabel) {
   return p.locator("main button", { hasText: new RegExp(`${name}.*${monthLabel}`) }).first();
 }
 
-export async function expandMonth(p, monthLabel, probeName) {
-  const probe = probeName ? personRow(p, probeName, monthLabel) : null;
-  if (probe && (await probe.count()) && (await probe.isVisible())) return;
+export async function expandMonth(p, monthLabel) {
+  // Person rows read "Name\nSeptember 2026 · Role …"; the group header "September 2026 | n people".
+  const rows = p.locator("main button", { hasText: new RegExp(monthLabel + " ·") });
+  if (await rows.count()) return;
   await monthButton(p, monthLabel).click();
   await p.waitForTimeout(700);
 }
@@ -90,4 +91,111 @@ export async function inputValues(p) {
   return p.evaluate(() =>
     [...document.querySelectorAll("main input, main textarea")].map((e) => (e.type === "checkbox" ? (e.checked ? "☑" : "☐") : e.value)),
   );
+}
+
+/** Month-end actual inputs (locked plan), in page order. */
+export function actualInputs(p) {
+  return p.locator('main table input[type="number"]');
+}
+
+/** Execution score selects (locked plan), in page order. */
+export function execSelects(p) {
+  return p.locator("main select");
+}
+
+/** Values score buttons ("Score n") of the i-th behaviour row. */
+export function scoreButton(p, behaviourIndex, n) {
+  return p.locator(`main button[aria-label="Score ${n}"]`).nth(behaviourIndex);
+}
+
+export async function scoreSelected(btn) {
+  return btn.evaluate((e) => !e.className.includes("bg-transparent"));
+}
+
+export async function headerButton(p, label) {
+  return p.locator("main").getByRole("button", { name: label, exact: true }).first();
+}
+
+export async function statusBadge(p) {
+  const t = await p.locator("main").innerText();
+  const m = t.match(/\n(Plan open|Plan locked|Closure pending|Closed|Waiting approval|Approved)\n/);
+  return m ? m[1] : null;
+}
+
+/** Fill every month-end actual, execution score and values score so the plan can be closed. */
+export async function fillAllScores(p, base = 80) {
+  const n = await actualInputs(p).count();
+  for (let i = 0; i < n; i++) if (!(await actualInputs(p).nth(i).isDisabled())) await setInput(p, actualInputs(p).nth(i), base + i);
+  const s = await execSelects(p).count();
+  for (let i = 0; i < s; i++) if (!(await execSelects(p).nth(i).isDisabled())) await execSelects(p).nth(i).selectOption("3");
+  const b = await p.locator('main button[aria-label="Score 3"]').count();
+  for (let i = 0; i < b; i++) {
+    const btn = p.locator('main button[aria-label="Score 3"]').nth(i);
+    if (await btn.isDisabled()) continue;
+    if (!(await scoreSelected(btn))) await btn.click();
+  }
+  return { actuals: n, exec: s, values: b };
+}
+
+/** Bottom "Close plan" (locked plan). Returns the validation message, if any. */
+export async function closePlan(p) {
+  const b = p.locator("main").getByRole("button", { name: "Close plan", exact: true }).last();
+  await b.scrollIntoViewIfNeeded();
+  await b.click();
+  await p.waitForTimeout(800);
+  const t = await p.locator("main").innerText();
+  const m = t.match(/[^\n]*(before close|enter the actual|rate every|must total)[^\n]*/i);
+  return m ? m[0].slice(0, 200) : "";
+}
+
+/**
+ * Make a locked plan closable (Super admin): unlock for edit, add one
+ * execution outcome, score every actual / execution / value, press Done.
+ */
+export async function prepareClose(p, title) {
+  const unlock = p.locator("main").getByRole("button", { name: "Unlock plan", exact: true }).first();
+  if (await unlock.count()) {
+    await unlock.click();
+    await p.waitForTimeout(600);
+  }
+  if (!(await p.locator("main select").count())) await addPriority(p, title, "Done means shipped");
+  // Values must be on the plan (and rated) before close.
+  if (!(await p.locator('main button[aria-label="Score 3"]').count())) {
+    let all = p.locator("main").getByRole("button", { name: "Select all", exact: true }).first();
+    if (!(await all.count())) {
+      const vb = p.locator("main button", { hasText: /^Values ·/ }).first();
+      if (await vb.count()) {
+        await vb.click();
+        await p.waitForTimeout(400);
+      }
+      all = p.locator("main").getByRole("button", { name: "Select all", exact: true }).first();
+    }
+    if (await all.count()) {
+      await all.scrollIntoViewIfNeeded();
+      await all.click();
+      await p.waitForTimeout(300);
+    }
+  }
+  const done = p.locator("main").getByRole("button", { name: "Done", exact: true }).first();
+  if (await done.count()) {
+    await done.click();
+    await p.waitForTimeout(600);
+  }
+  return fillAllScores(p);
+}
+
+/** Manager notes as the screen shows them: the textarea, or the read-only text. */
+export async function notesValue(p, label = "Manager notes") {
+  const ta = textareaAfter(p, label);
+  if (await ta.count()) return ta.inputValue();
+  return p.evaluate((label) => {
+    const h = [...document.querySelectorAll("main *")].find((e) => e.children.length === 0 && e.textContent.trim() === label);
+    if (!h) return null;
+    let box = h.parentElement;
+    for (let i = 0; i < 3 && box; i++, box = box.parentElement) {
+      const t = (box.innerText || "").replace(label, "").trim();
+      if (t) return t.split("\n")[0].trim();
+    }
+    return "";
+  }, label);
 }

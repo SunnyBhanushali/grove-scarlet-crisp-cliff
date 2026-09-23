@@ -16,6 +16,7 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
   const net = { A: [], B: [], C: [] };
   const errs = { A: [], B: [], C: [] };
   for (const [tag, p] of Object.entries(pages)) attach(p, tag, base, net, errs);
+  for (const p of Object.values(pages)) await watchBanners(p);
 
   const ctx = {
     A, B, C, pages, base, net, errs,
@@ -73,23 +74,34 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
         };
       });
     },
-    async anyBanner() {
+    /** Any banner now, or any banner element that appeared since `since` (DOM observer). */
+    async anyBanner(since = 0) {
       const out = {};
       for (const [tag, p] of Object.entries(pages)) {
         const b = await ctx.banner(p);
-        if (b.text || b.globalBar || b.rowConflicts) out[tag] = b;
+        const seen = await p.evaluate((t) => (window.__e2eBanners || []).filter((x) => x.t >= t), since).catch(() => []);
+        if (b.text || b.globalBar || seen.length) out[tag] = { ...b, seen: seen.slice(0, 3) };
       }
       return Object.keys(out).length ? out : null;
     },
     /** Hold a page's live feed so its screen provably stays stale. */
-    async holdFeed(p) {
+    async holdFeed(p, extra = null) {
       const h = (r) => r.abort();
       p.__feedHold = h;
       await p.route(FEED, h);
+      // Screens also re-read their own row every few seconds (e.g. the open
+      // person-month); hold that too so the screen really stays stale.
+      if (extra) {
+        const g = (r) => (r.request().method() === "GET" ? r.abort() : r.continue());
+        p.__readHold = { re: extra, g };
+        await p.route(extra, g);
+      }
     },
     async releaseFeed(p) {
       if (p.__feedHold) await p.unroute(FEED, p.__feedHold);
+      if (p.__readHold) await p.unroute(p.__readHold.re, p.__readHold.g);
       p.__feedHold = null;
+      p.__readHold = null;
     },
     async text(p, sel = "main") {
       return (await p.locator(sel).first().innerText()).replace(/ /g, " ");
@@ -118,6 +130,37 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
   return ctx;
 }
 
+/**
+ * Record every banner the SPA renders ([data-apms-banner], the sync conflict
+ * bar, or text asking to refresh), even if it disappears again before a
+ * check samples the screen. Survives reloads (init script).
+ */
+const BANNER_WATCH = `(() => {
+  if (window.__e2eBannerWatch) return;
+  window.__e2eBannerWatch = true;
+  window.__e2eBanners = window.__e2eBanners || [];
+  const scan = () => {
+    document.querySelectorAll("[data-apms-banner]").forEach((el) => {
+      if (el.__e2eSeen) return;
+      el.__e2eSeen = true;
+      window.__e2eBanners.push({ t: Date.now(), kind: el.getAttribute("data-apms-banner"), text: (el.innerText || "").slice(0, 160) });
+    });
+  };
+  const start = () => {
+    scan();
+    new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) start();
+  else document.addEventListener("DOMContentLoaded", start);
+})();`;
+
+async function watchBanners(p) {
+  if (p.__bannerWatch) return;
+  p.__bannerWatch = true;
+  await p.addInitScript(BANNER_WATCH);
+  await p.evaluate(BANNER_WATCH).catch(() => {});
+}
+
 function attach(p, tag, base, net, errs) {
   if (p.__e2eAttached) return;
   p.__e2eAttached = true;
@@ -132,6 +175,12 @@ function attach(p, tag, base, net, errs) {
     net[tag].push({ t: Date.now(), m, u: u.slice(0, 140), s: r.status(), req: (req.postData() || "").slice(0, 600), body });
   });
   p.on("pageerror", (e) => errs[tag].push({ t: Date.now(), msg: String((e && e.message) || e).slice(0, 200) }));
+  // The SPA reports refusals with window.alert / confirm; record them and accept.
+  p.__dialogs = [];
+  p.on("dialog", async (d) => {
+    p.__dialogs.push({ t: Date.now(), type: d.type(), msg: d.message().slice(0, 300) });
+    try { await d.accept(); } catch { /* already handled */ }
+  });
 }
 
 /** Writes that are not a person's edit: sign-in and auth traffic are excluded. */

@@ -30,6 +30,7 @@ import {
 import { stripSnapshotUiSession } from "./company-ui-session";
 import { ackFromPatch, parseCompanyPatch, type CompanyPatchAck } from "./company-patch";
 import { dualWriteAfterPatch, importHotTables } from "./company-hot-tables";
+import { latestSeq } from "./company-entity-store";
 import { assembleForGet, prepareBookPatch, stripRowOwnedFromBooks, normalizeCompanySnapshot } from "./company-assemble";
 import {
   RestoreRejectedError,
@@ -773,6 +774,16 @@ export { slimForWire };
 async function buildCompanyWireFromDb(): Promise<CompanyWire> {
   noteWireAssemble();
   await allBookChains();
+  // The change-feed position this wire is at least as new as, read before the
+  // wire itself. A client that loads a stale-while-revalidate wire replays the
+  // feed from here instead of from the head, so commits the wire has not
+  // caught up with yet (a delete, a lock) still reach its screen.
+  let feedSeq: number | undefined;
+  try {
+    feedSeq = await latestSeq(await getSql());
+  } catch {
+    feedSeq = undefined;
+  }
   const loaded = await loadCompanySnapshot();
   const parsed = parseSnapshot(loaded.snapshotJson);
   const base = parsed ? slimForWire(parsed) : {};
@@ -789,6 +800,7 @@ async function buildCompanyWireFromDb(): Promise<CompanyWire> {
   }
   const bookGens = normalizeBookGens(slim);
   const at = Math.max(Number(slim.notebookUpdatedAt) || 0, currentLiveAt() || 0);
+  if (feedSeq !== undefined) slim.feedSeq = feedSeq;
   return encodeCompanyWire(slim, at, bookGens);
 }
 

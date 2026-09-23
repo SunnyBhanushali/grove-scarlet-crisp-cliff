@@ -107,6 +107,7 @@
   var SAVE_FN = "/_serverFn/b4b4aa7e0ac816b4d5b83f44cd4fa14cbee181632dfc30d951bda1da6d06ecdb";
 
   var lastHashes = emptyBooks("");
+  var replayFeedOnHooks = false;
   var lastGens = emptyBooks(0);
   var lastRemoteAt = 0;
   var lastPulledAt = 0;
@@ -658,7 +659,20 @@
     lastApmsMonthFetchAt = 0;
     lastApmsPersonFetchAt = 0;
     lastApmsPersonKey = "";
-    if (C && typeof document !== "undefined") {
+    var wireSeq = Number(snapshot.feedSeq);
+    if (C && Number.isFinite(wireSeq) && wireSeq >= 0 && snapshot.feedSeq !== null && snapshot.feedSeq !== undefined) {
+      // The wire may be a stale-while-revalidate copy: replay the change feed
+      // from the position it was built at, not from the head, so a commit the
+      // wire has not caught up with (a delete, a lock) still reaches the screen.
+      liveSeq = wireSeq;
+      replayFeedOnHooks = true;
+      if (liveHooks) {
+        replayFeedOnHooks = false;
+        try {
+          pollChanges();
+        } catch (err) {}
+      }
+    } else if (C && typeof document !== "undefined") {
       try {
         fetchLiveHead();
       } catch (err) {}
@@ -844,6 +858,11 @@
     try {
       flagStaleReadd();
     } catch (err) {}
+    try {
+      clearGhosts();
+    } catch (err) {
+      if (typeof console !== "undefined" && console.warn) console.warn("[apms-sync] clearGhosts", err);
+    }
     var snap = liveHooks && typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
     var view = uiView();
     if (!view && snap && snap.view) view = String(snap.view);
@@ -942,6 +961,12 @@
     liveHooks = hooks && typeof hooks === "object" ? hooks : null;
     startScreenReadWatch();
     startLiveWatch();
+    if (liveHooks && replayFeedOnHooks) {
+      replayFeedOnHooks = false;
+      try {
+        pollChanges();
+      } catch (err) {}
+    }
     if (liveHooks && (pendingEntities.length > 0 || lastRemoteAt > lastPulledAt)) {
       scheduleLivePull();
     }
@@ -1087,10 +1112,15 @@
       .then(function (body) {
         changesInFlight = null;
         if (!body || !Array.isArray(body.changes)) return null;
-        if (Number.isFinite(Number(body.seq))) liveSeq = Math.max(liveSeq, Number(body.seq));
-        if (!body.changes.length) return body;
         var hooks = liveHooks;
         var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
+        if (body.changes.length && !local) {
+          // Nothing on screen to apply them to yet: keep the cursor, replay later.
+          replayFeedOnHooks = true;
+          return body;
+        }
+        if (Number.isFinite(Number(body.seq))) liveSeq = Math.max(liveSeq, Number(body.seq));
+        if (!body.changes.length) return body;
         var resync = false;
         var next = local;
         var feedAcks = [];
@@ -1317,6 +1347,10 @@
       lastAcked.months = lastAcked.months || {};
       var tree = Object.assign({}, isPlainObject(lastAcked.months[field]) ? lastAcked.months[field] : {});
       var month = Object.assign({}, isPlainObject(tree[k2]) ? tree[k2] : {});
+      var before = month[k1];
+      if (isPlainObject(before) && !deleted && !eq(before, payload)) {
+        supersededRows[entityRevKey(kind === "month-records" ? "month_records" : "reward_records", k2, k1)] = before;
+      }
       if (deleted) delete month[k1];
       else month[k1] = payload;
       tree[k2] = month;
@@ -1434,7 +1468,9 @@
       var dkey = sliceKey(field, period, pid);
       if (slices && slices.months && slices.months[dkey]) {
         var dismissKey = period + "\0" + pid;
-        if (!dismissedConflicts[dismissKey]) {
+        // A delete is not a conflict to resolve: it stands, and the draft is
+        // dropped when it is saved. No "changed in another session" banner.
+        if (!dismissedConflicts[dismissKey] && !(body && body.deleted)) {
           lastRowConflicts = lastRowConflicts.concat([{ field: field, period: period, personId: pid }]);
         }
         return out;
@@ -1443,8 +1479,11 @@
       tree[period] = {};
       if (body && body.deleted) {
         /* missing key is not a delete of other people; drop this one slice */
-        var next = mergeKeepMonthMapsClient(out[field], {});
+        var next = Object.assign({}, mergeKeepMonthMapsClient(out[field], {}));
         if (isPlainObject(next[period])) {
+          // Copy the month map: it is shared with the screen's own state (and
+          // possibly the baseline); deleting in place changed them unseen.
+          next[period] = Object.assign({}, next[period]);
           delete next[period][pid];
         }
         out[field] = next;
@@ -2319,6 +2358,94 @@
     if (remoteDeletedKeys[revKey] || entry.fromLoad) staleReadds[revKey] = 1;
   }
 
+  /**
+   * Deleted records a stale page rebuilt locally and that were not sent. If
+   * the UI refused the corrected snapshot at save time, the blank record would
+   * stay on this person's screen (and in their month list); once they are off
+   * that record's page it is taken off their screen.
+   */
+  var ghostRecords = {};
+  function noteGhost(op) {
+    if (op.kind !== "month_records" && op.kind !== "reward_records") return;
+    ghostRecords[op.revKey] = { field: op.kind === "reward_records" ? "rewardRecords" : "records", kind: op.kind === "reward_records" ? "rewards" : "apms", month: String(op.period), pid: String(op.personId) };
+  }
+  /** Put the server's version back on screen after a dropped stale write-back. */
+  function restoreWritebacks() {
+    var keys = Object.keys(restoreRows);
+    if (!keys.length || !liveHooks || typeof liveHooks.getSnapshot !== "function" || typeof liveHooks.apply !== "function") return;
+    if (typeof liveHooks.isBlocked === "function" && liveHooks.isBlocked()) return;
+    var snap = liveHooks.getSnapshot();
+    if (!snap) return;
+    var next = snap;
+    keys.forEach(function (revKey) {
+      var r = restoreRows[revKey];
+      var tree = (lastAcked.months && lastAcked.months[r.field]) || {};
+      var acked = isPlainObject(tree[r.month]) ? tree[r.month][r.pid] : undefined;
+      var here = isPlainObject(next[r.field]) && isPlainObject(next[r.field][r.month]) ? next[r.field][r.month][r.pid] : undefined;
+      if (acked === undefined || eq(recordContent(here), recordContent(acked))) return;
+      var month = Object.assign({}, next[r.field][r.month]);
+      month[r.pid] = acked;
+      var field = Object.assign({}, next[r.field]);
+      field[r.month] = month;
+      next = Object.assign({}, next);
+      next[r.field] = field;
+    });
+    if (next !== snap) {
+      var took = false;
+      try {
+        took = liveHooks.apply(Object.assign({}, next, { bookGens: Object.assign({}, lastGens) }), "live-entity") !== false;
+      } catch (err) {
+        took = false;
+      }
+      if (!took) return;
+    }
+    restoreRows = {};
+  }
+
+  function clearGhosts() {
+    restoreWritebacks();
+    var keys = Object.keys(ghostRecords);
+    if (!keys.length || !liveHooks || typeof liveHooks.getSnapshot !== "function" || typeof liveHooks.apply !== "function") return;
+    if (typeof liveHooks.isBlocked === "function" && liveHooks.isBlocked()) return;
+    var snap = liveHooks.getSnapshot();
+    if (!snap) return;
+    var next = snap;
+    var cleared = [];
+    keys.forEach(function (revKey) {
+      var g = ghostRecords[revKey];
+      if (screenEntry.key === recordScreenKey(g.kind, g.pid, g.month)) return;
+      var tree = (lastAcked.months && lastAcked.months[g.field]) || {};
+      if (!remoteDeletedKeys[revKey] || (isPlainObject(tree[g.month]) && tree[g.month][g.pid] !== undefined)) {
+        cleared.push(revKey);
+        return;
+      }
+      var here = isPlainObject(next[g.field]) && isPlainObject(next[g.field][g.month]) ? next[g.field][g.month][g.pid] : undefined;
+      if (here === undefined) {
+        cleared.push(revKey);
+        return;
+      }
+      var month = Object.assign({}, next[g.field][g.month]);
+      delete month[g.pid];
+      var field = Object.assign({}, next[g.field]);
+      field[g.month] = month;
+      next = Object.assign({}, next);
+      next[g.field] = field;
+      cleared.push(revKey);
+    });
+    if (next !== snap) {
+      var took = false;
+      try {
+        took = liveHooks.apply(Object.assign({}, next, { bookGens: Object.assign({}, lastGens) }), "live-entity") !== false;
+      } catch (err) {
+        took = false;
+      }
+      if (!took) return;
+    }
+    cleared.forEach(function (k) {
+      delete ghostRecords[k];
+    });
+  }
+
   /** A month / reward record another user deleted, re-added by a stale page. */
   function staleHotReadd(op) {
     if (op.kind !== "month_records" && op.kind !== "reward_records") return false;
@@ -2328,9 +2455,35 @@
     return entry.fromLoad || entry.hadRecord;
   }
 
+  /**
+   * The version of a month / reward record this client held just before the
+   * latest server version replaced it. The SPA sometimes writes a whole record
+   * back from an older copy it kept (an open plan page did this right after
+   * another user's lock arrived): that save is the superseded version exactly,
+   * down to its updatedAt stamp, which a real edit always refreshes. Sending it
+   * would silently undo the other user's change, so it is not sent and the
+   * screen goes back to the server's version.
+   */
+  var supersededRows = {};
+  var restoreRows = {};
+  function staleWriteback(op) {
+    if (op.deleted || (op.kind !== "month_records" && op.kind !== "reward_records")) return false;
+    var sup = supersededRows[op.revKey];
+    if (!isPlainObject(sup) || sup.updatedAt === undefined || !isPlainObject(op.payload)) return false;
+    if (op.payload.updatedAt !== sup.updatedAt) return false;
+    return eq(op.payload, sup);
+  }
+
   async function saveOneEntity(op, snap) {
+    if (staleWriteback(op)) {
+      var current = ackedSlice(op);
+      restoreRows[op.revKey] = { field: op.kind === "reward_records" ? "rewardRecords" : "records", month: String(op.period), pid: String(op.personId) };
+      lastMergeTrace.push({ revKey: op.revKey, kind: "stale-writeback-dropped" });
+      return { ok: true, json: { ok: true, payload: current, deleted: current === undefined }, op: op, adopted: true, deleted: current === undefined, restore: true };
+    }
     if (!op.deleted && remoteDeletedKeys[op.revKey] && ackedSlice(op) === undefined && (op.spec || staleHotReadd(op))) {
       // Re-adding a row someone else deleted: stale screen state, not a create.
+      noteGhost(op);
       lastMergeTrace.push({ revKey: op.revKey, kind: "stale-readd-dropped" });
       return { ok: true, json: { ok: true, deleted: true, payload: op.payload }, op: op, adopted: true, deleted: true };
     }
@@ -2380,6 +2533,7 @@
           // They deleted the row while I edited it. The delete stands; my
           // edit is dropped rather than resurrecting the row.
           remoteDeletedKeys[op.revKey] = 1;
+          noteGhost(op);
           lastMergeTrace.push({ revKey: op.revKey, kind: "deleted-by-other" });
           return { ok: true, json: result.json, op: op, adopted: true, deleted: true };
         }
@@ -2612,7 +2766,16 @@
       // the next save then 409-merges against the server instead of sending
       // the UI's pre-merge copy at the current rev (a silent revert of the
       // other user's fields). The change feed brings the merged row to the UI.
-      markEntityFieldsAcked(snap, ops);
+      // A record the server holds as deleted never enters the baseline, even
+      // if the screen still shows it (a blank plan a stale page rebuilt).
+      var ackSnap = snap;
+      results.forEach(function (r) {
+        if (!r || !r.ok || !r.op || !r.adopted || !(r.deleted || r.restore)) return;
+        if (r.op.kind !== "month_records" && r.op.kind !== "reward_records") return;
+        var keep = r.restore ? ackedSlice(r.op) : undefined;
+        ackSnap = placeEntityPayload(ackSnap, { type: r.op.kind, id: r.op.personId, period: r.op.period }, keep === undefined ? { ok: true, deleted: true } : { ok: true, payload: keep, deleted: false }, {});
+      });
+      markEntityFieldsAcked(ackSnap, ops);
       results.forEach(function (r) {
         if (r && r.ok && r.op && (r.adopted || r.op.merged)) delete entityRevs[r.op.revKey];
       });
@@ -3267,6 +3430,10 @@
     screenEntry = { key: "", at: 0, fromLoad: true, hadRecord: false };
     screenEntries = [];
     staleReadds = {};
+    ghostRecords = {};
+    supersededRows = {};
+    restoreRows = {};
+    replayFeedOnHooks = false;
     entityFieldsFromNextPull = false;
     liveSeq = 0;
     lastChangesAt = 0;
