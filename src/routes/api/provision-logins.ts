@@ -10,6 +10,40 @@ function rowsFrom(body: unknown): LoginRow[] {
   return Array.isArray(rows) ? (rows as LoginRow[]) : [];
 }
 
+/**
+ * The wire no longer carries passwords, so a client re-provisioning existing
+ * people sends rows without one. Fill from what the server already holds
+ * (issued_logins, then the person row) before hashing.
+ */
+async function fillMissingPasswords(rows: LoginRow[]): Promise<LoginRow[]> {
+  if (!rows.some((r) => !r || !String(r.password || ""))) return rows;
+  let issued: Record<string, { personId?: string; password?: string }> = {};
+  let people: Array<Record<string, unknown>> = [];
+  try {
+    const { loadIssuedLogins } = await import("@/lib/issued-logins");
+    issued = await loadIssuedLogins();
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { readLiveSnapshot } = await import("@/lib/company-notebook");
+    const snap = await readLiveSnapshot();
+    people = Array.isArray(snap?.people) ? (snap!.people as Array<Record<string, unknown>>) : [];
+  } catch {
+    /* ignore */
+  }
+  return rows.map((row) => {
+    if (!row || String(row.password || "")) return row;
+    const uname = String(row.username || "").trim().toLowerCase();
+    const pid = String(row.personId || "");
+    const fromIssued = (uname && issued[uname]?.password) || (pid && issued[pid]?.password) || "";
+    const person = people.find((p) => (pid && String(p.id) === pid) || (uname && String(p.username || "").toLowerCase() === uname));
+    const fromPerson = person && typeof person.password === "string" ? person.password : "";
+    const password = String(fromIssued || fromPerson || "");
+    return password ? { ...row, password } : row;
+  });
+}
+
 export const Route = createFileRoute("/api/provision-logins")({
   server: {
     handlers: {
@@ -25,7 +59,7 @@ export const Route = createFileRoute("/api/provision-logins")({
               console.error("[provision-logins] sunny", err);
             }
           }
-          const rows = rowsFrom(body);
+          const rows = await fillMissingPasswords(rowsFrom(body));
           if (!rows.length) {
             return Response.json({ ok: true, added: bootstrap ? 1 : 0, failed: [], sent: 0 });
           }

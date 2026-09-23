@@ -1,4 +1,5 @@
 import { mergeKeepMonthMaps, mergeKeepPeople, normalizeBookGens, type BookId, type Snapshot } from "./company-books.ts";
+import { slimPersonForWire } from "./company-wire-slim.ts";
 import {
   flattenPeople,
   flattenPersonPeriodMap,
@@ -101,6 +102,26 @@ export function parseEntityPatch(input: unknown): {
   return { payload, baseRev, clientOpId, deleted };
 }
 
+/**
+ * The wire never carries `password` / `passwordHash`, so a client re-saving a
+ * person sends neither. Keep what is stored unless the client explicitly set a
+ * new non-empty password (admin reset / new hire form).
+ */
+export function preservePersonSecrets(
+  incoming: Record<string, unknown>,
+  stored: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const out = { ...incoming };
+  const src = stored || {};
+  for (const field of ["password", "passwordHash"] as const) {
+    const sent = out[field];
+    const has = typeof sent === "string" ? sent.length > 0 : sent !== undefined && sent !== null;
+    if (!has && src[field] !== undefined && src[field] !== null && src[field] !== "") out[field] = src[field];
+    else if (!has) delete out[field];
+  }
+  return out;
+}
+
 function rowBody(key: EntityKey, row: EntityRow, extra: Record<string, unknown> = {}) {
   const ids =
     key.table === "people" || key.table === "target_cells"
@@ -110,7 +131,7 @@ function rowBody(key: EntityKey, row: EntityRow, extra: Record<string, unknown> 
     ok: true,
     table: key.table,
     ...ids,
-    payload: row.payload,
+    payload: key.table === "people" ? (slimPersonForWire(row.payload) as Record<string, unknown>) : row.payload,
     rev: row.rev,
     deleted: row.deleted,
     ...extra,
@@ -417,7 +438,7 @@ async function patchEntityUnlocked(
   }
 
   const payload =
-    key.table === "people" ? { ...parsed.payload, id: key.id } : { ...parsed.payload };
+    key.table === "people" ? preservePersonSecrets({ ...parsed.payload, id: key.id }, stored.payload) : { ...parsed.payload };
 
   const nextRev = stored.rev === 0 ? 1 : stored.rev + 1;
   const won = await writeRow(sql, key, payload, nextRev, parsed.deleted, updatedBy, parsed.baseRev);

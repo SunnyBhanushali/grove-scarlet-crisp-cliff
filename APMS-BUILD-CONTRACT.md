@@ -2,7 +2,7 @@
 
 Product host is **https://apms.alienstattoo.in** (production SPA). `app.alienstattoo.in` is the older tree. This workspace is Aliens APMS, not a new app. Do not scaffold. Do not invent OT / CRDT / Yjs / Automerge / WebRTC. Do not disable multi-user.
 
-Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10 G9 still **0/3**. This tree is **p0as78** (ROWS-V2: sync p0as78; routes p0as78; login-view p0as68; server p0aw2).
+Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10 G9 still **0/3**. This tree is **p0as78** (ROWS-V2: sync p0as78; routes p0as78; login-view p0as68; server p0aw3).
 
 ## LOCKS
 
@@ -115,6 +115,8 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - **BOOT-PAREN** — 20 Sep 2026 08:19 IST. Stamp **p0as45**. Preview would not open: `SyntaxError: Unexpected token ')'` from an extra `)` after G9 `handleLiveEvent` in `routes-…p0ar.js`. Also repaired `apms-roster.js` `esc()`. See `REPORT-BOOT-PAREN.md`.
 
 - **ROWS-V2** — 22 Sep 2026 IST. Stamp **p0as78** (sync + routes), server **p0aw2**, migration `0008_entities.sql`. Every remaining collection (org catalog, roles, accessRoles, notices, trash, plans, kpiMaster, apmsPlans, awards, gateUnits, roleMonths, rewardRoleMonths, gateMonths, targets graph, settings scalars) is a row with its own rev. Per-row PATCH `/api/e/:kind/:k1[/:k2]`; 409 → 3-way field merge on the client (no blind retry, no whole-row overwrite); tombstones cannot be resurrected; change feed `/api/changes` replaces the 20-hint cap for these kinds. Org node PATCH race fixed. `invalidateCompanyWire` / `getCompanyWire` were used in `company-notebook.ts` without being imported (restore path would throw) — imported. PERF-TAB cap restored (≤20 row GETs per tick; in-flight hints not double-fetched). Tests: `company-entity-store.test.ts` (real Postgres via `scripts/mini-pg.mjs`), `rows-v2-client.test.ts` (client + real store end to end). See `REPORT-ROWS-V2.md`.
+
+- **NO-SECRETS-WIRE** — 23 Sep 2026 IST. Server **p0aw3**. `people[].password`, `people[].passwordHash` and `logins{}.password` are stripped from every read path a browser sees: company wire (`slimForWire`), wire patch-in-place, `/api/people` list, `/api/people/:id`, trash list, `/api/e/logins*`, `/api/changes`. Writes preserve the stored secret when the client sends none (`preservePersonSecrets`; logins rows likewise); a new non-empty password still replaces it. `/api/provision-logins` fills a missing password from `issued_logins` / the person row before hashing. Auth middleware reads the books directly and is unaffected. Test `company-wire-slim.test.ts`.
 
 ## OPEN
 
@@ -233,7 +235,7 @@ No fake live G9 pass.
 ## KNOWN BROKEN
 
 - ROWS-V2 untested in a browser: the p0as78 routes stamp (`pickDataFields` in the live-entity apply) parses (`node --check`) but has not been exercised in the SPA. If a generic field does not repaint after another user's save, check `window.__apmsSync.pickDataFields` exists and `/assets/apms-collections.js` loaded before `apms-sync.js`.
-- Passwords ride the company snapshot: `people[].password` and `logins{}.password` are in the wire every client downloads. Not touched by ROWS-V2 (out of scope) — should be stripped server-side.
+- Legacy sign-in (`apms-credentials.ts`): `sunny.b` / `sunny` with password `0000` always signs in, and any person with no stored password signs in with `0000`. Server-side only now (the wire no longer carries passwords), but still a hard-coded credential — decide with Sunny before removing.
 - Live G9 on p0as14: B entityGets=0 / pulls=55. Fixed in tree p0as69 (hop B: do not drop hints vs lastWireAt; hyphen URL; no company GET). Next LOAD-10 must be LIVE_SEES_HIRE 3/3, LIVE_SEES_LOCK 3/3, B entityGets >= 2.
 - This tree is not on Contabo. Hard refresh on live still loads p0as12/p0as14. Preview must load `routes-e2g7y5q8-13m-p0as72.js` and `apms-sync.js?v=p0as77`.
 - Two-browser Playwright smoke untested here (no signed-in live session in this sandbox).

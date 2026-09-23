@@ -3,6 +3,7 @@
  * GET /api/org?kind=  GET/PATCH /api/org/:kind/:id
  */
 import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
+import { slimPersonForWire } from "./company-wire-slim.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 import type { Snapshot } from "./company-books.ts";
 import { notifyCompanyLive } from "./company-live.ts";
@@ -234,7 +235,7 @@ export async function listTrashPeople(sql: HotSql): Promise<{
   const rows = await sql.query<{ id: string; payload: unknown; rev?: number }>(
     "select id, payload, rev from people where deleted_at is not null",
   );
-  const people = rows.map((row) => ({ ...asPayload(row.payload), id: row.id, rev: Number(row.rev) || 1, deleted: true }));
+  const people = rows.map((row) => ({ ...(slimPersonForWire(asPayload(row.payload)) as Record<string, unknown>), id: row.id, rev: Number(row.rev) || 1, deleted: true }));
   people.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
   return { people, total: people.length };
 }

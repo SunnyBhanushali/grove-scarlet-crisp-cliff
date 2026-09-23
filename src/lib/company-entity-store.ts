@@ -105,6 +105,14 @@ function rowFromDb(r: {
   };
 }
 
+/** Secrets never leave the server: logins rows lose their password on the way out. */
+export function redactEntityPayload(kind: string, payload: Record<string, unknown>): Record<string, unknown> {
+  if (kind !== "logins" || !("password" in payload)) return payload;
+  const next = { ...payload };
+  delete next.password;
+  return next;
+}
+
 export function entityBody(row: StoredEntity, extra: Record<string, unknown> = {}) {
   return {
     ok: true,
@@ -112,7 +120,7 @@ export function entityBody(row: StoredEntity, extra: Record<string, unknown> = {
     id: row.id,
     k1: row.k1,
     k2: row.k2,
-    payload: row.payload,
+    payload: redactEntityPayload(row.kind, row.payload),
     rev: row.rev,
     deleted: row.deleted,
     ...extra,
@@ -247,7 +255,7 @@ export async function changesSince(
     rev: r.current_rev != null ? Number(r.current_rev) : Number(r.rev),
     deleted: r.current_deleted != null ? true : !!r.deleted,
     at: r.at,
-    payload: asPayload(r.payload),
+    payload: redactEntityPayload(r.kind, asPayload(r.payload)),
     currentRev: r.current_rev != null ? Number(r.current_rev) : undefined,
   }));
 }
@@ -409,10 +417,18 @@ export async function patchEntityRow(
       expectRev = stored.rev;
     }
 
-    const payload =
+    let payload =
       spec.shape === "list" && !spec.keyFields && !parsed.deleted
         ? { ...parsed.payload, id: parsed.payload.id ?? key.id }
         : parsed.payload;
+    if (spec.kind === "logins" && !parsed.deleted) {
+      // Wire strips logins{}.password; keep the stored one unless a new non-empty value arrives.
+      const sent = payload.password;
+      const storedPw = stored && !stored.deleted ? stored.payload.password : undefined;
+      if ((typeof sent !== "string" || !sent) && typeof storedPw === "string" && storedPw) {
+        payload = { ...payload, password: storedPw };
+      }
+    }
     const won = await casWrite(sql, key, payload, expectRev, parsed.deleted, updatedBy);
     if (!won) {
       const current = (await readEntity(sql, key)) || { ...key, payload: {}, rev: 0, deleted: true };

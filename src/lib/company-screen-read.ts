@@ -4,6 +4,7 @@
  * — not the company file.
  */
 import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
+import { slimPersonForWire } from "./company-wire-slim.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 
 export const SCREEN_PAGE_LIMIT = 80;
@@ -177,7 +178,10 @@ export async function handleScreenReadHttp(request: Request): Promise<Response |
 
   if (parsed.kind === "people") {
     const page = await listPeoplePage(sql, { limit: Number(limit) || undefined, q, sbu, offset: Number(offset) || 0 });
-    return Response.json({ ok: true, ...page });
+    const people = Array.isArray((page as { people?: unknown[] }).people)
+      ? (page as { people: unknown[] }).people.map(slimPersonForWire)
+      : (page as { people?: unknown }).people;
+    return Response.json({ ok: true, ...page, people });
   }
   if (parsed.kind === "reward-records") {
     const page = await listRewardMonthPage(sql, parsed.period || "", {

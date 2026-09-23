@@ -3,6 +3,7 @@
  * Stamp: p0aw1. No DB import — notebook registers the assembler.
  */
 import { gzipSync } from "node:zlib";
+import { slimPersonForWire } from "./company-wire-slim.ts";
 import { normalizeBookGens, type BookId, type Snapshot } from "./company-books.ts";
 
 export type CompanyWire = {
@@ -132,10 +133,7 @@ function bookForTable(table: string): BookId {
 }
 
 function slimPerson(row: Record<string, unknown>): Record<string, unknown> {
-  if (!row.passwordHash) return row;
-  const next = { ...row };
-  delete next.passwordHash;
-  return next;
+  return slimPersonForWire(row) as Record<string, unknown>;
 }
 
 export type WireEntityPatch = {
