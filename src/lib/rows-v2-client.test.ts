@@ -744,3 +744,51 @@ test("screen checks copy the screen state once per store state, not once per fee
     sync.resetForTests();
   }
 });
+
+test("merge3: an item one side removed stays removed even if the other side edited it (stale screen)", () => {
+  const base = { priorities: [{ id: "a", name: "A" }, { id: "b", name: "B", score: null }] };
+  // Another user moved EO b to trash; this screen still had it and rated it.
+  const mine = { priorities: [{ id: "a", name: "A" }, { id: "b", name: "B", score: 5 }, { id: "c", name: "New" }] };
+  const theirs = { priorities: [{ id: "a", name: "A2" }] };
+  const trace: unknown[] = [];
+  const out = sync.merge3(base, mine, theirs, trace) as { priorities: Array<{ id: string; name: string }> };
+  assert.deepEqual(out.priorities.map((p) => p.id), ["a", "c"], "b stays deleted; c (added here) is kept");
+  assert.equal(out.priorities[0].name, "A2", "their edit of a is kept");
+  assert.ok((trace as Array<{ removedBy?: string }>).some((t) => t.removedBy === "theirs"));
+  // And the other way round: this side removed b, they edited it.
+  const out2 = sync.merge3(base, { priorities: [{ id: "a", name: "A" }] }, { priorities: [{ id: "a", name: "A" }, { id: "b", name: "B!" }] }) as { priorities: Array<{ id: string }> };
+  assert.deepEqual(out2.priorities.map((p) => p.id), ["a"]);
+});
+
+test("opening a review page does not write: an empty idle review is not saved, and a real one replaces it", () => {
+  sync.resetForTests();
+  const base = baseSnap();
+  sync.noteLoaded(base);
+  const id = "p1:2026-Q2";
+  const blank = { id, personId: "p1", kind: "quarter", period: "2026-Q2", status: "idle", selfNote: "", managerNote: "", ags: {} };
+  const shown = { ...base, periodReviews: { ...((base as Record<string, unknown>).periodReviews as object), [id]: blank } };
+  assert.equal(sync.collectEntityOps(shown).filter((op) => op.kind === "e:period-reviews").length, 0, "Add review alone writes nothing");
+  const opened = { ...shown, periodReviews: { ...(shown.periodReviews as object), [id]: { ...blank, status: "self_open" } } };
+  assert.equal(sync.collectEntityOps(opened).filter((op) => op.kind === "e:period-reviews").length, 1, "Open review is saved");
+  // Another user opened it meanwhile: their row replaces this screen's placeholder.
+  const next = sync.mergeGenericRow(shown, "period-reviews", { id, k1: id, rev: 1, payload: { ...blank, status: "self_open", managerNote: "from A" } });
+  const got = (next.periodReviews as Record<string, { status: string; managerNote: string }>)[id];
+  assert.equal(got.status, "self_open");
+  assert.equal(got.managerNote, "from A");
+  sync.resetForTests();
+});
+
+test("signing in does not write: a month reminder the screen derived is saved only once someone acts on it", () => {
+  sync.resetForTests();
+  const base = baseSnap();
+  sync.noteLoaded(base);
+  const reminder = { id: "nt-x", kind: "month_close_due", title: "Close August 2026 APMS", body: "3 APMS months are still open after month-end.", fromId: "p1", toIds: ["p1"], month: "2026-08", planKind: "apms", phase: "close", subjectId: "p1", status: "open", createdAt: "2026-09-23T10:00:00.000Z" };
+  const notices = (base as Record<string, unknown>).notices as unknown[];
+  const derived = { ...base, notices: [...notices, reminder] };
+  assert.equal(sync.collectEntityOps(derived).filter((op) => op.kind === "e:notices").length, 0, "derived reminder not written");
+  const done = { ...base, notices: [...notices, { ...reminder, status: "done", doneIds: ["p1"] }] };
+  assert.equal(sync.collectEntityOps(done).filter((op) => op.kind === "e:notices").length, 1, "acted on: written");
+  const typed = { ...base, notices: [...notices, { ...reminder, kind: "app_request" }] };
+  assert.equal(sync.collectEntityOps(typed).filter((op) => op.kind === "e:notices").length, 1, "other notices are written as before");
+  sync.resetForTests();
+});

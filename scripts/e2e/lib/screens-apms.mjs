@@ -60,9 +60,9 @@ export async function openWithoutWrites(ctx, R, label, openFn) {
   await Promise.all([ctx.A, ctx.B, ctx.C].map((p) => openFn(p)));
   await ctx.sleep(3000);
   const all = ["A", "B", "C"].flatMap((t) => realWrites(m.writes(t)).map((n) => ({ t, n })));
-  const reminders = all.filter(({ n }) => isAutoReminder(n));
-  const w = all.filter((x) => !reminders.includes(x)).map(({ t, n }) => `${t}: ${brief([n])[0]}`);
-  if (reminders.length) R.note(`month reminder raised by the SPA on opening ${label} (${reminders.map(({ t, n }) => `${t}: ${n.s}`).join(", ")}; one stays live, duplicates are stored deleted)`);
+  // Month reminders the screen derives are not written any more (apms-sync
+  // isPlaceholderRow): any write here, reminder or not, fails check 6.
+  const w = all.map(({ t, n }) => `${t}: ${brief([n])[0]}${isAutoReminder(n) ? " (month reminder)" : ""}`);
   if (w.length) R.fail(6, `writes on opening ${label}: ${w.join("; ")}`);
   return m;
 }

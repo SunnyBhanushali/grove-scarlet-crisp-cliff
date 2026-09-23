@@ -224,10 +224,20 @@
         var inB = Object.prototype.hasOwnProperty.call(bm, id);
         if (inM && inT) list.push(merge3(bm[id], mm[id], tm[id], trace, path + "[" + id + "]"));
         else if (inM && !inT) {
-          if (inB && eq(mm[id], bm[id])) return;
+          // They removed an item this side had (an EO moved to trash, a KPI
+          // deleted): the removal stands, even if this side edited it from a
+          // stale screen. Only an item this side added is kept.
+          if (inB) {
+            if (!eq(mm[id], bm[id])) trace.push({ path: path + "[" + id + "]", removedBy: "theirs" });
+            return;
+          }
           list.push(mm[id]);
         } else if (!inM && inT) {
-          if (inB && eq(tm[id], bm[id])) return;
+          // Same the other way: this side removed it.
+          if (inB) {
+            if (!eq(tm[id], bm[id])) trace.push({ path: path + "[" + id + "]", removedBy: "mine" });
+            return;
+          }
           list.push(tm[id]);
         }
       });
@@ -336,6 +346,34 @@
     });
   }
 
+  /**
+   * Rows a screen makes up by itself that carry nothing yet, so opening a
+   * page or signing in never writes.
+   *
+   * "Add review" (My APMS) puts an empty, not-yet-opened review into the
+   * store just to show the page. It carries nothing a missing review does not
+   * ("idle" = no review), so it is not written: opening a page never writes.
+   * "Open review" (status leaves idle) or any typed note makes it a real row.
+   */
+  // Month reminders (plan due / late / close) that every signed-in screen
+  // derives from the data on its own (ensureCycleNotices). Saving each one a
+  // screen derived was a write on every sign-in; they are saved once someone
+  // acts on one (done, dismissed: any other field or status).
+  var AUTO_NOTICE = { plan_due: 1, plan_late: 1, month_close_due: 1 };
+  var AUTO_NOTICE_KEYS = { id: 1, kind: 1, title: 1, body: 1, fromId: 1, toIds: 1, month: 1, planKind: 1, phase: 1, subjectId: 1, status: 1, createdAt: 1, scope: 1 };
+  function isPlaceholderRow(spec, payload) {
+    if (!spec || !isPlainObject(payload)) return false;
+    if (spec.kind === "notices") {
+      if (!AUTO_NOTICE[payload.kind] || (payload.status && payload.status !== "open")) return false;
+      return Object.keys(payload).every(function (k) { return AUTO_NOTICE_KEYS[k] === 1; });
+    }
+    if (spec.kind !== "period-reviews") return false;
+    if (payload.status && payload.status !== "idle") return false;
+    if (payload.selfNote || payload.managerNote) return false;
+    if (isPlainObject(payload.ags) && Object.keys(payload.ags).length) return false;
+    return true;
+  }
+
   function genericOpsFor(spec, snap, ops) {
     // A field the UI snapshot does not carry (e.g. roleKrocs, a book-storage
     // split) is "not held here", never "every row deleted".
@@ -346,6 +384,7 @@
     Object.keys(next).forEach(function (id) {
       if (prev[id] && eq(next[id].payload, prev[id].payload)) return;
       var row = next[id];
+      if (!prev[id] && isPlaceholderRow(spec, row.payload)) return;
       ops.push({
         kind: "e:" + spec.kind,
         spec: spec,
@@ -1421,6 +1460,8 @@
     else delete remoteDeletedKeys[revKey];
     var ackedRow = rowsById(spec, ackedFieldValue(spec))[id];
     var localRow = rowsById(spec, local[spec.field])[id];
+    // A placeholder this screen never saved (see isPlaceholderRow) is not an edit.
+    if (localRow && !ackedRow && isPlaceholderRow(spec, localRow.payload)) localRow = undefined;
     var localDirty = !eq(localRow ? localRow.payload : undefined, ackedRow ? ackedRow.payload : undefined);
     if (!localDirty || deleted) {
       return applyGenericRow(local, spec, row, deleted, true);
