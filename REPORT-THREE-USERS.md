@@ -66,7 +66,33 @@ The six checks per screen:
 
 ## 2. Screens × checks (run 2, fresh database)
 
-RESULTS_TABLE
+| Module | Screen | 1 | 2 | 3 | 4 | 5 | 6 | C saw it after |
+|---|---|---|---|---|---|---|---|---|
+| All | sign-in | — | — | — | — | — | pass |  |
+| APMS | apms-month-list | pass | pass | pass | pass | pass | pass | 0.5 s |
+| APMS | apms-plan-open | pass | pass | pass | pass | pass | pass | 2.1 s |
+| APMS | apms-plan-locked | pass | pass | pass | pass | pass | pass | 2.0 s |
+| APMS | apms-plan-drag | pass | pass | pass | pass | pass | pass | 0.9 s |
+| APMS | apms-self-comments | pass | pass | pass | pass | pass | pass | 1.1 s |
+| APMS | apms-eo | pass | pass | pass | pass | pass | pass | 2.1 s |
+| APMS | apms-quarter-review | pass | pass | pass | n/a | pass | pass | 1.1 s |
+| APMS | apms-lock-close | pass | pass | pass | pass | pass | pass | 2.2 s |
+| Targets | targets-delete-recreate | pass | pass | pass | pass | pass | pass | 3.5 s |
+| Rewards | rewards-month-list | pass | pass | pass | pass | pass | pass | 0.8 s |
+| Rewards | rewards-plan-open | pass | pass | pass | pass | pass | pass | 2.2 s |
+| Rewards | rewards-mass-update | pass | pass | pass | pass | pass | pass | 0.2 s |
+| Rewards | rewards-my-rewards | pass | pass | pass | pass | pass | pass | 1.1 s |
+| Rewards | rewards-lock-close | pass | pass | pass | pass | pass | pass | 1.7 s |
+| Targets | targets-cells | pass | pass | pass | pass | pass | pass | 1.4 s |
+| Targets | targets-groups | pass | pass | pass | pass | pass | pass | 0.8 s |
+| Targets | targets-drag | pass | pass | pass | pass | pass | pass | 1.0 s |
+| Targets | targets-month-list | pass | pass | pass | pass | pass | pass | 4.0 s |
+| Targets | targets-copy-month | pass | pass | pass | pass | pass | pass | 1.6 s |
+| Targets | targets-import | pass | n/a | pass | pass | pass | pass | 1.0 s |
+| Targets | targets-target-tab | pass | pass | pass | pass | pass | pass | 1.4 s |
+| Targets | targets-month-status | pass | pass | pass | pass | pass | pass | 2.9 s |
+
+Result: **PASS** (`/var/tmp/run2/report.json`; the runner prints the same table). Run 1 on its own fresh database had the same results except three scenarios that stopped on test data (fix #13 below).
 
 `n/a` cases:
 
@@ -86,7 +112,17 @@ Signed in (three admins at once: **no writes**, no 5xx), opened every screen,
 one edit per module, reload. "Edit" = the value is in the database right
 after the save and still there after the reload.
 
-SMOKE_TABLE
+| Module | Edit (DB after reload) | Open screens: no writes / banner / 5xx | Detail |
+|---|---|---|---|
+| Home | n/a | pass | no edit: read-only dashboard (figures, alerts, awards won) |
+| Me | pass | pass | edit "smoke-me-cr9k" in the DB true, still there after reload true |
+| Org | pass | pass | edit "smoke-org-cr9k" in the DB true, still there after reload true |
+| KPI | pass | pass | edit "smoke-kpi-cr9k" in the DB true, still there after reload true |
+| Awards | pass | pass | edit "smoke-awards-cr9k" in the DB true, still there after reload true |
+| MIS | pass | pass | edit "smoke-mis-cr9k" in the DB true, still there after reload true |
+| Settings | pass | pass | edit "smoke-settings-cr9k" in the DB true, still there after reload true |
+| Improve | pass | pass | edit "smoke-improve-cr9k" in the DB true, still there after reload true |
+| Roster | — | n/a | not reached: the Roster link opens no page in this build |
 
 - Home: read-only dashboard, nothing to edit.
 - Plans: the APMS / Rewards plans screens are covered above.
