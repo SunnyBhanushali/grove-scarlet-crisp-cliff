@@ -56,6 +56,10 @@ export const SCENARIOS = [
   ["apmsEO", eo.apmsEO],
   ["apmsQuarterReview", eo.apmsQuarterReview],
   ["apmsLockClose", apms.apmsLockClose],
+  // Before Rewards: it needs Nevil's and Biri's September rewards still linked
+  // to Ahmedabad (plan open deletes Nevil's, mass update moves Biri's). It puts
+  // Ahmedabad back when it is done.
+  ["targetsDeleteRecreate", months.targetsDeleteRecreate],
   ["rewardsMonthList", rewards.rewardsMonthList],
   ["rewardsPlanOpen", rewards.rewardsPlanOpen],
   ["rewardsMassUpdate", rewards.rewardsMassUpdate],
@@ -68,7 +72,6 @@ export const SCENARIOS = [
   ["targetsCopyMonth", months.targetsCopyMonth],
   ["targetsImport", months.targetsImport],
   ["targetsTargetTab", months.targetsTargetTab],
-  ["targetsDeleteRecreate", months.targetsDeleteRecreate],
   ["targetsMonthStatus", targets.targetsMonthStatus],
 ];
 
