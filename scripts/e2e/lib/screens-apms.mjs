@@ -507,8 +507,20 @@ export async function apmsPlanDrag(ctx, run) {
   R.expect(1, oa[0] === "Aliens Stuff" && ob[0] === "Consultation NPS Score", `DB: Fawaz July KPIs ${oa.join(" › ")}; Rohan September KRAs ${ob.join(" › ")}`);
   void KRAS;
 
-  // Check 4: A deletes Ameesha's plan; B (stale) edits it (no second item to drag there, so notes).
-  await staleDeleteCheck(ctx, R, "apms", P.ameeshaSep, async (p) => setInput(p, textareaAfter(p, "Manager notes"), `STALE ${run}`));
+  // Check 4: A deletes a September plan; B (stale) edits it (no second item to
+  // drag there, so notes). The plan is made here, so this does not depend on
+  // what earlier scenarios deleted.
+  const D = { name: "Aakash Popalkar", month: "September 2026", id: "", period: "2026-09" };
+  const who = await ctx.sql("select id from people where payload->>'name' = $1 and deleted_at is null", [D.name]);
+  D.id = who[0] ? who[0].id : "";
+  const dRec = await monthRecord(ctx, D);
+  if (!dRec || dRec.deleted_at) {
+    await openPlansList(ctx, A, "apms");
+    await addPeople(A, D.month, [D.name]);
+    await ctx.settled(A);
+    await ctx.sleep(1500);
+  }
+  await staleDeleteCheck(ctx, R, "apms", D, async (p) => setInput(p, textareaAfter(p, "Manager notes"), `STALE ${run}`));
 
   // Check 5
   const dbo = await kpiOrder(X);
