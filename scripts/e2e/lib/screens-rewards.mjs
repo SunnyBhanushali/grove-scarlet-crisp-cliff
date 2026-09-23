@@ -220,8 +220,9 @@ export async function rewardsLockUnlock(ctx, run) {
   R.expect(1, r1?.status === "closed" && r2?.status === "closed" && a1.every((x) => x != null) && a2.every((x) => x != null),
     `DB: ${U1.name} ${U1.month} ${r1?.status} actuals ${a1.join("/")}${redA ? " (A: " + redA + ")" : ""}; ${U2.name} ${r2?.status} actuals ${a2.join("/")}${redB ? " (B: " + redB + ")" : ""}; C saw ${U1.name} closed ${cU === null ? `no (${await statusBadge(C)})` : `in ${(cU / 1000).toFixed(1)} s`}`);
 
-  // Check 4: A deletes Priti's plan; B (stale) presses Unlock on it.
-  await staleDeleteCheck(ctx, R, "rewards", RP.priti, async (p) => setInput(p, actualInputs(p).nth(0), 3), "reward_records");
+  // Check 4: A deletes Sachin's plan; B (stale) types its actual. (Priti's plan is
+  // the mass-update scenario's delete; each scenario deletes its own.)
+  await staleDeleteCheck(ctx, R, "rewards", RP.sachin, async (p) => setInput(p, actualInputs(p).nth(0), 3), "reward_records");
 
   // Check 5
   const label = { plan_open: "Plan open", plan_locked: "Plan locked", closed: "Closed" };
