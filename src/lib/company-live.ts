@@ -34,7 +34,7 @@ export function resetLiveForTests(): void {
 
 export function hydrateLiveFromTickRow(parsed: {
   at?: unknown;
-  bookGens?: BookGens;
+  bookGens?: BookGens | null;
   entities?: LiveEntityHint[];
 }): void {
   const at = Number(parsed.at) || 0;

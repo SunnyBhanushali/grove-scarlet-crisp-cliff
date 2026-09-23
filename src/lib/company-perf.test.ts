@@ -120,7 +120,7 @@ test("at-only tick without gens still pulls (LIVE-FIX)", async () => {
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }) as typeof fetch);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,

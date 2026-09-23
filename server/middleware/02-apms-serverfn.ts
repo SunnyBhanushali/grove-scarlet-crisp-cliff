@@ -12,6 +12,7 @@ import { ensureHourlyBackup, startBackupScheduler } from "../../src/lib/company-
 import { hasSessionToken, unauthorizedJson } from "../../src/lib/apms-request-auth";
 import { handleScreenReadHttp } from "../../src/lib/company-screen-read";
 import { handleOrgHttp } from "../../src/lib/company-org-read";
+import { handleCompanyGetRequest } from "../../src/lib/company-wire-http";
 
 const LOAD = "5c5cc138c933bc09d2cf232e1c81b3bbc654ed1bc6c042fa94c1b527783e7bf5";
 const SAVE = "b4b4aa7e0ac816b4d5b83f44cd4fa14cbee181632dfc30d951bda1da6d06ecdb";

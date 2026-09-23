@@ -235,9 +235,29 @@ export async function listTrashPeople(sql: HotSql): Promise<{
   const rows = await sql.query<{ id: string; payload: unknown; rev?: number }>(
     "select id, payload, rev from people where deleted_at is not null",
   );
-  const people = rows.map((row) => ({ ...(slimPersonForWire(asPayload(row.payload)) as Record<string, unknown>), id: row.id, rev: Number(row.rev) || 1, deleted: true }));
+  const people: Array<Record<string, unknown>> = rows.map((row) => ({ ...(slimPersonForWire(asPayload(row.payload)) as Record<string, unknown>), id: row.id, rev: Number(row.rev) || 1, deleted: true }));
   people.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
   return { people, total: people.length };
+}
+
+/**
+ * ROWS-V2: catalog slices are read from the entity rows (the authority), with
+ * roles whole. The org book is a mirror whose roles are stored split (kras /
+ * ags / competencies live in plans.roleKrocs); serving it made clients save
+ * roles without them, and the row merge read that as a delete.
+ */
+async function withEntityRows(book: Snapshot): Promise<Snapshot> {
+  const { ENTITY_ROWS_ENABLED, overlayEntityFields } = await import("./company-entities-v2");
+  if (!ENTITY_ROWS_ENABLED) return book;
+  try {
+    const { getSql } = await import("./db");
+    const { readLiveSnapshot } = await import("./company-notebook");
+    const sql = (await getSql()) as unknown as HotSql;
+    return await overlayEntityFields(sql, book, () => readLiveSnapshot());
+  } catch (err) {
+    console.error("[org] entity overlay failed; serving the org book", err);
+    return book;
+  }
 }
 
 export async function handleOrgHttp(request: Request): Promise<Response | null> {
@@ -258,7 +278,7 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
       const { getSql } = await import("./db");
       const sql = await getSql();
       const page = await listTrashPeople(sql);
-      const book = await readOrgBook();
+      const book = await withEntityRows(await readOrgBook());
       return Response.json({
         ok: true,
         kind: "trash",
@@ -267,7 +287,7 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
         total: page.total,
       });
     }
-    const book = await readOrgBook();
+    const book = await withEntityRows(await readOrgBook());
     return Response.json(orgSliceFromBook(book, kind));
   }
 
@@ -289,7 +309,7 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
     if (method === "GET") {
       const row = await readEntity(sql, key);
       if (!row || row.deleted) return Response.json({ ok: false, error: "not-found", kind, id: parsed.id }, { status: 404 });
-      return Response.json({ ok: true, kind, id: parsed.id, field, payload: { ...row.payload, rev: row.rev }, rev: row.rev });
+      return Response.json({ ok: true, kind, id: parsed.id, field, payload: row.payload, rev: row.rev });
     }
     const body = await request.json().catch(() => null);
     const result = await patchEntityRow(sql, key, body, "org-patch", liveEntityHooks());

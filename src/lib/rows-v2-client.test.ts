@@ -32,6 +32,8 @@ type Sync = {
   entityRevs(): Record<string, number>;
   mergeTrace(): unknown[];
   lastAckedBooks(): Record<string, Record<string, unknown>>;
+  pullLive(opts: Record<string, unknown>): Promise<Record<string, unknown>>;
+  applyPulledBooks(local: Record<string, unknown>, books: Record<string, Record<string, unknown>>, skip?: Record<string, number>): Record<string, unknown>;
 };
 const sync = (globalThis as unknown as { __apmsSync: Sync }).__apmsSync;
 
@@ -327,4 +329,269 @@ test("collections script served to the browser is the same file the server impor
   assert.equal(served, source);
   const html = readFileSync(new URL("../../public/apms.html", import.meta.url), "utf8");
   assert.ok(html.indexOf("apms-collections.js") < html.indexOf("apms-sync.js"), "collections loads before sync");
+});
+
+test("hydrate with whole roles and no roleKrocs in the UI snapshot → zero ops (no login write storm)", () => {
+  sync.resetForTests();
+  const wire = {
+    roles: {
+      ceo: { id: "ceo", name: "CEO", band: 6, kras: [{ id: "k1", name: "Group" }], ags: { "1A": 50 } },
+      ops: { id: "ops", name: "Ops", band: 5 },
+    },
+    notices: [{ id: "n1", title: "Hi" }],
+  };
+  sync.noteLoaded(wire);
+  // The SPA store does not keep roleKrocs; roles stay whole.
+  const ui = JSON.parse(JSON.stringify(wire)) as Record<string, unknown>;
+  assert.deepEqual(sync.collectEntityOps(ui), []);
+  // A real edit is still exactly one PATCH, never a role-krocs delete.
+  (ui.roles as Record<string, Record<string, unknown>>).ceo.band = 7;
+  const ops = sync.collectEntityOps(ui);
+  assert.deepEqual(ops.map((o) => [o.url, o.deleted]), [["/api/e/roles/ceo", false]]);
+});
+
+test("GET overlay folds role-krocs rows into roles and keeps roleKrocs off the wire", async () => {
+  const { foldRoleKrocsIntoRoles } = await import("./company-entities-v2.ts");
+  const out = foldRoleKrocsIntoRoles({
+    roles: { ceo: { id: "ceo", band: 6, kras: [{ id: "new" }] }, ops: { id: "ops", band: 5 } },
+    roleKrocs: { ceo: { kras: [{ id: "stale" }] }, ops: { kras: [{ id: "ops-k" }] } },
+  });
+  assert.equal("roleKrocs" in out, false);
+  const roles = out.roles as Record<string, { kras?: Array<{ id: string }> }>;
+  assert.equal(roles.ceo.kras?.[0]?.id, "new", "role row wins over a stale kroc row");
+  assert.equal(roles.ops.kras?.[0]?.id, "ops-k", "kroc row fills a role without kras");
+});
+
+test("a row whose content already matches the server is adopted, not rewritten (no rev churn)", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = baseSnap();
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    sync.resetForTests();
+    // This client's baseline lacks the brand row (never saw it), but the value
+    // it holds on screen is exactly what the server has.
+    sync.noteLoaded({ ...base, brands: [base.brands[0]] });
+    const log: Array<{ method: string; url: string; body?: unknown }> = [];
+    sync.install(storeFetch(sql, log));
+    const ack = await sync.save(base);
+    assert.equal(ack.ok, true);
+    const patches = log.filter((l) => l.method === "PATCH" && l.url === "/api/e/brands/b2");
+    assert.equal(patches.length, 1, "one probe PATCH (409), no identical resend");
+    const row = await readEntity(sql, entityIdFromParts("brands", "b2"));
+    assert.equal(row?.rev, 1, "server rev untouched");
+    assert.equal(sync.entityRevs()["e:brands:b2"], 1);
+  } finally {
+    db.end();
+  }
+});
+
+test("a refused feed apply does not teach the rev: the next save 409-merges instead of overwriting", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = baseSnap();
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    const head = await latestSeq(sql);
+    // Me: saved ceo once, so I know rev 2.
+    sync.resetForTests();
+    sync.noteLoaded(base);
+    sync.setLiveSeq(head);
+    const log: Array<{ method: string; url: string; body?: unknown }> = [];
+    sync.install(storeFetch(sql, log));
+    const mine1 = { ...base, roles: { ...base.roles, ceo: { ...base.roles.ceo, band: 4 } } };
+    assert.equal((await sync.save(mine1)).ok, true);
+    const seqAfterMine = await latestSeq(sql);
+    // Someone else renames ceo (rev 3).
+    await patchEntityRow(sql, entityIdFromParts("roles", "ceo"), { baseRev: 2, payload: { ...base.roles.ceo, band: 4, name: "Chief" } }, "other");
+    sync.setLiveSeq(seqAfterMine);
+    // Their row arrives while my UI is busy saving: the apply is refused.
+    sync.setLiveHooks({ getSnapshot: () => mine1, isBlocked: () => true, apply: () => false, remember: () => {} });
+    await sync.pollChanges();
+    assert.equal(sync.entityRevs()["e:roles:ceo"], 2, "rev not learned from a refused apply");
+    // My next edit (from the screen that never showed "Chief") must merge, not overwrite.
+    log.length = 0;
+    const mine2 = { ...mine1, roles: { ...mine1.roles, ceo: { ...mine1.roles.ceo, slabs: [1, 2, 3] } } };
+    assert.equal((await sync.save(mine2)).ok, true);
+    const patches = log.filter((l) => l.method === "PATCH" && l.url === "/api/e/roles/ceo");
+    assert.equal((patches[0].body as { baseRev: number }).baseRev, 2);
+    assert.equal(patches.length, 2, "409 first, then the merged row");
+    const row = await readEntity(sql, entityIdFromParts("roles", "ceo"));
+    assert.equal(row?.payload.name, "Chief", "their rename survives");
+    assert.deepEqual(row?.payload.slabs, [1, 2, 3], "my edit survives");
+  } finally {
+    db.end();
+  }
+});
+
+test("merged rows the busy UI refused are not acked: the next save merges again instead of reverting", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = baseSnap();
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    // Someone else renames ceo first (rev 2).
+    await patchEntityRow(sql, entityIdFromParts("roles", "ceo"), { baseRev: 1, payload: { ...base.roles.ceo, name: "Chief" } }, "other");
+    sync.resetForTests();
+    sync.noteLoaded(base);
+    // The SPA refuses applies while its own save is in flight.
+    sync.setLiveHooks({ getSnapshot: () => base, isBlocked: () => true, apply: () => false, remember: () => {} });
+    const log: Array<{ method: string; url: string; body?: unknown }> = [];
+    sync.install(storeFetch(sql, log));
+    const mine1 = { ...base, roles: { ...base.roles, ceo: { ...base.roles.ceo, band: 4 } } };
+    assert.equal((await sync.save(mine1)).ok, true);
+    let row = await readEntity(sql, entityIdFromParts("roles", "ceo"));
+    assert.equal(row?.payload.name, "Chief");
+    assert.equal(row?.payload.band, 4);
+    // The screen never showed "Chief"; the next edit must not send "CEO" back at the current rev.
+    const mine2 = { ...mine1, roles: { ...mine1.roles, ceo: { ...mine1.roles.ceo, slabs: [9] } } };
+    assert.equal((await sync.save(mine2)).ok, true);
+    row = await readEntity(sql, entityIdFromParts("roles", "ceo"));
+    assert.equal(row?.payload.name, "Chief", "other user's rename not reverted");
+    assert.equal(row?.payload.band, 4);
+    assert.deepEqual(row?.payload.slabs, [9]);
+  } finally {
+    db.end();
+  }
+});
+
+test("a row this client knew stays deleted even when a pull already dropped it from the baseline", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = baseSnap();
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    sync.resetForTests();
+    sync.noteLoaded(base);
+    await patchEntityRow(sql, entityIdFromParts("notices", "n1"), { baseRev: 1, deleted: true, payload: base.notices[0] }, "other");
+    // A book pull refreshed the baseline without n1, but the screen still has it.
+    sync.noteLoaded({ ...base, notices: [] });
+    sync.install(storeFetch(sql, []));
+    const ack = await sync.save({ ...base, notices: [{ ...base.notices[0], status: "done" }] });
+    assert.equal(ack.ok, true);
+    const row = await readEntity(sql, entityIdFromParts("notices", "n1"));
+    assert.equal(row?.deleted, true, "not resurrected");
+  } finally {
+    db.end();
+  }
+});
+
+test("a person that differs from the baseline only by the server's rev key or hydrate defaults is not re-saved", () => {
+  sync.resetForTests();
+  const base = baseSnap();
+  sync.noteLoaded(base);
+  const listed = { ...base, people: [{ ...base.people[0], rev: 3 }] };
+  assert.deepEqual(sync.collectEntityOps(listed).map((o) => o.url), []);
+  const hydrated = { ...base, people: [{ ...base.people[0], kras: [], brands: [], password: "" }] };
+  assert.deepEqual(sync.collectEntityOps(hydrated).map((o) => o.url), []);
+  sync.noteLoaded({ ...base, people: [{ ...base.people[0], phone: "123" }] });
+  const cleared = { ...base, people: [{ ...base.people[0], phone: "" }] };
+  assert.deepEqual(sync.collectEntityOps(cleared).map((o) => o.url), ["/api/people/p1"], "clearing a value is an edit");
+  sync.noteLoaded(base);
+  const edited = { ...base, people: [{ ...base.people[0], rev: 3, name: "P1 edited" }] };
+  assert.deepEqual(sync.collectEntityOps(edited).map((o) => o.url), ["/api/people/p1"]);
+});
+
+test("a book pull (stale-while-revalidate wire) never overwrites row-owned fields on screen", () => {
+  sync.resetForTests();
+  const base = baseSnap();
+  sync.noteLoaded(base);
+  const local = { ...base, roles: { ...base.roles, ceo: { ...base.roles.ceo, name: "Chief (from feed)" } } };
+  const out = sync.applyPulledBooks(local, { org: { roles: { ceo: { id: "ceo", name: "CEO (stale mirror)" } }, notices: [] } });
+  assert.equal((out.roles as Record<string, { name: string }>).ceo.name, "Chief (from feed)");
+  assert.equal((out.notices as unknown[]).length, 1, "notices kept");
+});
+
+test("acks are scoped per flow: the feed committing its rows does not ack rows a pull merged but the UI refused", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = baseSnap();
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    sync.resetForTests();
+    sync.noteLoaded(base);
+    await patchEntityRow(sql, entityIdFromParts("roles", "ceo"), { baseRev: 1, payload: { ...base.roles.ceo, name: "Chief" } }, "other");
+    sync.setLiveSeq(await latestSeq(sql));
+    await patchEntityRow(sql, entityIdFromParts("roles", "cto"), { baseRev: 1, payload: { ...base.roles.cto, band: 9 } }, "other");
+    const store = storeFetch(sql, []);
+    let releaseSlow: () => void = () => {};
+    const slow = new Promise<void>((r) => { releaseSlow = r; });
+    sync.install((async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/e/brands/b2") await slow;
+      return store(input, init);
+    }) as typeof fetch);
+    let ui: Record<string, unknown> = base;
+    // The feed's apply is taken…
+    sync.setLiveHooks({ getSnapshot: () => ui, isBlocked: () => false, apply: (s: Record<string, unknown>) => { ui = s; return true; }, remember: () => {} });
+    // …the pull's apply is refused.
+    const pulling = sync.pullLive({
+      entities: [{ type: "e:roles", id: "ceo" }, { type: "e:brands", id: "b2" }],
+      getSnapshot: () => ui,
+      isBlocked: false,
+      apply: (_s: Record<string, unknown>, reason: string) => reason !== "live-entity",
+      remember: () => {},
+    });
+    await new Promise((r) => setTimeout(r, 50)); // ceo fetched + merged, b2 still pending
+    await sync.pollChanges(); // applies cto, commits its acks
+    releaseSlow();
+    await pulling;
+    const roles = (ui.roles as Record<string, Record<string, unknown>>);
+    assert.equal(roles.cto.band, 9, "feed row applied");
+    assert.equal(roles.ceo.name, "CEO", "the refused pull did not reach the screen");
+    const acked = sync.lastAckedBooks().org.roles as Record<string, Record<string, unknown>>;
+    assert.equal(acked.ceo.name, "CEO", "so the baseline must not have it either");
+    assert.notEqual(sync.entityRevs()["e:roles:ceo"], 2, "nor its rev");
+  } finally {
+    db.end();
+  }
+});
+
+test("a row another user deleted is not re-created when stale screen state re-adds it", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = baseSnap();
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    sync.resetForTests();
+    sync.noteLoaded(base);
+    sync.setLiveSeq(await latestSeq(sql));
+    await patchEntityRow(sql, entityIdFromParts("notices", "n1"), { baseRev: 1, deleted: true, payload: base.notices[0] }, "other");
+    let ui: Record<string, unknown> = base;
+    sync.setLiveHooks({ getSnapshot: () => ui, isBlocked: () => false, apply: (s: Record<string, unknown>) => { ui = s; return true; }, remember: () => {} });
+    const log: Array<{ method: string; url: string; body?: unknown }> = [];
+    sync.install(storeFetch(sql, log));
+    await sync.pollChanges();
+    assert.equal((ui.notices as unknown[]).length, 0, "feed removed it");
+    assert.equal(sync.entityRevs()["e:notices:n1"], 2, "tombstone rev learned");
+    // The SPA rebuilds its notice list from memory and puts n1 back.
+    const ack = await sync.save({ ...(ui as object), notices: [{ ...base.notices[0], title: "Hello (refreshed)" }] } as Record<string, unknown>);
+    assert.equal(ack.ok, true);
+    assert.equal(log.some((l) => l.method === "PATCH" && l.url === "/api/e/notices/n1"), false, "nothing sent");
+    const row = await readEntity(sql, entityIdFromParts("notices", "n1"));
+    assert.equal(row?.deleted, true, "still deleted");
+  } finally {
+    db.end();
+  }
+});
+
+test("a book PATCH 409 does not pull row-owned fields into the baseline (no revert of a row the screen never took)", async () => {
+  sync.resetForTests();
+  const base = baseSnap();
+  sync.noteLoaded(base);
+  let bookCalls = 0;
+  sync.install((async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const body = init?.body ? JSON.parse(String(init.body)) : {};
+    if (url.startsWith("/api/e/")) return json({ ok: true, rev: 2, payload: body.payload, deleted: false });
+    if (url.startsWith("/api/company")) {
+      bookCalls += 1;
+      if (bookCalls === 1) {
+        return json({ ok: false, conflict: ["plans", "org"], applied: [], books: { org: { roles: { ...base.roles, ceo: { ...base.roles.ceo, name: "Chief" } } }, plans: {} }, bookGens: { org: 5, plans: 5, months: 1, targets: 1 } }, 409);
+      }
+      return json({ ok: true, applied: ["plans", "org"], conflict: [], skipped: [], bookGens: { org: 6, plans: 6, months: 1, targets: 1 }, notebookUpdatedAt: Date.now() });
+    }
+    return json({ ok: false }, 404);
+  }) as typeof fetch);
+  // An AGS edit: the ceo row saves, and the plans book (roleKrocs split) goes dirty.
+  const ui = { ...base, roles: { ...base.roles, ceo: { ...base.roles.ceo, ags: { "1A": 40 } } } };
+  const ack = await sync.save(ui);
+  assert.equal(ack.ok, true);
+  assert.equal(bookCalls >= 1, true, "a book PATCH went out");
+  const acked = sync.lastAckedBooks().org.roles as Record<string, Record<string, unknown>>;
+  assert.equal(acked.ceo.name, "CEO", "baseline still what the screen has");
+  assert.deepEqual(sync.collectEntityOps(ui).map((o) => o.url), [], "so the untouched name is not re-sent as an edit");
 });

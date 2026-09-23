@@ -116,10 +116,10 @@ test("plan drop reorders KRAs and moves a KPI across KRAs", () => {
   const first = applyPlanDrop(kras, "k2", "kra:k1", "before");
   assert.deepEqual(first.map((k) => k.id), ["k2", "k1"]);
   const moved = applyPlanDrop(kras, "p2", "kra:k2", "inside");
-  assert.deepEqual(moved[0].kpis.map((p) => p.id), ["p1"]);
-  assert.deepEqual(moved[1].kpis.map((p) => p.id), ["p2", "p3"]);
+  assert.deepEqual(moved[0]!.kpis!.map((p) => p.id), ["p1"]);
+  assert.deepEqual(moved[1]!.kpis!.map((p) => p.id), ["p2", "p3"]);
   const reorder = applyPlanDrop(kras, "p2", "kpi:p1", "before");
-  assert.deepEqual(reorder[0].kpis.map((p) => p.id), ["p2", "p1"]);
+  assert.deepEqual(reorder[0]!.kpis!.map((p) => p.id), ["p2", "p1"]);
 });
 
 test("weight field empty stays empty (does not coerce to 0 while typing)", () => {

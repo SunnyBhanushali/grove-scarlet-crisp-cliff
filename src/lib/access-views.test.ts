@@ -194,3 +194,12 @@ test("stamp p0as78; fallbackPost still absent; G9 path kept", () => {
   assert.equal(sync.includes("p0as60"), true);
   assert.equal(routes.includes("function Virt("), true);
 });
+
+test("p0as78 routes: a live (book pull) apply clears its own dirty flag so later row applies are taken", () => {
+  const stamped = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as78.js", import.meta.url), "utf8");
+  assert.equal(stamped.split("let ok=h(t,`live`);D.current=!1;").length - 1, 3);
+  assert.equal(stamped.split("h(t,`live`),D.current=!1,").length - 1, 1);
+  assert.equal(stamped.includes("let ok=h(t,`live`);setTimeout("), false, "no live apply left without the reset");
+  assert.equal(stamped.split("window.__apmsSync.pickDataFields(t)").length - 1, 3);
+  assert.equal(stamped.includes("function _(){D.current=!0;l.current&&("), true, "edits during an apply window still schedule a save");
+});

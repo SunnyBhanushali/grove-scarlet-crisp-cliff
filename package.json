@@ -1,7 +1,9 @@
 {
   "name": "app-builder-workspace",
   "private": true,
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/lib/apms-collections.js"
+  ],
   "type": "module",
   "overrides": {
     "nf3": "0.3.17"

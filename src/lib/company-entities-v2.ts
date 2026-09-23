@@ -162,5 +162,29 @@ export async function overlayEntityFields(sql: HotSql, snapshot: Snapshot, readB
   const { loadEntityFields } = await import("./company-entity-store.ts");
   await ensureEntitiesFromBooks(sql, readBooks);
   const fields = await loadEntityFields(sql);
-  return { ...snapshot, ...fields };
+  return foldRoleKrocsIntoRoles({ ...snapshot, ...fields });
+}
+
+/**
+ * The wire carries roles whole (kras / ags / competencies inside), as
+ * assembleSnapshot always did; `roleKrocs` is a book-storage split, not a
+ * client field. role-krocs rows only fill kroc fields a role row lacks — the
+ * role row (what clients edit) wins.
+ */
+export function foldRoleKrocsIntoRoles(snapshot: Snapshot): Snapshot {
+  const krocs = snapshot.roleKrocs;
+  if (krocs === undefined) return snapshot;
+  const out: Snapshot = { ...snapshot };
+  delete out.roleKrocs;
+  const roles = out.roles;
+  if (!krocs || typeof krocs !== "object" || Array.isArray(krocs)) return out;
+  if (!roles || typeof roles !== "object" || Array.isArray(roles)) return out;
+  const next: Record<string, unknown> = {};
+  for (const [id, role] of Object.entries(roles as Record<string, unknown>)) {
+    const kroc = (krocs as Record<string, unknown>)[id];
+    const isObj = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
+    next[id] = isObj(role) && isObj(kroc) ? { ...(kroc as object), ...(role as object) } : role;
+  }
+  out.roles = next;
+  return out;
 }

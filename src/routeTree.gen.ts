@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApmsDothtmlRouteImport } from './routes/apms[.]html'
+import { Route as ApiChangesRouteImport } from './routes/api/changes'
 import { Route as ApiCompanyRouteImport } from './routes/api/company'
 import { Route as ApiCompanyBackupsRouteImport } from './routes/api/company-backups'
 import { Route as ApiCompanyLiveRouteImport } from './routes/api/company-live'
@@ -21,22 +22,21 @@ import { Route as ApiOrgRouteImport } from './routes/api/org'
 import { Route as ApiPasswordResetRouteImport } from './routes/api/password-reset'
 import { Route as ApiPeopleRouteImport } from './routes/api/people'
 import { Route as ApiProvisionLoginsRouteImport } from './routes/api/provision-logins'
+import { Route as ApiEKindRouteImport } from './routes/api/e.$kind'
 import { Route as ApiMonthRecordsPeriodRouteImport } from './routes/api/month-records.$period'
 import { Route as ApiOrgKindRouteImport } from './routes/api/org.$kind'
 import { Route as ApiPeopleIdRouteImport } from './routes/api/people.$id'
 import { Route as ApiRewardRecordsPeriodRouteImport } from './routes/api/reward-records.$period'
 import { Route as ApiRosterPeriodRouteImport } from './routes/api/roster.$period'
 import { Route as ApiTargetCellsIdRouteImport } from './routes/api/target-cells.$id'
-import { Route as ApiChangesRouteImport } from './routes/api/changes'
-import { Route as ApiEKindRouteImport } from './routes/api/e.$kind'
 import { Route as ApiEKindK1RouteImport } from './routes/api/e.$kind.$k1'
-import { Route as ApiEKindK1K2RouteImport } from './routes/api/e.$kind.$k1.$k2'
 import { Route as ApiMonthRecordsPeriodPersonIdRouteImport } from './routes/api/month-records.$period.$personId'
 import { Route as ApiOrgKindIdRouteImport } from './routes/api/org.$kind.$id'
 import { Route as ApiRewardRecordsPeriodPersonIdRouteImport } from './routes/api/reward-records.$period.$personId'
 import { Route as ApiRosterBindKindSubjectIdRouteImport } from './routes/api/roster-bind.$kind.$subjectId'
 import { Route as ApiRosterPeriodLockRouteImport } from './routes/api/roster.$period.lock'
 import { Route as ApiRosterPeriodUnlockRouteImport } from './routes/api/roster.$period.unlock'
+import { Route as ApiEKindK1K2RouteImport } from './routes/api/e.$kind.$k1.$k2'
 import { Route as ApiRosterBindKindSubjectIdRebindRouteImport } from './routes/api/roster-bind.$kind.$subjectId.rebind'
 import { Route as ApiRosterPeriodCopyFromFromPeriodRouteImport } from './routes/api/roster.$period.copy-from.$fromPeriod'
 
@@ -48,6 +48,11 @@ const IndexRoute = IndexRouteImport.update({
 const ApmsDothtmlRoute = ApmsDothtmlRouteImport.update({
   id: '/apms.html',
   path: '/apms.html',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiChangesRoute = ApiChangesRouteImport.update({
+  id: '/api/changes',
+  path: '/api/changes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCompanyRoute = ApiCompanyRouteImport.update({
@@ -100,6 +105,11 @@ const ApiProvisionLoginsRoute = ApiProvisionLoginsRouteImport.update({
   path: '/api/provision-logins',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEKindRoute = ApiEKindRouteImport.update({
+  id: '/api/e/$kind',
+  path: '/api/e/$kind',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMonthRecordsPeriodRoute = ApiMonthRecordsPeriodRouteImport.update({
   id: '/api/month-records/$period',
   path: '/api/month-records/$period',
@@ -130,25 +140,10 @@ const ApiTargetCellsIdRoute = ApiTargetCellsIdRouteImport.update({
   path: '/api/target-cells/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiChangesRoute = ApiChangesRouteImport.update({
-  id: '/api/changes',
-  path: '/api/changes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiEKindRoute = ApiEKindRouteImport.update({
-  id: '/api/e/$kind',
-  path: '/api/e/$kind',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiEKindK1Route = ApiEKindK1RouteImport.update({
-  id: '/api/e/$kind/$k1',
-  path: '/api/e/$kind/$k1',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiEKindK1K2Route = ApiEKindK1K2RouteImport.update({
-  id: '/api/e/$kind/$k1/$k2',
-  path: '/api/e/$kind/$k1/$k2',
-  getParentRoute: () => rootRouteImport,
+  id: '/$k1',
+  path: '/$k1',
+  getParentRoute: () => ApiEKindRoute,
 } as any)
 const ApiMonthRecordsPeriodPersonIdRoute =
   ApiMonthRecordsPeriodPersonIdRouteImport.update({
@@ -183,6 +178,11 @@ const ApiRosterPeriodUnlockRoute = ApiRosterPeriodUnlockRouteImport.update({
   path: '/unlock',
   getParentRoute: () => ApiRosterPeriodRoute,
 } as any)
+const ApiEKindK1K2Route = ApiEKindK1K2RouteImport.update({
+  id: '/$k2',
+  path: '/$k2',
+  getParentRoute: () => ApiEKindK1Route,
+} as any)
 const ApiRosterBindKindSubjectIdRebindRoute =
   ApiRosterBindKindSubjectIdRebindRouteImport.update({
     id: '/rebind',
@@ -199,6 +199,7 @@ const ApiRosterPeriodCopyFromFromPeriodRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/apms.html': typeof ApmsDothtmlRoute
+  '/api/changes': typeof ApiChangesRoute
   '/api/company': typeof ApiCompanyRoute
   '/api/company-backups': typeof ApiCompanyBackupsRoute
   '/api/company-live': typeof ApiCompanyLiveRoute
@@ -209,28 +210,28 @@ export interface FileRoutesByFullPath {
   '/api/password-reset': typeof ApiPasswordResetRoute
   '/api/people': typeof ApiPeopleRouteWithChildren
   '/api/provision-logins': typeof ApiProvisionLoginsRoute
+  '/api/e/$kind': typeof ApiEKindRouteWithChildren
   '/api/month-records/$period': typeof ApiMonthRecordsPeriodRouteWithChildren
   '/api/org/$kind': typeof ApiOrgKindRouteWithChildren
   '/api/people/$id': typeof ApiPeopleIdRoute
   '/api/reward-records/$period': typeof ApiRewardRecordsPeriodRouteWithChildren
   '/api/roster/$period': typeof ApiRosterPeriodRouteWithChildren
   '/api/target-cells/$id': typeof ApiTargetCellsIdRoute
-  '/api/changes': typeof ApiChangesRoute
-  '/api/e/$kind': typeof ApiEKindRoute
-  '/api/e/$kind/$k1': typeof ApiEKindK1Route
-  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
+  '/api/e/$kind/$k1': typeof ApiEKindK1RouteWithChildren
   '/api/month-records/$period/$personId': typeof ApiMonthRecordsPeriodPersonIdRoute
   '/api/org/$kind/$id': typeof ApiOrgKindIdRoute
   '/api/reward-records/$period/$personId': typeof ApiRewardRecordsPeriodPersonIdRoute
   '/api/roster-bind/$kind/$subjectId': typeof ApiRosterBindKindSubjectIdRouteWithChildren
   '/api/roster/$period/lock': typeof ApiRosterPeriodLockRoute
   '/api/roster/$period/unlock': typeof ApiRosterPeriodUnlockRoute
+  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
   '/api/roster-bind/$kind/$subjectId/rebind': typeof ApiRosterBindKindSubjectIdRebindRoute
   '/api/roster/$period/copy-from/$fromPeriod': typeof ApiRosterPeriodCopyFromFromPeriodRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/apms.html': typeof ApmsDothtmlRoute
+  '/api/changes': typeof ApiChangesRoute
   '/api/company': typeof ApiCompanyRoute
   '/api/company-backups': typeof ApiCompanyBackupsRoute
   '/api/company-live': typeof ApiCompanyLiveRoute
@@ -241,22 +242,21 @@ export interface FileRoutesByTo {
   '/api/password-reset': typeof ApiPasswordResetRoute
   '/api/people': typeof ApiPeopleRouteWithChildren
   '/api/provision-logins': typeof ApiProvisionLoginsRoute
+  '/api/e/$kind': typeof ApiEKindRouteWithChildren
   '/api/month-records/$period': typeof ApiMonthRecordsPeriodRouteWithChildren
   '/api/org/$kind': typeof ApiOrgKindRouteWithChildren
   '/api/people/$id': typeof ApiPeopleIdRoute
   '/api/reward-records/$period': typeof ApiRewardRecordsPeriodRouteWithChildren
   '/api/roster/$period': typeof ApiRosterPeriodRouteWithChildren
   '/api/target-cells/$id': typeof ApiTargetCellsIdRoute
-  '/api/changes': typeof ApiChangesRoute
-  '/api/e/$kind': typeof ApiEKindRoute
-  '/api/e/$kind/$k1': typeof ApiEKindK1Route
-  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
+  '/api/e/$kind/$k1': typeof ApiEKindK1RouteWithChildren
   '/api/month-records/$period/$personId': typeof ApiMonthRecordsPeriodPersonIdRoute
   '/api/org/$kind/$id': typeof ApiOrgKindIdRoute
   '/api/reward-records/$period/$personId': typeof ApiRewardRecordsPeriodPersonIdRoute
   '/api/roster-bind/$kind/$subjectId': typeof ApiRosterBindKindSubjectIdRouteWithChildren
   '/api/roster/$period/lock': typeof ApiRosterPeriodLockRoute
   '/api/roster/$period/unlock': typeof ApiRosterPeriodUnlockRoute
+  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
   '/api/roster-bind/$kind/$subjectId/rebind': typeof ApiRosterBindKindSubjectIdRebindRoute
   '/api/roster/$period/copy-from/$fromPeriod': typeof ApiRosterPeriodCopyFromFromPeriodRoute
 }
@@ -264,6 +264,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/apms.html': typeof ApmsDothtmlRoute
+  '/api/changes': typeof ApiChangesRoute
   '/api/company': typeof ApiCompanyRoute
   '/api/company-backups': typeof ApiCompanyBackupsRoute
   '/api/company-live': typeof ApiCompanyLiveRoute
@@ -274,22 +275,21 @@ export interface FileRoutesById {
   '/api/password-reset': typeof ApiPasswordResetRoute
   '/api/people': typeof ApiPeopleRouteWithChildren
   '/api/provision-logins': typeof ApiProvisionLoginsRoute
+  '/api/e/$kind': typeof ApiEKindRouteWithChildren
   '/api/month-records/$period': typeof ApiMonthRecordsPeriodRouteWithChildren
   '/api/org/$kind': typeof ApiOrgKindRouteWithChildren
   '/api/people/$id': typeof ApiPeopleIdRoute
   '/api/reward-records/$period': typeof ApiRewardRecordsPeriodRouteWithChildren
   '/api/roster/$period': typeof ApiRosterPeriodRouteWithChildren
   '/api/target-cells/$id': typeof ApiTargetCellsIdRoute
-  '/api/changes': typeof ApiChangesRoute
-  '/api/e/$kind': typeof ApiEKindRoute
-  '/api/e/$kind/$k1': typeof ApiEKindK1Route
-  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
+  '/api/e/$kind/$k1': typeof ApiEKindK1RouteWithChildren
   '/api/month-records/$period/$personId': typeof ApiMonthRecordsPeriodPersonIdRoute
   '/api/org/$kind/$id': typeof ApiOrgKindIdRoute
   '/api/reward-records/$period/$personId': typeof ApiRewardRecordsPeriodPersonIdRoute
   '/api/roster-bind/$kind/$subjectId': typeof ApiRosterBindKindSubjectIdRouteWithChildren
   '/api/roster/$period/lock': typeof ApiRosterPeriodLockRoute
   '/api/roster/$period/unlock': typeof ApiRosterPeriodUnlockRoute
+  '/api/e/$kind/$k1/$k2': typeof ApiEKindK1K2Route
   '/api/roster-bind/$kind/$subjectId/rebind': typeof ApiRosterBindKindSubjectIdRebindRoute
   '/api/roster/$period/copy-from/$fromPeriod': typeof ApiRosterPeriodCopyFromFromPeriodRoute
 }
@@ -298,6 +298,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/apms.html'
+    | '/api/changes'
     | '/api/company'
     | '/api/company-backups'
     | '/api/company-live'
@@ -308,28 +309,28 @@ export interface FileRouteTypes {
     | '/api/password-reset'
     | '/api/people'
     | '/api/provision-logins'
+    | '/api/e/$kind'
     | '/api/month-records/$period'
     | '/api/org/$kind'
     | '/api/people/$id'
     | '/api/reward-records/$period'
     | '/api/roster/$period'
     | '/api/target-cells/$id'
-    | '/api/changes'
-    | '/api/e/$kind'
     | '/api/e/$kind/$k1'
-    | '/api/e/$kind/$k1/$k2'
     | '/api/month-records/$period/$personId'
     | '/api/org/$kind/$id'
     | '/api/reward-records/$period/$personId'
     | '/api/roster-bind/$kind/$subjectId'
     | '/api/roster/$period/lock'
     | '/api/roster/$period/unlock'
+    | '/api/e/$kind/$k1/$k2'
     | '/api/roster-bind/$kind/$subjectId/rebind'
     | '/api/roster/$period/copy-from/$fromPeriod'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/apms.html'
+    | '/api/changes'
     | '/api/company'
     | '/api/company-backups'
     | '/api/company-live'
@@ -340,28 +341,28 @@ export interface FileRouteTypes {
     | '/api/password-reset'
     | '/api/people'
     | '/api/provision-logins'
+    | '/api/e/$kind'
     | '/api/month-records/$period'
     | '/api/org/$kind'
     | '/api/people/$id'
     | '/api/reward-records/$period'
     | '/api/roster/$period'
     | '/api/target-cells/$id'
-    | '/api/changes'
-    | '/api/e/$kind'
     | '/api/e/$kind/$k1'
-    | '/api/e/$kind/$k1/$k2'
     | '/api/month-records/$period/$personId'
     | '/api/org/$kind/$id'
     | '/api/reward-records/$period/$personId'
     | '/api/roster-bind/$kind/$subjectId'
     | '/api/roster/$period/lock'
     | '/api/roster/$period/unlock'
+    | '/api/e/$kind/$k1/$k2'
     | '/api/roster-bind/$kind/$subjectId/rebind'
     | '/api/roster/$period/copy-from/$fromPeriod'
   id:
     | '__root__'
     | '/'
     | '/apms.html'
+    | '/api/changes'
     | '/api/company'
     | '/api/company-backups'
     | '/api/company-live'
@@ -372,22 +373,21 @@ export interface FileRouteTypes {
     | '/api/password-reset'
     | '/api/people'
     | '/api/provision-logins'
+    | '/api/e/$kind'
     | '/api/month-records/$period'
     | '/api/org/$kind'
     | '/api/people/$id'
     | '/api/reward-records/$period'
     | '/api/roster/$period'
     | '/api/target-cells/$id'
-    | '/api/changes'
-    | '/api/e/$kind'
     | '/api/e/$kind/$k1'
-    | '/api/e/$kind/$k1/$k2'
     | '/api/month-records/$period/$personId'
     | '/api/org/$kind/$id'
     | '/api/reward-records/$period/$personId'
     | '/api/roster-bind/$kind/$subjectId'
     | '/api/roster/$period/lock'
     | '/api/roster/$period/unlock'
+    | '/api/e/$kind/$k1/$k2'
     | '/api/roster-bind/$kind/$subjectId/rebind'
     | '/api/roster/$period/copy-from/$fromPeriod'
   fileRoutesById: FileRoutesById
@@ -395,6 +395,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApmsDothtmlRoute: typeof ApmsDothtmlRoute
+  ApiChangesRoute: typeof ApiChangesRoute
   ApiCompanyRoute: typeof ApiCompanyRoute
   ApiCompanyBackupsRoute: typeof ApiCompanyBackupsRoute
   ApiCompanyLiveRoute: typeof ApiCompanyLiveRoute
@@ -405,14 +406,11 @@ export interface RootRouteChildren {
   ApiPasswordResetRoute: typeof ApiPasswordResetRoute
   ApiPeopleRoute: typeof ApiPeopleRouteWithChildren
   ApiProvisionLoginsRoute: typeof ApiProvisionLoginsRoute
+  ApiEKindRoute: typeof ApiEKindRouteWithChildren
   ApiMonthRecordsPeriodRoute: typeof ApiMonthRecordsPeriodRouteWithChildren
   ApiRewardRecordsPeriodRoute: typeof ApiRewardRecordsPeriodRouteWithChildren
   ApiRosterPeriodRoute: typeof ApiRosterPeriodRouteWithChildren
   ApiTargetCellsIdRoute: typeof ApiTargetCellsIdRoute
-  ApiChangesRoute: typeof ApiChangesRoute
-  ApiEKindRoute: typeof ApiEKindRoute
-  ApiEKindK1Route: typeof ApiEKindK1Route
-  ApiEKindK1K2Route: typeof ApiEKindK1K2Route
   ApiRosterBindKindSubjectIdRoute: typeof ApiRosterBindKindSubjectIdRouteWithChildren
 }
 
@@ -430,6 +428,13 @@ declare module '@tanstack/react-router' {
       path: '/apms.html'
       fullPath: '/apms.html'
       preLoaderRoute: typeof ApmsDothtmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/changes': {
+      id: '/api/changes'
+      path: '/api/changes'
+      fullPath: '/api/changes'
+      preLoaderRoute: typeof ApiChangesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/company': {
@@ -502,6 +507,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProvisionLoginsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/e/$kind': {
+      id: '/api/e/$kind'
+      path: '/api/e/$kind'
+      fullPath: '/api/e/$kind'
+      preLoaderRoute: typeof ApiEKindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/month-records/$period': {
       id: '/api/month-records/$period'
       path: '/api/month-records/$period'
@@ -544,33 +556,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTargetCellsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/changes': {
-      id: '/api/changes'
-      path: '/api/changes'
-      fullPath: '/api/changes'
-      preLoaderRoute: typeof ApiChangesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/e/$kind': {
-      id: '/api/e/$kind'
-      path: '/api/e/$kind'
-      fullPath: '/api/e/$kind'
-      preLoaderRoute: typeof ApiEKindRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/e/$kind/$k1': {
       id: '/api/e/$kind/$k1'
-      path: '/api/e/$kind/$k1'
+      path: '/$k1'
       fullPath: '/api/e/$kind/$k1'
       preLoaderRoute: typeof ApiEKindK1RouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/e/$kind/$k1/$k2': {
-      id: '/api/e/$kind/$k1/$k2'
-      path: '/api/e/$kind/$k1/$k2'
-      fullPath: '/api/e/$kind/$k1/$k2'
-      preLoaderRoute: typeof ApiEKindK1K2RouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof ApiEKindRoute
     }
     '/api/month-records/$period/$personId': {
       id: '/api/month-records/$period/$personId'
@@ -613,6 +604,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/roster/$period/unlock'
       preLoaderRoute: typeof ApiRosterPeriodUnlockRouteImport
       parentRoute: typeof ApiRosterPeriodRoute
+    }
+    '/api/e/$kind/$k1/$k2': {
+      id: '/api/e/$kind/$k1/$k2'
+      path: '/$k2'
+      fullPath: '/api/e/$kind/$k1/$k2'
+      preLoaderRoute: typeof ApiEKindK1K2RouteImport
+      parentRoute: typeof ApiEKindK1Route
     }
     '/api/roster-bind/$kind/$subjectId/rebind': {
       id: '/api/roster-bind/$kind/$subjectId/rebind'
@@ -664,6 +662,30 @@ const ApiPeopleRouteChildren: ApiPeopleRouteChildren = {
 
 const ApiPeopleRouteWithChildren = ApiPeopleRoute._addFileChildren(
   ApiPeopleRouteChildren,
+)
+
+interface ApiEKindK1RouteChildren {
+  ApiEKindK1K2Route: typeof ApiEKindK1K2Route
+}
+
+const ApiEKindK1RouteChildren: ApiEKindK1RouteChildren = {
+  ApiEKindK1K2Route: ApiEKindK1K2Route,
+}
+
+const ApiEKindK1RouteWithChildren = ApiEKindK1Route._addFileChildren(
+  ApiEKindK1RouteChildren,
+)
+
+interface ApiEKindRouteChildren {
+  ApiEKindK1Route: typeof ApiEKindK1RouteWithChildren
+}
+
+const ApiEKindRouteChildren: ApiEKindRouteChildren = {
+  ApiEKindK1Route: ApiEKindK1RouteWithChildren,
+}
+
+const ApiEKindRouteWithChildren = ApiEKindRoute._addFileChildren(
+  ApiEKindRouteChildren,
 )
 
 interface ApiMonthRecordsPeriodRouteChildren {
@@ -728,6 +750,7 @@ const ApiRosterBindKindSubjectIdRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApmsDothtmlRoute: ApmsDothtmlRoute,
+  ApiChangesRoute: ApiChangesRoute,
   ApiCompanyRoute: ApiCompanyRoute,
   ApiCompanyBackupsRoute: ApiCompanyBackupsRoute,
   ApiCompanyLiveRoute: ApiCompanyLiveRoute,
@@ -738,14 +761,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPasswordResetRoute: ApiPasswordResetRoute,
   ApiPeopleRoute: ApiPeopleRouteWithChildren,
   ApiProvisionLoginsRoute: ApiProvisionLoginsRoute,
+  ApiEKindRoute: ApiEKindRouteWithChildren,
   ApiMonthRecordsPeriodRoute: ApiMonthRecordsPeriodRouteWithChildren,
   ApiRewardRecordsPeriodRoute: ApiRewardRecordsPeriodRouteWithChildren,
   ApiRosterPeriodRoute: ApiRosterPeriodRouteWithChildren,
   ApiTargetCellsIdRoute: ApiTargetCellsIdRoute,
-  ApiChangesRoute: ApiChangesRoute,
-  ApiEKindRoute: ApiEKindRoute,
-  ApiEKindK1Route: ApiEKindK1Route,
-  ApiEKindK1K2Route: ApiEKindK1K2Route,
   ApiRosterBindKindSubjectIdRoute: ApiRosterBindKindSubjectIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport

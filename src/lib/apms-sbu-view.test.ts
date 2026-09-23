@@ -23,7 +23,7 @@ test("FH with no own SBU still sees SBUs of people on their team", () => {
   ];
   const shown = sbuUnitsForViewer(allan, units, team.filter((p) => p.id !== "allan"));
   assert.deepEqual(
-    shown.map((u) => u.id).sort(),
+    shown.map((u: { id: string }) => u.id).sort(),
     ["at", "del", "goa"],
   );
   assert.deepEqual(personSbuIds(allan), []);

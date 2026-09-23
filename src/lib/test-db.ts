@@ -16,7 +16,7 @@ export async function openTestDb(): Promise<TestDb | null> {
   const wantReal = process.env.PGTEST === "1" || !!process.env.PGPORT;
   if (!wantReal) {
     try {
-      const { PGlite } = (await import("@electric-sql/pglite")) as { PGlite: new () => { waitReady: Promise<void>; exec(s: string): Promise<void>; query<T>(t: string, p?: unknown[]): Promise<{ rows: T[] }>; close(): Promise<void> } };
+      const { PGlite } = (await import("@electric-sql/pglite")) as unknown as { PGlite: new () => { waitReady: Promise<void>; exec(s: string): Promise<void>; query<T>(t: string, p?: unknown[]): Promise<{ rows: T[] }>; close(): Promise<void> } };
       const pg = new PGlite();
       await pg.waitReady;
       await pg.exec(hotMigration);

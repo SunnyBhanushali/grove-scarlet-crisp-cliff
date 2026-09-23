@@ -231,10 +231,31 @@
     return mine;
   }
 
+  /**
+   * The acked baseline of one generic field, in row shape. `roles` rows carry
+   * kras / ags / competencies, but the book split (noteLoaded) keeps those in
+   * plans.roleKrocs — fold them back so an untouched role is not a diff. The
+   * role's own fields win (after a save lastAcked.org.roles is already whole).
+   */
+  function ackedFieldValue(spec) {
+    var acked = lastAcked[spec.book] || {};
+    var value = acked[spec.field];
+    if (spec.field !== "roles" || !isPlainObject(value)) return value;
+    var krocs = lastAcked.plans && lastAcked.plans.roleKrocs;
+    if (!isPlainObject(krocs)) return value;
+    var out = {};
+    Object.keys(value).forEach(function (id) {
+      var role = value[id];
+      out[id] = isPlainObject(role) && isPlainObject(krocs[id]) ? Object.assign({}, krocs[id], role) : role;
+    });
+    return out;
+  }
+
   function genericOpsFor(spec, snap, ops) {
-    var book = spec.book;
-    var acked = lastAcked[book] || {};
-    var prev = rowsById(spec, acked[spec.field]);
+    // A field the UI snapshot does not carry (e.g. roleKrocs, a book-storage
+    // split) is "not held here", never "every row deleted".
+    if (snap[spec.field] === undefined) return;
+    var prev = rowsById(spec, ackedFieldValue(spec));
     var next = rowsById(spec, snap[spec.field]);
     Object.keys(next).forEach(function (id) {
       if (prev[id] && eq(next[id].payload, prev[id].payload)) return;
@@ -282,13 +303,59 @@
    * stale local value over the other user's change).
    */
   var pendingAcks = [];
+  /**
+   * Acks are scoped to the flow that built the snapshot they belong to.
+   * pullLive merges rows between awaits while pollChanges / hint GETs apply
+   * their own snapshots; one shared queue let one flow commit the other's
+   * acks — the baseline then held a row the screen never took, and the next
+   * save sent the screen's old value as an edit (a silent revert).
+   */
+  var ackSink = null;
+  function pushAck(fn) {
+    (ackSink || pendingAcks).push(fn);
+  }
+  function withAcks(list, fn) {
+    var prev = ackSink;
+    ackSink = list;
+    try {
+      return fn();
+    } finally {
+      ackSink = prev;
+    }
+  }
+  function runAcks(list) {
+    (list || []).forEach(function (fn) { fn(); });
+    return (list || []).length;
+  }
+  /**
+   * Generic rows this client has ever held (loaded, pulled or acked). A save
+   * that finds the row tombstoned is a stale edit when the id is known here —
+   * the delete stands; only a never-seen id is a genuine create.
+   */
+  var knownRowKeys = {};
+  /**
+   * Rows another user deleted (learned from the feed or a 409). A later save
+   * that re-adds one (not in the baseline) comes from stale screen state — an
+   * SPA list rebuilt from memory — so it is not sent: the delete stands.
+   */
+  var remoteDeletedKeys = {};
+  function rememberRows(snapshot) {
+    if (!C || !isPlainObject(snapshot)) return;
+    C.SPECS.forEach(function (spec) {
+      if (snapshot[spec.field] === undefined) return;
+      Object.keys(rowsById(spec, snapshot[spec.field])).forEach(function (id) {
+        knownRowKeys["e:" + spec.kind + ":" + id] = 1;
+      });
+    });
+  }
   function applyGenericRow(snap, spec, row, deleted, alsoAck) {
     var out = Object.assign({}, snap);
     var value = C.applyRow(spec, out[spec.field], row, deleted);
     if (value === undefined) delete out[spec.field];
     else out[spec.field] = value;
     if (alsoAck) {
-      pendingAcks.push(function () {
+      pushAck(function () {
+        knownRowKeys["e:" + spec.kind + ":" + row.id] = 1;
         var book = spec.book;
         lastAcked[book] = lastAcked[book] || {};
         var av = C.applyRow(spec, lastAcked[book][spec.field], row, deleted);
@@ -514,8 +581,12 @@
       lastGens[id] = gens[id];
       remoteGens[id] = Math.max(Number(remoteGens[id]) || 0, gens[id]);
     });
+    rememberRows(snapshot);
     var at = Number(snapshot.notebookUpdatedAt) || 0;
     if (at > lastWireAt) lastWireAt = at;
+    // The loaded snapshot already holds every change up to `at`: an idle tick
+    // at the same `at` must not poll the change feed.
+    if (at > lastChangesAt) lastChangesAt = at;
     lastScreenKey = "";
     lastPeopleFetchAt = 0;
     lastRewardsFetchAt = 0;
@@ -856,13 +927,13 @@
           var hooks = liveHooks;
           var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
           if (local && body && body.ok !== false) {
-            var next = mergeEntityPayload(local, hint, body, {});
+            var hintAcks = [];
+            var next = withAcks(hintAcks, function () { return mergeEntityPayload(local, hint, body, {}); });
             var took = false;
             if (hooks && typeof hooks.apply === "function") took = hooks.apply(next, "live-entity") !== false;
-            if (took) commitPendingAcks();
+            if (took) runAcks(hintAcks);
             else {
               // UI not ready or refused: keep the hint queued so pullLive applies it later.
-              discardPendingAcks();
               delete seenEntityKeys[key];
               queueEntityHint(hint);
             }
@@ -954,14 +1025,14 @@
         var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
         var resync = false;
         var next = local;
+        var feedAcks = [];
         body.changes.forEach(function (ch) {
           if (!ch || !ch.kind) return;
-          if (ch.kind === "*") { resync = true; return; }
+          if (ch.kind === "*") { resync = true; entityFieldsFromNextPull = true; return; }
           if (!next) return;
-          next = mergeGenericRow(next, ch.kind, ch);
+          next = withAcks(feedAcks, function () { return mergeGenericRow(next, ch.kind, ch); });
         });
         if (resync) {
-          discardPendingAcks();
           scheduleLivePull();
           return body;
         }
@@ -975,11 +1046,12 @@
         } else if (next === local) {
           applied = true;
         }
-        if (applied) commitPendingAcks();
+        if (applied) runAcks(feedAcks);
         else {
-          // UI refused (unsaved edits in flight). Rewind the cursor: replay on the next tick.
-          discardPendingAcks();
+          // UI refused (unsaved edits in flight). Rewind the cursor: replay on the next tick
+          // (even if that tick's `at` has not moved again).
           liveSeq = since;
+          lastChangesAt = 0;
           return body;
         }
         if (body.changes.length >= 500) return pollChanges();
@@ -1100,10 +1172,20 @@
     var id = spec.shape === "map2" ? k1 + C.SEP + (k2 || "") : k1;
     var row = { kind: spec.kind, id: id, k1: k1, k2: k2, payload: isPlainObject(body.payload) ? body.payload : {} };
     var revKey = "e:" + spec.kind + ":" + id;
-    if (Number.isFinite(Number(body.rev))) entityRevs[revKey] = Number(body.rev);
+    // The row's rev is learned together with its payload: only once the UI
+    // took the snapshot (commitPendingAcks). Learning it early, while the apply
+    // is refused (save in flight), let the next save go out at the new rev with
+    // the old payload — a silent overwrite instead of a 409 merge.
+    if (Number.isFinite(Number(body.rev))) {
+      var learnedRev = Number(body.rev);
+      pushAck(function () {
+        entityRevs[revKey] = learnedRev;
+      });
+    }
     var deleted = !!body.deleted;
-    var acked = lastAcked[spec.book] || {};
-    var ackedRow = rowsById(spec, acked[spec.field])[id];
+    if (deleted) remoteDeletedKeys[revKey] = 1;
+    else delete remoteDeletedKeys[revKey];
+    var ackedRow = rowsById(spec, ackedFieldValue(spec))[id];
     var localRow = rowsById(spec, local[spec.field])[id];
     var localDirty = !eq(localRow ? localRow.payload : undefined, ackedRow ? ackedRow.payload : undefined);
     if (!localDirty || deleted) {
@@ -1171,12 +1253,13 @@
   }
 
   async function pullPendingEntities(local, slices) {
-    if (!pendingEntities.length) return { local: local, fetched: [], types: {} };
+    if (!pendingEntities.length) return { local: local, fetched: [], types: {}, acks: [] };
     var batch = pendingEntities.slice(0, LIVE_ENTITY_CAP);
     pendingEntities = pendingEntities.slice(LIVE_ENTITY_CAP);
     var fetched = [];
     var types = {};
     var out = local;
+    var pullAcks = [];
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     for (var i = 0; i < batch.length; i++) {
       var hint = batch[i];
@@ -1202,12 +1285,13 @@
         seenEntityKeys[entityHintKey(hint)] = 1;
         fetched.push(hint);
         types[hint.type] = 1;
-        out = mergeEntityPayload(out, hint, body, slices);
+        var before = out;
+        out = withAcks(pullAcks, function () { return mergeEntityPayload(before, hint, body, slices); });
       } catch (err) {
         pendingEntities.push(hint);
       }
     }
-    return { local: out, fetched: fetched, types: types };
+    return { local: out, fetched: fetched, types: types, acks: pullAcks };
   }
 
   function noteAck(ack, sentIds) {
@@ -1223,7 +1307,26 @@
     });
   }
 
+  /**
+   * `into` with every row-owned field of `book` taken from `from` (absent stays
+   * absent): the four hot collections, and with ROWS-V2 every generic field.
+   */
+  var HOT_BY_BOOK = { org: ["people"], months: ["records", "rewardRecords"], targets: ["targetCells"], plans: [] };
+  function keepRowOwned(book, into, from) {
+    if (!isPlainObject(into)) return into;
+    var out = Object.assign({}, into);
+    var src = isPlainObject(from) ? from : {};
+    var fields = (HOT_BY_BOOK[book] || []).slice();
+    if (C) C.SPECS.forEach(function (spec) { if (spec.book === book) fields.push(spec.field); });
+    fields.forEach(function (field) {
+      if (Object.prototype.hasOwnProperty.call(src, field)) out[field] = src[field];
+      else delete out[field];
+    });
+    return out;
+  }
+
   function markAckedFromSnap(snapshot, ids) {
+    rememberRows(snapshot);
     var books = splitSnapshot(snapshot);
     (ids || BOOK_IDS).forEach(function (id) {
       lastAcked[id] = bookPayload(books[id], id);
@@ -1557,8 +1660,18 @@
     return hits;
   }
 
+  /**
+   * ROWS-V2: generic fields are row-owned and reach followers through the
+   * change feed. A book pull is served from the stale-while-revalidate wire,
+   * so right after a row commit it can still carry the old row — applying it
+   * put the old value back on screen and the next save sent it as an edit.
+   * Book pulls keep the local value of every row-owned field, except the one
+   * full pull after a `*` (restore) in the feed.
+   */
+  var entityFieldsFromNextPull = false;
   function applyPulledBooks(local, books, skip) {
     var out = Object.assign({}, local);
+    var keepRows = !!C && !entityFieldsFromNextPull;
     var skipSet = skip || {};
     var slices = dirtySlices(local);
     BOOK_IDS.forEach(function (id) {
@@ -1567,6 +1680,7 @@
       if (!isPlainObject(book)) return;
       BOOK_FIELDS[id].forEach(function (field) {
         if (!(field in book)) return;
+        if (keepRows && C.specForField(field)) return;
         if (field === "people") {
           out.people = restoreLocalPeople(
             mergeKeepPeopleClient(out.people, book.people),
@@ -1714,8 +1828,14 @@
           if (cid === "months") {
             personHits = personHits.concat(overlappingPersonMonths(lastAcked[cid], split[cid], serverBook));
           }
-          split[cid] = rebaseBook(cid, split[cid], serverBook);
-          lastAcked[cid] = bookPayload(serverBook, cid);
+          // Row-owned fields are not the book's to settle (book PATCH ignores
+          // them; rows + the change feed own them). Taking the server book's
+          // copy into the baseline or the rebased local book made a value the
+          // screen never took look like a local edit to revert.
+          var localBook = split[cid];
+          var prevAck = lastAcked[cid] || {};
+          split[cid] = keepRowOwned(cid, rebaseBook(cid, localBook, serverBook), localBook);
+          lastAcked[cid] = keepRowOwned(cid, bookPayload(serverBook, cid), prevAck);
           lastHashes[cid] = stableStringify(lastAcked[cid]);
         });
         if (personHits.length) {
@@ -1792,8 +1912,25 @@
     var ackedOrg = lastAcked.org || {};
     var prevPeople = peopleById(ackedOrg.people);
     var nextPeople = peopleById(snap.people);
+    // Compare people by content. `rev` is server metadata the people list /
+    // row GETs put on each person, and the SPA's hydrate fills empty defaults
+    // ([] lists, password ""): neither is an edit. Without this every load or
+    // live apply re-saved all people (180 PATCHes holding the save — and the
+    // live view — for many seconds). Clearing a field that had a value still
+    // differs from the baseline, so real edits are unaffected.
+    function personContent(p) {
+      if (!isPlainObject(p)) return p;
+      var c = {};
+      Object.keys(p).forEach(function (k) {
+        var v = p[k];
+        if (k === "rev" || v === "" || v === null || v === undefined) return;
+        if (Array.isArray(v) && v.length === 0) return;
+        c[k] = v;
+      });
+      return c;
+    }
     Object.keys(nextPeople).forEach(function (id) {
-      if (!eq(nextPeople[id], prevPeople[id])) {
+      if (!eq(personContent(nextPeople[id]), personContent(prevPeople[id]))) {
         ops.push({
           kind: "people",
           url: "/api/people/" + encodeURIComponent(id),
@@ -1882,8 +2019,7 @@
 
   function ackedSlice(op) {
     if (op.spec) {
-      var acked = lastAcked[op.spec.book] || {};
-      var prevRows = rowsById(op.spec, acked[op.spec.field]);
+      var prevRows = rowsById(op.spec, ackedFieldValue(op.spec));
       return prevRows[op.rowId] ? prevRows[op.rowId].payload : undefined;
     }
     if (op.kind === "people") {
@@ -1925,6 +2061,11 @@
   }
 
   async function saveOneEntity(op, snap) {
+    if (op.spec && !op.deleted && remoteDeletedKeys[op.revKey] && ackedSlice(op) === undefined) {
+      // Re-adding a row someone else deleted: stale screen state, not a create.
+      lastMergeTrace.push({ revKey: op.revKey, kind: "stale-readd-dropped" });
+      return { ok: true, json: { ok: true, deleted: true, payload: op.payload }, op: op, adopted: true, deleted: true };
+    }
     var known = Object.prototype.hasOwnProperty.call(entityRevs, op.revKey);
     var baseRev = known ? Number(entityRevs[op.revKey]) || 0 : 0;
     var attempts = 0;
@@ -1957,13 +2098,14 @@
         }
         baseRev = serverRev;
         if (serverDeleted && !op.deleted) {
-          if (base === undefined) {
+          if (base === undefined && !knownRowKeys[op.revKey]) {
             // I never had this row: it is a genuine create that collided with
             // an old tombstone id. Re-create it on top of the tombstone.
             continue;
           }
           // They deleted the row while I edited it. The delete stands; my
           // edit is dropped rather than resurrecting the row.
+          remoteDeletedKeys[op.revKey] = 1;
           lastMergeTrace.push({ revKey: op.revKey, kind: "deleted-by-other" });
           return { ok: true, json: result.json, op: op, adopted: true, deleted: true };
         }
@@ -1975,6 +2117,10 @@
           // I deleted; they changed it meanwhile. The explicit delete stands.
           continue;
         }
+        if (eq(serverPayload, op.payload)) {
+          // The server already holds exactly my row: adopt its rev, no write.
+          return { ok: true, json: result.json, op: op, adopted: true, deleted: false };
+        }
         if (eq(serverPayload, base)) {
           // Nobody else touched it; I just did not know the rev. Resend as-is.
           continue;
@@ -1982,6 +2128,10 @@
         var trace = [];
         var merged = merge3(base, op.payload, serverPayload, trace);
         lastMergeTrace.push({ revKey: op.revKey, kind: "merged", clashes: trace });
+        if (eq(merged, serverPayload)) {
+          // The server already holds exactly the merged row: nothing to write.
+          return { ok: true, json: result.json, op: op, adopted: true, deleted: false };
+        }
         op.payload = merged;
         op.merged = true;
         continue;
@@ -2171,11 +2321,27 @@
       };
     }
     var corrected = foldEntityResults(snap, results);
-    markEntityFieldsAcked(corrected, ops);
-    if (corrected !== snap && liveHooks && typeof liveHooks.apply === "function") {
+    // Without UI hooks the caller takes `snapshot: corrected` from the result.
+    var took = corrected === snap || !liveHooks || typeof liveHooks.apply !== "function";
+    if (!took) {
       try {
-        liveHooks.apply(Object.assign({}, corrected, { bookGens: Object.assign({}, lastGens) }), "live-entity");
-      } catch (err) {}
+        took = liveHooks.apply(Object.assign({}, corrected, { bookGens: Object.assign({}, lastGens) }), "live-entity") !== false;
+      } catch (err) {
+        took = false;
+      }
+    }
+    if (took) {
+      markEntityFieldsAcked(corrected, ops);
+    } else {
+      // The UI refused the merged rows (it is still busy with this save). Keep
+      // the baseline on what the UI shows and forget the merged rows' new rev:
+      // the next save then 409-merges against the server instead of sending
+      // the UI's pre-merge copy at the current rev (a silent revert of the
+      // other user's fields). The change feed brings the merged row to the UI.
+      markEntityFieldsAcked(snap, ops);
+      results.forEach(function (r) {
+        if (r && r.ok && r.op && (r.adopted || r.op.merged)) delete entityRevs[r.op.revKey];
+      });
     }
     lastSaveMeta = {
       via: "ENTITY",
@@ -2185,7 +2351,7 @@
       applied: ops.map(function (op) { return op.url; }),
       merged: results.filter(function (r) { return r && (r.adopted || (r.op && r.op.merged)); }).length,
     };
-    return { ok: true, applied: ops.map(function (op) { return op.url; }), ops: ops, snapshot: corrected };
+    return { ok: true, applied: ops.map(function (op) { return op.url; }), ops: ops, snapshot: took ? corrected : snap };
   }
 
   async function save(snapshot) {
@@ -2555,8 +2721,7 @@
       );
       var tookEntities = true;
       if (typeof opts.apply === "function") tookEntities = opts.apply(local, "live-entity") !== false;
-      if (tookEntities) commitPendingAcks();
-      else discardPendingAcks();
+      if (tookEntities) runAcks(entityPull.acks);
       if (entityPull.types.people) lastGens.org = Math.max(Number(lastGens.org) || 0, Number(remoteGens.org) || 0);
       if (entityPull.types["reward-records"] || entityPull.types["month-records"] || entityPull.types.reward_records || entityPull.types.month_records) {
         lastGens.months = Math.max(Number(lastGens.months) || 0, Number(remoteGens.months) || 0);
@@ -2624,6 +2789,7 @@
       applied = opts.apply(merged, "live") !== false;
     }
     if (applied) {
+      entityFieldsFromNextPull = false;
       var after = typeof opts.getSnapshot === "function" ? opts.getSnapshot() : merged;
       var afterBooks = splitSnapshot(after);
       toPull.forEach(function (id) {
@@ -2794,6 +2960,9 @@
   }
 
   function resetForTests() {
+    knownRowKeys = {};
+    remoteDeletedKeys = {};
+    entityFieldsFromNextPull = false;
     liveSeq = 0;
     lastChangesAt = 0;
     changesInFlight = null;

@@ -7,6 +7,8 @@
  *   const rows = await db.query("select $1::int as n", [1]);
  *   await db.end();
  */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck -- untyped test-only wire client (imported by src/lib/test-db.ts)
 import net from "node:net";
 
 const enc = new TextEncoder();

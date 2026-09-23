@@ -35,7 +35,7 @@ describe("rewards import parse", () => {
   });
 
   it("parses the dummy template xlsx", async () => {
-    const buf = readFileSync("/workspace/public/rewards-template.xlsx");
+    const buf = readFileSync(new URL("../../public/rewards-template.xlsx", import.meta.url));
     const { rows, errors } = await parseXlsx(buf, inflate);
     assert.deepEqual(errors, []);
     assert.ok(rows.length >= 10);

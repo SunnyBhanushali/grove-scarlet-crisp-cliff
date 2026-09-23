@@ -130,7 +130,7 @@ test("two sessions: A PATCH people + reward-records → B tick JSON → entity G
     JSON.stringify(tickJson),
   );
 
-  const sse = encodeSse(tickJson.at, tickJson.bookGens, tickJson.entities);
+  const sse = encodeSse(tickJson.at, tickJson.bookGens as Parameters<typeof encodeSse>[1], tickJson.entities);
   const ssePayload = JSON.parse(sse.replace(/^data: /, "").trim()) as typeof tickJson;
   console.log("G9_LIVE_2_SSE_JSON", JSON.stringify(ssePayload));
 

@@ -3,7 +3,19 @@
  * The SPA's live-entity `apply` only wrote the four hot collections into the
  * store. Every collection is a row now, so the same apply must also take the
  * generic fields (roles, plans, notices, targets graph, …) that
- * apms-sync.js merged. Nothing else in the bundle changes.
+ * apms-sync.js merged.
+ *
+ * The `live` (book pull) apply marks its own setState as local work: the store
+ * subscription sets the dirty flag D while `w` (applying) suppresses the save
+ * that would clear it, so D stayed true until the user's next edit — and every
+ * later live-entity apply was refused (`if(D.current||…)return!1`). The apply
+ * only runs on a clean screen, so D is cleared right after it.
+ *
+ * The same `w` window also swallowed real edits: a change made within 800 ms
+ * of a book-pull apply set D but scheduled no save, so the edit sat unsaved
+ * (and the screen stayed blocked) until the next edit. The save is scheduled
+ * regardless now — an echo of an applied snapshot diffs to nothing (SKIP).
+ * Nothing else in the bundle changes.
  *
  *   node scripts/stamp-p0as78-rows-v2.mjs
  */
@@ -18,6 +30,13 @@ const OLD =
 const NEW =
   "K.setState(Object.assign(window.__apmsSync&&window.__apmsSync.pickDataFields?window.__apmsSync.pickDataFields(t):{},{people:t.people,rewardRecords:t.rewardRecords,records:t.records,targetCells:t.targetCells,bookGens:t.bookGens||K.getState().bookGens,notebookUpdatedAt:t.notebookUpdatedAt}))";
 
+const LIVE_OLD = "w.current=!0;let ok=h(t,`live`);setTimeout(()=>{w.current=!1},800);return ok";
+const LIVE_NEW = "w.current=!0;let ok=h(t,`live`);D.current=!1;setTimeout(()=>{w.current=!1},800);return ok";
+const DIRTY_OLD = "function _(){D.current=!0;l.current&&!w.current&&(";
+const DIRTY_NEW = "function _(){D.current=!0;l.current&&(";
+const FOCUS_OLD = "(w.current=!0,h(t,`live`),setTimeout(()=>{w.current=!1},800))";
+const FOCUS_NEW = "(w.current=!0,h(t,`live`),D.current=!1,setTimeout(()=>{w.current=!1},800))";
+
 function must(cond, msg) {
   if (!cond) throw new Error(msg);
 }
@@ -25,7 +44,13 @@ function must(cond, msg) {
 export function stampRoutes(src) {
   const n = src.split(OLD).length - 1;
   must(n === 3, `live-entity apply: expected 3 sites, got ${n}`);
-  return src.split(OLD).join(NEW);
+  const live = src.split(LIVE_OLD).length - 1;
+  must(live === 3, `live apply: expected 3 sites, got ${live}`);
+  const focus = src.split(FOCUS_OLD).length - 1;
+  must(focus === 1, `focus apply: expected 1 site, got ${focus}`);
+  const dirty = src.split(DIRTY_OLD).length - 1;
+  must(dirty === 1, `dirty scheduler: expected 1 site, got ${dirty}`);
+  return src.split(OLD).join(NEW).split(LIVE_OLD).join(LIVE_NEW).split(FOCUS_OLD).join(FOCUS_NEW).split(DIRTY_OLD).join(DIRTY_NEW);
 }
 
 export function stampHtml(html) {

@@ -325,7 +325,7 @@ export async function commitEntityRowToBook(
   spec: { field: string; book: BookId; shape: string; kind: string },
   row: { kind: string; id: string; k1: string | null; k2: string | null; payload: Record<string, unknown>; rev: number; deleted: boolean },
 ): Promise<Record<string, number>> {
-  const { collections } = await import("./apms-collections");
+  const { collections } = await import("./apms-collections.ts");
   const run = async () => {
     const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
     const next: Snapshot = { ...existing };

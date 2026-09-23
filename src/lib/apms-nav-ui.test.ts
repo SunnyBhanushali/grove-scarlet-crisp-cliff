@@ -65,7 +65,7 @@ test("applySession wins over persisted localStorage view:home", () => {
     currentUserId: "p-admin",
     selectedPersonId: null,
   };
-  const merged = applySession(persisted);
+  const merged = applySession(persisted) as typeof persisted & { selectedFunctionId?: unknown };
   assert.equal(merged.view, "org-people");
   assert.equal(merged.selectedPersonId, "p-tushar");
   assert.equal(merged.selectedFunctionId, "fn-ops");
@@ -77,7 +77,7 @@ test("boot session survives a hydrate that writes home into sessionStorage", () 
   resetSessionForTests();
   saveSession({ view: "rewards", selectedAwardId: "aw-1" });
   saveSession({ view: "home", selectedAwardId: null });
-  const merged = applySession({ view: "home", people: [] });
+  const merged = applySession({ view: "home", people: [] }) as { view: string; selectedAwardId?: unknown };
   assert.equal(merged.view, "rewards");
   assert.equal(merged.selectedAwardId, "aw-1");
 });

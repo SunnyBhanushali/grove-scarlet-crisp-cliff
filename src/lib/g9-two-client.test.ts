@@ -42,7 +42,7 @@ test("G9 two-client: published SSE entities drive B GET /api/people (no hand pul
   };
   sync.noteLoaded(localB);
   const urls: string[] = [];
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   sync.install((async (input: RequestInfo | URL) => {
     const url = String(input);
     urls.push(url);
@@ -111,7 +111,7 @@ test("G9 hop A race: tick wrapFetch before setLiveHooks still GETs reward-record
   };
   sync.noteLoaded(localB);
   const urls: string[] = [];
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const tick = {
     at: 77,
     bookGens: { org: 1, plans: 1, months: 5, targets: 1 },

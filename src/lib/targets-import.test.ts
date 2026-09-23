@@ -22,7 +22,7 @@ describe("targets import parse", () => {
   });
 
   it("parses the dummy template xlsx", async () => {
-    const buf = readFileSync("/workspace/public/targets-template.xlsx");
+    const buf = readFileSync(new URL("../../public/targets-template.xlsx", import.meta.url));
     const { rows, errors } = await parseXlsx(buf, inflate);
     assert.deepEqual(errors, []);
     assert.equal(rows.length, 38);
@@ -52,7 +52,7 @@ describe("targets import parse", () => {
 
 describe("targets import apply", () => {
   it("nests only from parent_group and rolls groups as blank floors", async () => {
-    const buf = readFileSync("/workspace/public/targets-template.xlsx");
+    const buf = readFileSync(new URL("../../public/targets-template.xlsx", import.meta.url));
     const { rows, errors } = await parseXlsx(buf, inflate);
     assert.equal(errors.length, 0);
     const seed = JSON.parse(readFileSync(new URL("./company-seed.json", import.meta.url), "utf8"));

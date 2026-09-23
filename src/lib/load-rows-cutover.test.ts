@@ -296,7 +296,7 @@ test("A7 month change does not snap another tab back", async () => {
     );
   }) as typeof fetch;
   sync.install(fake);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const result = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => local,

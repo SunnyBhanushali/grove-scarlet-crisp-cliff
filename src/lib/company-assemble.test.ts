@@ -142,8 +142,13 @@ test("PATCH /api/company strip ignores people / records / rewardRecords / target
     "draft",
   );
   assert.equal((result.snapshot.targetCells as { c1?: { actual?: number } }).c1?.actual, 1);
-  assert.equal((result.snapshot.trash as unknown[]).length, 0);
-  assert.ok((result.snapshot.roles as Record<string, unknown>).n);
+  // ROWS-V2: trash / roles are entity rows — a book PATCH cannot write them.
+  assert.equal((result.snapshot.trash as unknown[]).length, 1);
+  assert.equal((result.snapshot.roles as Record<string, unknown>).n, undefined);
+  // Without entity ownership (kill switch) the book path still writes them.
+  const legacy = applyBookPatches(stored, prepareBookPatch({ org: { trash: [], roles: { r: { id: "r" }, n: { id: "n" } } } }, stored, new Set()), { org: 4 });
+  assert.equal((legacy.snapshot.trash as unknown[]).length, 0);
+  assert.ok((legacy.snapshot.roles as Record<string, unknown>).n);
 });
 
 test("empty-trash org PATCH cannot resurrect a row-deleted person on overlay", () => {

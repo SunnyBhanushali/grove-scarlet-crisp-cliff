@@ -159,7 +159,7 @@ test("PATCH people publishes live gens; B pullLive sees the id without a full re
     throw new Error("pullLive must GET the one person, not books: " + url);
   }) as typeof fetch;
   sync.install(fake);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,
@@ -201,7 +201,7 @@ test("at-only SSE tick still pulls people (does not skip because gens missing)",
     );
   }) as typeof fetch;
   sync.install(fake);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,
@@ -271,7 +271,7 @@ test("PATCH reward-record lock → assemble + B pullLive sees the lock", async (
     }
     throw new Error("lock pullLive must GET the reward row, not books: " + url);
   }) as typeof fetch);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,
@@ -318,7 +318,7 @@ test("A PATCH people 200 → B pullLive sees name, B conflict banner hidden", as
     }
     throw new Error("idle B must not download books/snapshotJson: " + url);
   }) as typeof fetch);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,
@@ -361,7 +361,7 @@ test("A PATCH reward-record on X, B idle on Settings → no banner, lock in stat
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }) as typeof fetch);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,
@@ -419,7 +419,7 @@ test("B dirty on X+month, A saves X+month → row conflict only, no global bar; 
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }) as typeof fetch);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => dirtyB,
@@ -504,7 +504,7 @@ test("PATCH people publishes people hint; B GET /api/people/:id", async () => {
     }
     throw new Error("must GET the person entity: " + url);
   }) as typeof fetch);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const pulled = await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,
@@ -573,7 +573,7 @@ test("hyphen reward-records hint GETs /api/reward-records/:period/:id", async ()
     }
     throw new Error("must GET reward-records entity: " + url);
   }) as typeof fetch);
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   await sync.pullLive({
     isBlocked: false,
     getSnapshot: () => localB,
@@ -624,7 +624,7 @@ test("G9 hop A+B: published SSE/tick drives B entity GET without hand pullLive (
   };
   sync.noteLoaded(localB);
   const urls: string[] = [];
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   sync.install((async (input: RequestInfo | URL) => {
     const url = String(input);
     urls.push(url);
@@ -694,7 +694,7 @@ test("G9 hop A+B: tick GET wrapFetch (no hand pullLive) GETs reward-records", as
   };
   sync.noteLoaded(localB);
   const urls: string[] = [];
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const fake = (async (input: RequestInfo | URL) => {
     const url = String(input);
     urls.push(url);
@@ -761,7 +761,7 @@ test("G9 two-client: live at<=local still GETs /api/people from entities payload
   };
   sync.noteLoaded(localB);
   const urls: string[] = [];
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   sync.install((async (input: RequestInfo | URL) => {
     const url = String(input);
     urls.push(url);
@@ -826,7 +826,7 @@ test("G9 hop A race: tick wrapFetch before setLiveHooks still GETs entity after 
   };
   sync.noteLoaded(localB);
   const urls: string[] = [];
-  let applied: Record<string, unknown> | null = null;
+  let applied = null as Record<string, unknown> | null;
   const tick = {
     at: 77,
     bookGens: { org: 1, plans: 1, months: 5, targets: 1 },
@@ -854,16 +854,20 @@ test("G9 hop A race: tick wrapFetch before setLiveHooks still GETs entity after 
         { status: 200, headers: { "content-type": "application/json" } },
       );
     }
+    if (url.includes("/api/changes")) {
+      return new Response(JSON.stringify({ ok: true, seq: 0, changes: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     throw new Error("race must GET reward-records, not " + url);
   }) as typeof fetch);
 
   await (globalThis.fetch as typeof fetch)("/api/company-tick", { credentials: "include" });
   await waitMs(20);
-  assert.equal(
-    urls.some((u) => u.includes("/api/reward-records/")),
-    false,
-    "must not pull before hooks: " + JSON.stringify(urls),
-  );
+  // via=init: the row GET may start before hooks exist (fetchHintNow); what
+  // matters is that nothing is applied until hooks attach, then it is.
+  assert.equal(applied === null, true, "applied before hooks");
 
   sync.setLiveHooks({
     isBlocked: false,
