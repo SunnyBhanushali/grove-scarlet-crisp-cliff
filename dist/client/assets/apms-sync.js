@@ -1502,7 +1502,7 @@
     return out;
   }
 
-  async function pullPendingEntities(local, slices) {
+  async function pullPendingEntities(local, slices, getNow) {
     if (!pendingEntities.length) return { local: local, fetched: [], types: {}, acks: [] };
     var batch = pendingEntities.slice(0, LIVE_ENTITY_CAP);
     pendingEntities = pendingEntities.slice(LIVE_ENTITY_CAP);
@@ -1510,6 +1510,7 @@
     var types = {};
     var out = local;
     var pullAcks = [];
+    var bodies = [];
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     for (var i = 0; i < batch.length; i++) {
       var hint = batch[i];
@@ -1535,12 +1536,26 @@
         seenEntityKeys[entityHintKey(hint)] = 1;
         fetched.push(hint);
         types[hint.type] = 1;
-        var before = out;
-        out = withAcks(pullAcks, function () { return mergeEntityPayload(before, hint, body, slices); });
+        bodies.push({ hint: hint, body: body });
       } catch (err) {
         pendingEntities.push(hint);
       }
     }
+    // Merge onto the screen as it is now, not as it was before the GETs: the
+    // change feed may have applied other rows meanwhile (another user's new
+    // target), and a result built on the older snapshot took them off the
+    // screen while the baseline kept them, so the next save deleted them.
+    if (bodies.length && typeof getNow === "function") {
+      var now = getNow();
+      if (isPlainObject(now)) {
+        out = now;
+        slices = dirtySlices(now);
+      }
+    }
+    bodies.forEach(function (fb) {
+      var before = out;
+      out = withAcks(pullAcks, function () { return mergeEntityPayload(before, fb.hint, fb.body, slices); });
+    });
     return { local: out, fetched: fetched, types: types, acks: pullAcks };
   }
 
@@ -2757,8 +2772,13 @@
     // Without UI hooks the caller takes `snapshot: corrected` from the result.
     var took = corrected === snap || !liveHooks || typeof liveHooks.apply !== "function";
     if (!took) {
+      // The screen gets the server's outcomes on top of what it shows now
+      // (rows the feed applied during this save stay); the baseline below is
+      // still acked from what was sent.
+      var uiNow = typeof liveHooks.getSnapshot === "function" ? liveHooks.getSnapshot() : null;
+      var uiCorrected = isPlainObject(uiNow) ? foldEntityResults(stripUi(uiNow), results) : corrected;
       try {
-        took = liveHooks.apply(Object.assign({}, corrected, { bookGens: Object.assign({}, lastGens) }), "live-entity") !== false;
+        took = liveHooks.apply(Object.assign({}, uiCorrected, { bookGens: Object.assign({}, lastGens) }), "live-entity") !== false;
       } catch (err) {
         took = false;
       }
@@ -3180,7 +3200,7 @@
         queueEntityHint(hint);
       });
     }
-    var entityPull = await pullPendingEntities(local, slices);
+    var entityPull = await pullPendingEntities(local, slices, opts.getSnapshot);
     var entityFetched = entityPull.fetched || [];
     if (entityFetched.length) {
       local = entityPull.local;

@@ -566,6 +566,41 @@ test("acks are scoped per flow: the feed committing its rows does not ack rows a
   }
 });
 
+test("a row the feed applies while a hint GET is in flight stays on screen, and the next save does not delete it", skip, async () => {
+  const { sql, db } = await openSql();
+  try {
+    const base = baseSnap();
+    await importEntitiesFromSnapshot(sql, base, "seed");
+    sync.resetForTests();
+    sync.noteLoaded(base);
+    sync.setLiveSeq(await latestSeq(sql));
+    await patchEntityRow(sql, entityIdFromParts("brands", "b2"), { baseRev: 1, payload: { id: "b2", name: "Home+" } }, "other");
+    const store = storeFetch(sql, []);
+    let releaseSlow: () => void = () => {};
+    const slow = new Promise<void>((r) => { releaseSlow = r; });
+    sync.install((async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/e/brands/b2") await slow;
+      return store(input, init);
+    }) as typeof fetch);
+    let ui: Record<string, unknown> = base;
+    const hooks = { getSnapshot: () => ui, isBlocked: () => false, apply: (s: Record<string, unknown>) => { ui = s; return true; }, remember: () => {} };
+    sync.setLiveHooks(hooks);
+    const pulling = sync.pullLive({ entities: [{ type: "e:brands", id: "b2" }], getSnapshot: () => ui, isBlocked: false, apply: hooks.apply, remember: () => {} });
+    await new Promise((r) => setTimeout(r, 30)); // b2 GET in flight
+    // Another user creates a notice; the feed puts it on screen meanwhile.
+    await patchEntityRow(sql, entityIdFromParts("notices", "n2"), { baseRev: 0, payload: { id: "n2", title: "New", status: "open" } }, "other");
+    await sync.pollChanges();
+    assert.ok((ui.notices as Array<{ id: string }>).some((n) => n.id === "n2"), "feed applied n2");
+    releaseSlow();
+    await pulling;
+    assert.equal((ui.brands as Array<{ id: string; name: string }>).find((b) => b.id === "b2")?.name, "Home+", "pulled row applied");
+    assert.ok((ui.notices as Array<{ id: string }>).some((n) => n.id === "n2"), "n2 still on screen after the pull");
+    assert.deepEqual(sync.collectEntityOps(ui).filter((o) => o.deleted).map((o) => o.url), [], "nothing to delete");
+  } finally {
+    db.end();
+  }
+});
+
 test("a row another user deleted is not re-created when stale screen state re-adds it", skip, async () => {
   const { sql, db } = await openSql();
   try {
