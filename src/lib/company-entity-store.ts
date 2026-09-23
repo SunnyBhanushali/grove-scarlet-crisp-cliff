@@ -232,16 +232,17 @@ export async function changesSince(
     );
     return rows.map((r) => ({ ...r, seq: Number(r.seq), rev: Number(r.rev), deleted: !!r.deleted }));
   }
+  await ensureFeedSchema(sql);
   // Collapse to the latest change per row and join the current payload so a
   // follower can apply the feed in one round trip.
   const rows = await sql.query<ChangeRow & { payload: unknown; current_rev: number | null; current_deleted: string | null }>(
     `with c as (
-       select seq, kind, id, k1, k2, rev, deleted, at from entity_log where seq > $1 order by seq asc limit $2
+       select seq, kind, id, k1, k2, rev, deleted, at, payload as log_payload from entity_log where seq > $1 order by seq asc limit $2
      ), latest as (
        select distinct on (kind, id) * from c order by kind, id, seq desc
      )
      select l.seq, l.kind, l.id, l.k1, l.k2, l.rev, l.deleted, l.at,
-            e.payload, e.rev as current_rev, e.deleted_at as current_deleted
+            coalesce(e.payload, l.log_payload) as payload, e.rev as current_rev, e.deleted_at as current_deleted
        from latest l left join entities e on e.kind = l.kind and e.id = l.id
       order by l.seq asc`,
     params,
@@ -275,6 +276,58 @@ async function appendLog(sql: HotSql, row: StoredEntity, updatedBy: string): Pro
     [row.kind, row.id, row.k1, row.k2, row.rev, row.deleted, updatedBy],
   );
   return Number(rows[0]?.seq) || 0;
+}
+
+/**
+ * Live does not apply migration files on boot, so the one column the hot feed
+ * needs (0009_entity_log_payload.sql) is ensured here, once per process.
+ * `add column if not exists` is idempotent and cheap.
+ */
+let feedSchemaReady: Promise<void> | null = null;
+export function ensureFeedSchema(sql: HotSql): Promise<void> {
+  if (!feedSchemaReady) {
+    feedSchemaReady = sql
+      .query("alter table entity_log add column if not exists payload jsonb")
+      .then(() => undefined)
+      .catch((err) => {
+        feedSchemaReady = null;
+        throw err;
+      });
+  }
+  return feedSchemaReady;
+}
+
+export function resetFeedSchemaForTests(): void {
+  feedSchemaReady = null;
+}
+
+/** Kinds that live in the hot tables, not in `entities`; their feed rows carry the payload. */
+export const HOT_FEED_KINDS = new Set(["people", "month-records", "reward-records", "target-cells"]);
+
+/**
+ * Append a hot-table commit (people / month_records / reward_records /
+ * target_cells) to the change feed, payload included, so followers get it on
+ * the same channel as every other row. `k1` = person id or cell id, `k2` = period.
+ */
+export async function appendHotTableChange(
+  sql: HotSql,
+  kind: string,
+  k1: string,
+  k2: string | null,
+  rev: number,
+  deleted: boolean,
+  payload: Record<string, unknown>,
+  updatedBy: string,
+): Promise<number> {
+  const id = k2 ? `${k1}${collections.SEP}${k2}` : k1;
+  await ensureFeedSchema(sql);
+  const rows = await sql.query<{ seq: number }>(
+    "insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by, payload) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning seq",
+    [kind, id, k1, k2, rev, deleted, updatedBy, JSON.stringify(deleted ? {} : payload)],
+  );
+  const seq = Number(rows[0]?.seq) || 0;
+  await notifyPg(sql, { kind, id, k1, k2, rev, deleted, seq });
+  return seq;
 }
 
 async function notifyPg(sql: HotSql, payload: Record<string, unknown>): Promise<void> {
@@ -563,6 +616,7 @@ export async function ensureEntitiesFromBooks(
 export function resetEntityImportForTests(): void {
   importedKnown = false;
   importInFlight = null;
+  feedSchemaReady = null;
 }
 
 /** Which book a kind belongs to (for live gens). */

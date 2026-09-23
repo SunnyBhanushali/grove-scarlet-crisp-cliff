@@ -2,7 +2,7 @@
  * Aliens APMS per-book sync (Google Docs / Zoho grade).
  * PATCH only dirty books with baseGen. 409 rebases that book. Live pulls
  * only clean books whose generation moved. UI nav never rides the wire.
- * Stamp: p0as78 — ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
+ * Stamp: p0as79 — HOT-FEED people/month/reward/cells on /api/changes; id-list removals stick. p0as78 ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
  */
 (function (global) {
   "use strict";
@@ -227,8 +227,43 @@
       });
       return list;
     }
+    if (isPrimitiveList(mine) && isPrimitiveList(theirs)) {
+      // Lists of ids (target root order, members, setupDone, …): a removal by
+      // either side sticks, an addition by either side is kept, my order wins.
+      var baseList = isPrimitiveList(base) ? base : [];
+      var inBaseP = {};
+      baseList.forEach(function (x) { inBaseP[pk(x)] = 1; });
+      var inMineP = {};
+      mine.forEach(function (x) { inMineP[pk(x)] = 1; });
+      var inTheirsP = {};
+      theirs.forEach(function (x) { inTheirsP[pk(x)] = 1; });
+      var outP = [];
+      var seenP = {};
+      mine.concat(theirs).forEach(function (x) {
+        var k = pk(x);
+        if (seenP[k]) return;
+        seenP[k] = 1;
+        var removedByMe = inBaseP[k] && !inMineP[k];
+        var removedByThem = inBaseP[k] && !inTheirsP[k];
+        if (removedByMe || removedByThem) return;
+        outP.push(x);
+      });
+      return outP;
+    }
     trace.push({ path: path, mine: mine, theirs: theirs });
     return mine;
+  }
+
+  function isPrimitiveList(v) {
+    if (!Array.isArray(v)) return false;
+    for (var i = 0; i < v.length; i++) {
+      var t = typeof v[i];
+      if (t !== "string" && t !== "number") return false;
+    }
+    return true;
+  }
+  function pk(x) {
+    return typeof x + ":" + String(x);
   }
 
   /**
@@ -1030,6 +1065,10 @@
           if (!ch || !ch.kind) return;
           if (ch.kind === "*") { resync = true; entityFieldsFromNextPull = true; return; }
           if (!next) return;
+          if (HOT_FEED[ch.kind]) {
+            next = withAcks(feedAcks, function () { return mergeHotRow(next, ch.kind, ch); });
+            return;
+          }
           next = withAcks(feedAcks, function () { return mergeGenericRow(next, ch.kind, ch); });
         });
         if (resync) {
@@ -1195,6 +1234,97 @@
     var merged = merge3(ackedRow ? ackedRow.payload : undefined, localRow.payload, row.payload, []);
     applyGenericRow({}, spec, row, false, true); // queues the ack of THEIR row
     return applyGenericRow(local, spec, { kind: row.kind, id: id, k1: k1, k2: k2, payload: merged }, false, false);
+  }
+
+  var HOT_FEED = { "people": "people", "month-records": "month_records", "reward-records": "reward_records", "target-cells": "target_cells" };
+
+  /** Local + acked copies of one hot-table row, in the shape the SPA store keeps. */
+  function hotRowPair(kind, k1, k2, local) {
+    if (kind === "people") {
+      var lp = peopleById(local.people)[k1];
+      var ap = peopleById((lastAcked.org && lastAcked.org.people) || [])[k1];
+      return { local: lp, acked: ap };
+    }
+    if (kind === "target-cells") {
+      var lc = isPlainObject(local.targetCells) ? local.targetCells[k1] : undefined;
+      var ac = lastAcked.targets && isPlainObject(lastAcked.targets.targetCells) ? lastAcked.targets.targetCells[k1] : undefined;
+      return { local: lc, acked: ac };
+    }
+    var field = kind === "month-records" ? "records" : "rewardRecords";
+    var lt = isPlainObject(local[field]) && isPlainObject(local[field][k2]) ? local[field][k2][k1] : undefined;
+    var at = lastAcked.months && isPlainObject(lastAcked.months[field]) && isPlainObject(lastAcked.months[field][k2]) ? lastAcked.months[field][k2][k1] : undefined;
+    return { local: lt, acked: at };
+  }
+
+  /** Fold one server row into the acked baseline (queued until the UI takes the snapshot). */
+  function ackHotRow(kind, k1, k2, payload, deleted) {
+    pushAck(function () {
+      if (kind === "people") {
+        lastAcked.org = lastAcked.org || {};
+        var rows = Array.isArray(lastAcked.org.people) ? lastAcked.org.people.slice() : [];
+        var idx = -1;
+        for (var i = 0; i < rows.length; i++) if (rows[i] && String(rows[i].id) === k1) { idx = i; break; }
+        if (deleted) { if (idx >= 0) rows.splice(idx, 1); }
+        else if (idx >= 0) rows[idx] = payload;
+        else rows.push(payload);
+        lastAcked.org.people = rows;
+        lastHashes.org = stableStringify(bookPayload(lastAcked.org, "org"));
+        return;
+      }
+      if (kind === "target-cells") {
+        lastAcked.targets = lastAcked.targets || {};
+        var cells = Object.assign({}, isPlainObject(lastAcked.targets.targetCells) ? lastAcked.targets.targetCells : {});
+        if (deleted) delete cells[k1];
+        else cells[k1] = payload;
+        lastAcked.targets.targetCells = cells;
+        lastHashes.targets = stableStringify(bookPayload(lastAcked.targets, "targets"));
+        return;
+      }
+      var field = kind === "month-records" ? "records" : "rewardRecords";
+      lastAcked.months = lastAcked.months || {};
+      var tree = Object.assign({}, isPlainObject(lastAcked.months[field]) ? lastAcked.months[field] : {});
+      var month = Object.assign({}, isPlainObject(tree[k2]) ? tree[k2] : {});
+      if (deleted) delete month[k1];
+      else month[k1] = payload;
+      tree[k2] = month;
+      lastAcked.months[field] = tree;
+      lastHashes.months = stableStringify(bookPayload(lastAcked.months, "months"));
+    });
+  }
+
+  /**
+   * ROWS-V2: a hot-table change (people / month-records / reward-records /
+   * target-cells) arriving on the change feed. Same rules as mergeGenericRow:
+   * clean row → take theirs and ack it; dirty row → 3-way merge, keep dirty;
+   * deleted → gone. The rev is learned only when the UI takes the snapshot.
+   */
+  function mergeHotRow(local, kind, ch) {
+    var table = HOT_FEED[kind];
+    if (!table) return local;
+    var k1 = ch.k1 != null ? String(ch.k1) : String(ch.id || "");
+    var k2 = ch.k2 != null ? String(ch.k2) : null;
+    if (!k1) return local;
+    if ((kind === "month-records" || kind === "reward-records") && !k2) return local;
+    var payload = isPlainObject(ch.payload) ? ch.payload : {};
+    var deleted = !!ch.deleted;
+    var revKey = kind === "people" || kind === "target-cells" ? entityRevKey(table, k1) : entityRevKey(table, k2, k1);
+    if (Number.isFinite(Number(ch.rev))) {
+      var learnedRev = Number(ch.rev);
+      pushAck(function () { entityRevs[revKey] = learnedRev; });
+    }
+    var hint = { type: kind, id: k1, period: k2 || undefined };
+    var pair = hotRowPair(kind, k1, k2, local);
+    var localDirty = !eq(pair.local, pair.acked);
+    // Baseline in exactly the shape the screen holds (the store normalises
+    // plan records, stamps cell ids, …) so an untouched row never looks dirty.
+    var theirs = deleted ? undefined : hotRowPair(kind, k1, k2, mergeEntityPayload({}, hint, { ok: true, payload: payload, deleted: false }, {})).local;
+    if (deleted || !localDirty) {
+      ackHotRow(kind, k1, k2, theirs, deleted);
+      return mergeEntityPayload(local, hint, { ok: true, payload: payload, deleted: deleted }, {});
+    }
+    var merged = merge3(pair.acked, pair.local, theirs, []);
+    ackHotRow(kind, k1, k2, theirs, false);
+    return mergeEntityPayload(local, hint, { ok: true, payload: merged, deleted: false }, {});
   }
 
   function mergeEntityPayload(local, hint, body, slices) {
@@ -3034,6 +3164,7 @@
     merge3: merge3,
     collectEntityOps: collectEntityOps,
     mergeGenericRow: mergeGenericRow,
+    mergeHotRow: mergeHotRow,
     pollChanges: pollChanges,
     commitPendingAcks: commitPendingAcks,
     liveSeq: function () { return liveSeq; },

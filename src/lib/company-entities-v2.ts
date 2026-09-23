@@ -162,7 +162,39 @@ export async function overlayEntityFields(sql: HotSql, snapshot: Snapshot, readB
   const { loadEntityFields } = await import("./company-entity-store.ts");
   await ensureEntitiesFromBooks(sql, readBooks);
   const fields = await loadEntityFields(sql);
-  return foldRoleKrocsIntoRoles({ ...snapshot, ...fields });
+  return pruneDanglingTargets(foldRoleKrocsIntoRoles({ ...snapshot, ...fields }));
+}
+
+/**
+ * Safety net for "a deleted target keeps coming back": the month root order
+ * and group memberships are lists of target ids. Whatever path put a deleted
+ * id back into one of them, it is never shown: entries that point at a target
+ * node that no longer exists are dropped on every assemble. Cells and reward
+ * links are left alone (a broken reward link is surfaced, not hidden).
+ */
+export function pruneDanglingTargets(snapshot: Snapshot): Snapshot {
+  const nodes = snapshot.targetNodes;
+  if (!nodes || typeof nodes !== "object" || Array.isArray(nodes)) return snapshot;
+  const live = new Set(Object.keys(nodes as Record<string, unknown>));
+  if (!live.size) return snapshot;
+  const out: Snapshot = { ...snapshot };
+  const order = snapshot.targetRootOrder;
+  if (order && typeof order === "object" && !Array.isArray(order)) {
+    const next: Record<string, unknown> = {};
+    for (const [month, ids] of Object.entries(order as Record<string, unknown>)) {
+      next[month] = Array.isArray(ids) ? ids.filter((id) => live.has(String(id))) : ids;
+    }
+    out.targetRootOrder = next;
+  }
+  const members = snapshot.targetMembers;
+  if (Array.isArray(members)) {
+    out.targetMembers = members.filter((row) => {
+      if (!row || typeof row !== "object") return true;
+      const r = row as Record<string, unknown>;
+      return live.has(String(r.groupId)) && live.has(String(r.memberId));
+    });
+  }
+  return out;
 }
 
 /**

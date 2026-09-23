@@ -8,7 +8,10 @@ import { readFileSync } from "node:fs";
 import type { HotSql } from "./company-hot-tables.ts";
 
 const hotMigration = readFileSync(new URL("../../migrations/0005_hot_tables.sql", import.meta.url), "utf8");
-const entityMigration = readFileSync(new URL("../../migrations/0008_entities.sql", import.meta.url), "utf8");
+const entityMigration =
+  readFileSync(new URL("../../migrations/0008_entities.sql", import.meta.url), "utf8") +
+  "\n" +
+  readFileSync(new URL("../../migrations/0009_entity_log_payload.sql", import.meta.url), "utf8");
 
 export type TestDb = { sql: HotSql; close(): void };
 
@@ -34,7 +37,7 @@ export async function openTestDb(): Promise<TestDb | null> {
   try {
     const { connect, testDbConfig } = await import("../../scripts/mini-pg.mjs");
     const db = await connect(testDbConfig());
-    await db.exec("drop table if exists entities; drop table if exists entity_log; drop table if exists write_ids;");
+    await db.exec("drop table if exists entities; drop table if exists entity_log; drop table if exists write_ids; drop table if exists people; drop table if exists month_records; drop table if exists reward_records; drop table if exists target_cells; drop table if exists tombstones;");
     await db.exec(hotMigration);
     await db.exec(entityMigration);
     return {

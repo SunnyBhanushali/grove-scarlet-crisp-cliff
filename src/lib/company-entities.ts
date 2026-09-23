@@ -11,7 +11,8 @@ import {
 } from "./company-hot-tables.ts";
 import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
 import { loadHotSlices } from "./company-assemble.ts";
-import { publishEntityWrite, hintFromEntityTable } from "./company-live.ts";
+import { publishEntityWrite, hintFromEntityTable, liveTypeFromTable } from "./company-live.ts";
+import { appendHotTableChange } from "./company-entity-store.ts";
 
 export type EntityKey =
   | { table: "people"; id: string }
@@ -451,6 +452,26 @@ async function patchEntityUnlocked(
   }
   const next: EntityRow = { payload, rev: nextRev, deleted: parsed.deleted };
 
+  // ROWS-V2: hot-table commits ride the same change feed as every other row,
+  // so followers no longer depend on the hint channel for these four kinds.
+  let feedSeq = 0;
+  try {
+    const k1 = key.table === "people" || key.table === "target_cells" ? key.id : key.personId;
+    const k2 = key.table === "people" || key.table === "target_cells" ? null : key.period;
+    feedSeq = await appendHotTableChange(
+      sql,
+      liveTypeFromTable(key.table),
+      k1,
+      k2,
+      nextRev,
+      parsed.deleted,
+      key.table === "people" ? (slimPersonForWire(payload) as Record<string, unknown>) : payload,
+      updatedBy,
+    );
+  } catch (err) {
+    console.error("[hot-tables] change-feed append failed; hints still published", err);
+  }
+
   let liveGens: Record<string, number> | undefined;
   try {
     liveGens = await publishEntityWrite(
@@ -486,7 +507,7 @@ async function patchEntityUnlocked(
     console.error("[hot-tables] assemble still missing entity after PATCH", key);
   }
 
-  return { status: 200, body: rowBody(key, next, bookGens ? { bookGens } : {}) };
+  return { status: 200, body: rowBody(key, next, { ...(bookGens ? { bookGens } : {}), ...(feedSeq ? { seq: feedSeq } : {}) }) };
 }
 
 /** In-memory book adapter for tests. Serializes union-merge; never 409s on book gen. */

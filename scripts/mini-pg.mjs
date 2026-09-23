@@ -50,6 +50,22 @@ function convert(text, oid) {
   }
 }
 
+/** Same encoding as node-postgres: JS arrays become Postgres array literals. */
+function pgArray(list) {
+  return (
+    "{" +
+    list
+      .map((x) => {
+        if (x === null || x === undefined) return "NULL";
+        if (Array.isArray(x)) return pgArray(x);
+        const t = typeof x === "object" ? JSON.stringify(x) : String(x);
+        return '"' + t.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+      })
+      .join(",") +
+    "}"
+  );
+}
+
 export async function connect({ host = "127.0.0.1", port = 5432, user = "postgres", database = "postgres" } = {}) {
   const sock = net.createConnection({ host, port });
   await new Promise((res, rej) => {
@@ -136,7 +152,7 @@ export async function connect({ host = "127.0.0.1", port = 5432, user = "postgre
         b.writeInt32BE(-1);
         parts.push(b);
       } else {
-        const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+        const s = Array.isArray(v) ? pgArray(v) : typeof v === "object" ? JSON.stringify(v) : String(v);
         const data = Buffer.from(s, "utf8");
         const b = Buffer.alloc(4);
         b.writeInt32BE(data.length);
