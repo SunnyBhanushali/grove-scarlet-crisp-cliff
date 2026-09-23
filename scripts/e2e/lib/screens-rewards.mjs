@@ -7,6 +7,7 @@
 import { ScreenResult } from "./harness.mjs";
 import {
   openPerson, textareaAfter, setInput, kpiWeight, rowWith, pageHas, statusBadge, notesValue, actualInputs, closePlan,
+  openPlansList, expandMonth, monthButton, personRow, deleteFromList, addPeople, sectionTextarea,
 } from "./plan-page.mjs";
 import { monthRecord, openWithoutWrites, endChecks, staleDeleteCheck, apmsMonthList } from "./screens-apms.mjs";
 
@@ -36,6 +37,22 @@ export function targetSelect(p) {
   return p.locator("xpath=//main//*[normalize-space(text())='Unlock against']/following::select[1]").first();
 }
 /** The KRA header row (badge "KRA" + name), not a KPI that has the same name. */
+/** The linked target's name as the screen shows it (select on open plans, text on locked ones). */
+export async function targetName(p) {
+  const sel = targetSelect(p);
+  if (await sel.count()) {
+    const t = await sel.evaluate((e) => (e.selectedOptions[0] ? e.selectedOptions[0].textContent : ""));
+    return t.split(">").pop().trim();
+  }
+  const text = await p.locator("main").innerText();
+  const m = text.match(/Unlock against\n[\s\S]*?Numbers live in Targets\.\n+([^\n]+)/);
+  return m ? m[1].split(">").pop().trim() : null;
+}
+async function nodeName(ctx, id) {
+  const r = await ctx.sql("select payload->>'name' as name from entities where kind = 'target-nodes' and id = $1", [id]);
+  return r[0] ? String(r[0].name || "").split(">").pop().trim() : null;
+}
+
 export async function kraWeightInput(p, kraName) {
   return p
     .locator("main div")
@@ -227,4 +244,209 @@ export async function rewardsLockUnlock(ctx, run) {
 
 export async function rewardsMonthList(ctx, run) {
   return apmsMonthList(ctx, run, "rewards");
+}
+
+/** Rewards month list → Mass update: tick `names`, pick the target labelled `target`, Update. */
+export async function massUpdate(p, monthLabel, names, target) {
+  await expandMonth(p, monthLabel);
+  const grp = monthButton(p, monthLabel).locator("xpath=..");
+  const mu = grp.getByRole("button", { name: "Mass update" });
+  await mu.click();
+  await p.waitForTimeout(400);
+  for (const name of names) {
+    const row = personRow(p, name, monthLabel).locator("xpath=..");
+    await row.locator('input[type="checkbox"]').first().check();
+  }
+  await mu.click();
+  await p.waitForTimeout(500);
+  const d = p.locator("div.fixed.inset-0").filter({ hasText: /^Mass update/ }).last();
+  await d.locator("select").selectOption({ label: target });
+  await d.getByRole("button", { name: /^Update \d+/ }).click();
+  await p.waitForTimeout(600);
+}
+
+async function nodeIdFor(ctx, label) {
+  const rows = await ctx.sql("select id, payload->>'name' as name from entities where kind = 'target-nodes' and deleted_at is null");
+  const last = label.split(">").pop().trim();
+  const hit = rows.find((r) => (r.name || "").trim() === last);
+  return hit ? hit.id : null;
+}
+
+// ---------------------------------------------------------------------------
+// Rewards month list → Mass update (target for many people)
+// ---------------------------------------------------------------------------
+export async function rewardsMassUpdate(ctx, run) {
+  const R = new ScreenResult("Rewards", "rewards-mass-update", "Month list → Mass update (Unlock against for several people)");
+  const { A, B, C } = ctx;
+  const aman = RP.aman;
+  const m0 = await openWithoutWrites(ctx, R, "the Rewards month list (mass update)", async (p) => {
+    await openPlansList(ctx, p, "rewards");
+    await expandMonth(p, SEP);
+  });
+
+  // Check 2 + 3: A mass-updates Aman + Bhupendra to Goa while B writes Aman's notes on his page; C idle on Aman.
+  await openPerson(ctx, B, "rewards", aman.name, aman.month);
+  await openPerson(ctx, C, "rewards", aman.name, aman.month);
+  const goa = await nodeIdFor(ctx, "Goa");
+  const notesB = `E2E-B mass notes ${run}`;
+  await Promise.all([
+    massUpdate(A, SEP, [aman.name, "Bhupendra Kumar"], "Goa"),
+    setInput(B, textareaAfter(B, "Manager notes"), notesB),
+  ]);
+  const t0 = Date.now();
+  const shows = async (p) => (await targetName(p)) === "Goa" && (await notesValue(p)) === notesB;
+  const cSeen = await ctx.waitUntil(() => shows(C), 12000);
+  const tC = cSeen === null ? null : Date.now() - t0;
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const ra = await rec(ctx, aman);
+  const rb = (await monthRecord(ctx, { id: "p-1788353125597-7aas1e", period: "2026-09" }, "reward_records"))?.payload;
+  const bOk = (await ctx.waitUntil(() => shows(B), 5000)) !== null;
+  R.expect(2, ra?.targetNodeId === goa && rb?.targetNodeId === goa && ra?.notes === notesB && bOk, `DB: Aman target ${ra?.targetNodeId === goa ? "Goa" : ra?.targetNodeId}, notes ${ra?.notes === notesB}; Bhupendra target ${rb?.targetNodeId === goa ? "Goa" : rb?.targetNodeId}; B's screen shows both: ${bOk}`);
+  R.expect(3, tC !== null && tC <= 5000, tC === null ? "C did not show target + notes within 12 s" : `C showed target + notes ${(tC / 1000).toFixed(1)} s after the update`);
+
+  // Check 1: A mass-updates Biri + Dinesh to Pune while B mass-updates Gaurav + Grishita to Delhi.
+  await openPlansList(ctx, B, "rewards");
+  const pune = await nodeIdFor(ctx, "Pune");
+  const delhi = await nodeIdFor(ctx, "Delhi");
+  await Promise.all([
+    massUpdate(A, SEP, ["Biri tahu", "Dinesh Murkar"], "Pune"),
+    massUpdate(B, SEP, ["Gaurav Mokale", "Grishita Suthar"], "Delhi"),
+  ]);
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const tgt = async (name) => (await ctx.sql("select r.payload->>'targetNodeId' t from reward_records r join people p on p.id = r.person_id where p.payload->>'name' = $1 and r.period = '2026-09'", [name]))[0]?.t;
+  const got1 = { biri: await tgt("Biri tahu"), dinesh: await tgt("Dinesh Murkar"), gaurav: await tgt("Gaurav Mokale"), grishita: await tgt("Grishita Suthar") };
+  R.expect(1, got1.biri === pune && got1.dinesh === pune && got1.gaurav === delhi && got1.grishita === delhi && (await tgt(aman.name)) === goa,
+    `DB: Biri ${got1.biri === pune}, Dinesh ${got1.dinesh === pune} (Pune); Gaurav ${got1.gaurav === delhi}, Grishita ${got1.grishita === delhi} (Delhi); Aman still Goa ${(await tgt(aman.name)) === goa}`);
+
+  // Check 4: A deletes Priti from the list; B (stale list) mass-updates her target.
+  const W = RP.priti;
+  await openPlansList(ctx, B, "rewards");
+  await expandMonth(B, SEP);
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  await ctx.holdFeed(B, new RegExp(`/api/reward-records/${esc(W.period)}(/${esc(W.id)})?([?]|$)`));
+  await openPlansList(ctx, A, "rewards");
+  await deleteFromList(A, W.name, W.month);
+  await ctx.sleep(1500);
+  const afterDel = await monthRecord(ctx, W, "reward_records");
+  const bStill = (await personRow(B, W.name, W.month).count()) > 0;
+  let err = "";
+  try { await massUpdate(B, SEP, [W.name], "Goa"); } catch (e) { err = String(e).slice(0, 80); }
+  await ctx.sleep(3000);
+  await ctx.releaseFeed(B);
+  await ctx.sleep(3000);
+  const afterStale = await monthRecord(ctx, W, "reward_records");
+  await ctx.reloadAll();
+  const listed = [];
+  for (const p of [A, B, C]) {
+    await openPlansList(ctx, p, "rewards");
+    await expandMonth(p, SEP);
+    listed.push(await personRow(p, W.name, W.month).count());
+  }
+  R.expect(4, !!afterDel?.deleted_at && bStill && !!afterStale?.deleted_at && listed.every((n) => n === 0),
+    `A's delete in DB ${!!afterDel?.deleted_at}; B still listed it ${bStill}; after B's stale mass update${err ? " (" + err + ")" : ""} still deleted ${!!afterStale?.deleted_at}; listed after reload A/B/C ${listed.join("/")}`);
+
+  // Check 5: every touched person's target on all three screens = DB.
+  const names = [aman.name, "Bhupendra Kumar", "Biri tahu", "Dinesh Murkar", "Gaurav Mokale", "Grishita Suthar"];
+  const bad = [];
+  for (const [t, p] of Object.entries({ A, B, C })) {
+    for (const n of names.slice(0, 3)) {
+      await openPerson(ctx, p, "rewards", n, SEP);
+      const v = await targetName(p);
+      const w = await nodeName(ctx, await tgt(n));
+      if (v !== w) bad.push(`${t} ${n}: screen ${v}, DB ${w}`);
+    }
+  }
+  R.expect(5, !bad.length, bad.length ? bad.join("; ") : "targets on screen = DB for the people checked (A, B, C)");
+  await endChecks(ctx, R, m0);
+  return R;
+}
+
+/** "My rewards" month cell (e.g. "Sep") as shown: "—" when there is no plan. */
+export async function myMonthCell(p, mon) {
+  const b = p.locator("main button", { hasText: new RegExp(`^${mon}(?![a-z])`) }).first();
+  if (!(await b.count())) return null;
+  const t = (await b.innerText()).split("\n").map((x) => x.trim()).filter(Boolean);
+  return t.slice(1).join(" ");
+}
+
+// ---------------------------------------------------------------------------
+// My rewards (C's own view) + Self comments (C) vs Manager notes (B)
+// ---------------------------------------------------------------------------
+export async function rewardsMyRewards(ctx, run, kind = "rewards") {
+  const isR = kind === "rewards";
+  const table = isR ? "reward_records" : "month_records";
+  const R = new ScreenResult(isR ? "Rewards" : "APMS", isR ? "rewards-my-rewards" : "apms-self-comments",
+    isR ? "My rewards · Self comments (employee) vs Manager notes" : "Self comments (employee) vs Manager notes");
+  const { A, B, C } = ctx;
+  const cMe = { name: "Ronlind Menezes", month: SEP, id: "p-1788156420676", period: "2026-09" };
+  // B adds someone else at the same time (the picker does not list the signed-in user).
+  const bMe = { name: "Siddhesh Gawde", month: isR ? "August 2026" : "July 2026", id: "p-1788353125607-dh3zfb", period: isR ? "2026-08" : "2026-07" };
+  const myView = async (p) => (isR ? ctx.nav(p, "Rewards", "My rewards") : ctx.nav(p, "APMS", "My APMS"));
+  const m0 = await openWithoutWrites(ctx, R, isR ? "My rewards" : "My APMS", myView);
+
+  // Check 1: A adds C (Ronlind) to September while B adds Siddhesh to another month.
+  await openPlansList(ctx, A, kind);
+  await openPlansList(ctx, B, kind);
+  await Promise.all([addPeople(A, SEP, [cMe.name]), addPeople(B, bMe.month, [bMe.name])]);
+  const t1 = Date.now();
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const rc = await monthRecord(ctx, cMe, table);
+  const rbm = await monthRecord(ctx, bMe, table);
+  const cSees = isR ? await ctx.waitUntil(async () => (await myMonthCell(C, "Sep")) !== "—", 8000) : null;
+  R.expect(1, !!rc && !rc.deleted_at && !!rbm && !rbm.deleted_at, `DB: ${cMe.name} ${cMe.month} ${rc && !rc.deleted_at ? "created" : "missing"}, ${bMe.name} ${bMe.month} ${rbm && !rbm.deleted_at ? "created" : "missing"}${isR ? `; C's My rewards showed September ${cSees === null ? "no" : `in ${((Date.now() - t1 - 0) / 1000).toFixed(1)} s`}` : ""}`);
+
+  // Check 2 + 3: C writes Self comments on his own plan while B writes Manager notes on it; A idle on it.
+  if (isR) {
+    await C.locator("main button", { hasText: /^Sep(?![a-z])/ }).first().click();
+    await C.waitForTimeout(1200);
+  } else {
+    await openPerson(ctx, C, kind, cMe.name, cMe.month).catch(async () => {
+      // An employee reaches his own plan from My APMS.
+      await myView(C);
+      await C.locator("main").getByText("September 2026").first().click();
+      await C.waitForTimeout(1200);
+    });
+  }
+  await openPerson(ctx, B, kind, cMe.name, cMe.month);
+  await openPerson(ctx, A, kind, cMe.name, cMe.month);
+  const selfC = `E2E-C self ${run}`;
+  const notesB = `E2E-B mgr ${run}`;
+  await Promise.all([setInput(C, sectionTextarea(C, "Self comments"), selfC), setInput(B, textareaAfter(B, "Manager notes"), notesB)]);
+  const t0 = Date.now();
+  const shows = async (p) => (await notesValue(p, "Self comments")) === selfC && (await notesValue(p, "Manager notes")) === notesB;
+  const aSeen = await ctx.waitUntil(() => shows(A), 12000);
+  const tA = aSeen === null ? null : Date.now() - t0;
+  await ctx.settled(B);
+  await ctx.settled(C);
+  const r2 = (await monthRecord(ctx, cMe, table))?.payload;
+  const bcOk = (await ctx.waitUntil(() => shows(B), 5000)) !== null && (await ctx.waitUntil(() => shows(C), 5000)) !== null;
+  R.expect(2, r2?.selfNotes === selfC && r2?.notes === notesB && bcOk, `DB selfNotes ${r2?.selfNotes === selfC}, notes ${r2?.notes === notesB}; B and C screens show both: ${bcOk}`);
+  R.expect(3, tA !== null && tA <= 5000, tA === null ? `A did not show both within 12 s (self "${await notesValue(A, "Self comments")}", mgr "${await notesValue(A, "Manager notes")}")` : `A (idle) showed both ${(tA / 1000).toFixed(1)} s after the edits`);
+
+  // Check 4: A deletes C's September plan from the list; B (stale) edits its notes.
+  await staleDeleteCheck(ctx, R, kind, cMe, async (p) => setInput(p, textareaAfter(p, "Manager notes"), `STALE ${run}`), table, async (a) => {
+    await openPlansList(ctx, a, kind);
+    await deleteFromList(a, cMe.name, cMe.month);
+  });
+
+  // Check 5: after reload, C's own view and the DB agree.
+  const live = await monthRecord(ctx, cMe, table);
+  let detail = `DB: ${cMe.name} September ${live?.deleted_at ? "deleted" : "live"}`;
+  let ok = !!live?.deleted_at;
+  if (isR) {
+    await myView(C);
+    const cell = await myMonthCell(C, "Sep");
+    ok = ok && cell === "—";
+    detail += `; C's My rewards September "${cell}"`;
+  }
+  R.expect(5, ok, detail);
+  await endChecks(ctx, R, m0);
+  return R;
+}
+
+export async function apmsSelfComments(ctx, run) {
+  return rewardsMyRewards(ctx, run, "apms");
 }

@@ -184,20 +184,33 @@ export async function prepareClose(p, title) {
   return fillAllScores(p);
 }
 
-/** Manager notes as the screen shows them: the textarea, or the read-only text. */
+/**
+ * A notes section as the screen shows it ("Manager notes", "Self comments"):
+ * the textarea that belongs to that label, or its read-only text. Found by
+ * structure (the label's next sibling), not "the next textarea on the page".
+ */
 export async function notesValue(p, label = "Manager notes") {
-  const ta = textareaAfter(p, label);
-  if (await ta.count()) return ta.inputValue();
   return p.evaluate((label) => {
     const h = [...document.querySelectorAll("main *")].find((e) => e.children.length === 0 && e.textContent.trim() === label);
     if (!h) return null;
-    let box = h.parentElement;
-    for (let i = 0; i < 3 && box; i++, box = box.parentElement) {
-      const t = (box.innerText || "").replace(label, "").trim();
-      if (t) return t.split("\n")[0].trim();
+    let el = h;
+    for (let i = 0; i < 4 && el; i++, el = el.parentElement) {
+      let sib = el.nextElementSibling;
+      while (sib) {
+        const ta = sib.matches("textarea") ? sib : sib.querySelector("textarea");
+        if (ta) return ta.value;
+        const t = (sib.innerText || "").trim();
+        if (t) return t === "—" ? "" : t.split("\n")[0].trim();
+        sib = sib.nextElementSibling;
+      }
     }
     return "";
   }, label);
+}
+
+/** The textarea that belongs to a notes label, found by structure. */
+export function sectionTextarea(p, label) {
+  return p.locator(`xpath=//main//*[normalize-space(text())="${label}"]/following-sibling::*[1]/descendant-or-self::textarea | //main//*[normalize-space(text())="${label}"]/../following-sibling::*[1]/descendant-or-self::textarea`).first();
 }
 
 /** Month group "Add people": tick `names` and save. */
@@ -233,4 +246,29 @@ export async function listedNames(p, monthLabel) {
   const rows = p.locator("main button", { hasText: new RegExp(monthLabel + " ·") });
   const texts = await rows.allInnerTexts();
   return texts.map((t) => t.split("\n")[0].trim()).sort();
+}
+
+/** Pointer drag (the SPA's DnD: hold the title, move, drop) of `srcText` onto `dstText`'s row. */
+export async function dragOnto(p, srcText, dstText) {
+  const src = p.locator("main").getByText(srcText, { exact: true }).first();
+  const dst = p.locator("main").getByText(dstText, { exact: true }).first();
+  await src.scrollIntoViewIfNeeded();
+  const s = await src.boundingBox();
+  const d = await dst.boundingBox();
+  await p.mouse.move(s.x + 20, s.y + s.height / 2);
+  await p.mouse.down();
+  await p.waitForTimeout(400);
+  const steps = 15;
+  for (let i = 1; i <= steps; i++) {
+    await p.mouse.move(s.x + 20, s.y + s.height / 2 + ((d.y - s.y - 10) * i) / steps);
+    await p.waitForTimeout(40);
+  }
+  await p.waitForTimeout(250);
+  await p.mouse.up();
+  await p.waitForTimeout(400);
+}
+
+/** Leaf texts on screen that are one of `names`, in page order. */
+export async function screenOrder(p, names) {
+  return p.evaluate((names) => [...document.querySelectorAll("main *")].filter((e) => e.children.length === 0 && names.includes(e.textContent.trim())).map((e) => e.textContent.trim()), names);
 }

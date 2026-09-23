@@ -8,7 +8,7 @@ import { ScreenResult, realWrites, brief } from "./harness.mjs";
 import {
   openPerson, openPlansList, expandMonth, personRow, textareaAfter, setInput, kpiWeight, behaviourBox,
   addPriority, deletePersonMonth, pageHas, actualInputs, execSelects, scoreButton, scoreSelected, headerButton,
-  statusBadge, closePlan, fillAllScores, prepareClose, notesValue, addPeople, deleteFromList, listedNames,
+  statusBadge, closePlan, fillAllScores, prepareClose, notesValue, addPeople, deleteFromList, listedNames, dragOnto, screenOrder,
 } from "./plan-page.mjs";
 
 export const P = {
@@ -449,6 +449,61 @@ export async function apmsMonthList(ctx, run, kind = "apms") {
     }
   }
   R.expect(5, !bad.length, bad.length ? bad.join("; ") : `lists = DB (${SEP} ${want[SEP].length}, ${OCT} ${want[OCT].length})`);
+  await endChecks(ctx, R, m0);
+  return R;
+}
+
+// ---------------------------------------------------------------------------
+// Plan editing: drag to reorder (KPIs in APMS, KRAs in Rewards)
+// ---------------------------------------------------------------------------
+export async function apmsPlanDrag(ctx, run) {
+  const R = new ScreenResult("APMS", "apms-plan-drag", "Plan editing: drag to reorder KPIs / KRAs");
+  const { A, B, C } = ctx;
+  const X = P.fawazJul;
+  const KPIS = ["Revenue By BC", "Aliens Stuff", "Advanced Booked by BC"];
+  const kpiOrder = async (w, table = "month_records") => (await ctx.sql(`select jsonb_path_query_array(payload, '$.brands[0].kras[0].kpis[*].name') o from ${table} where person_id = $1 and period = $2`, [w.id, w.period]))[0]?.o || [];
+  const m0 = await openWithoutWrites(ctx, R, "an open plan (drag)", (p) => openPerson(ctx, p, "apms", X.name, X.month));
+
+  // Check 2 + 3: A drags "Advanced Booked by BC" to the top while B writes notes; C idle.
+  const notesB = `E2E-B drag notes ${run}`;
+  await Promise.all([dragOnto(A, "Advanced Booked by BC", "Revenue By BC"), setInput(B, textareaAfter(B, "Manager notes"), notesB)]);
+  const t0 = Date.now();
+  const want = ["Advanced Booked by BC", "Revenue By BC", "Aliens Stuff"];
+  const shows = async (p) => JSON.stringify(await screenOrder(p, KPIS)) === JSON.stringify(want) && (await notesValue(p)) === notesB;
+  const cSeen = await ctx.waitUntil(() => shows(C), 12000);
+  const tC = cSeen === null ? null : Date.now() - t0;
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const o = await kpiOrder(X);
+  const n = (await monthRecord(ctx, X))?.payload?.notes;
+  const abOk = (await ctx.waitUntil(() => shows(A), 5000)) !== null && (await ctx.waitUntil(() => shows(B), 5000)) !== null;
+  R.expect(2, JSON.stringify(o) === JSON.stringify(want) && n === notesB && abOk, `DB order ${o.join(" › ")}, notes ${n === notesB}; A and B show both: ${abOk}`);
+  R.expect(3, tC !== null && tC <= 5000, tC === null ? `C did not show the new order + notes within 12 s (${(await screenOrder(C, KPIS)).join(" › ")})` : `C showed both ${(tC / 1000).toFixed(1)} s after the drop`);
+
+  // Check 1: A drags on Fawaz July (APMS) while B drags KRAs on Rohan September (Rewards).
+  const rohan = { name: "Rohan Jadhav", month: "September 2026", id: "p-1788353125641-e4k6ut", period: "2026-09" };
+  const KRAS = ["Art Score", "Studio Audit + Mystery Audit", "Consultation NPS Score"];
+  await openPerson(ctx, B, "rewards", rohan.name, rohan.month);
+  await Promise.all([dragOnto(A, "Aliens Stuff", "Advanced Booked by BC"), dragOnto(B, "Consultation NPS Score", "Art Score")]);
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const oa = await kpiOrder(X);
+  const ob = (await ctx.sql("select jsonb_path_query_array(payload, '$.brands[0].kras[*].name') o from reward_records where person_id = $1 and period = $2", [rohan.id, rohan.period]))[0]?.o || [];
+  R.expect(1, oa[0] === "Aliens Stuff" && ob[0] === "Consultation NPS Score", `DB: Fawaz July KPIs ${oa.join(" › ")}; Rohan September KRAs ${ob.join(" › ")}`);
+  void KRAS;
+
+  // Check 4: A deletes Ameesha's plan; B (stale) edits it (no second item to drag there, so notes).
+  await staleDeleteCheck(ctx, R, "apms", P.ameeshaSep, async (p) => setInput(p, textareaAfter(p, "Manager notes"), `STALE ${run}`));
+
+  // Check 5
+  const dbo = await kpiOrder(X);
+  const bad = [];
+  for (const [t, p] of Object.entries({ A, B, C })) {
+    await openPerson(ctx, p, "apms", X.name, X.month);
+    const so = await screenOrder(p, KPIS);
+    if (JSON.stringify(so) !== JSON.stringify(dbo)) bad.push(`${t}: ${so.join(" › ")}`);
+  }
+  R.expect(5, !bad.length, bad.length ? `DB ${dbo.join(" › ")}; ${bad.join("; ")}` : `order on all screens = DB (${dbo.join(" › ")})`);
   await endChecks(ctx, R, m0);
   return R;
 }
