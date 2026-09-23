@@ -213,6 +213,8 @@ test("p0as80 routes: a live-entity (feed) apply clears the dirty flag its own se
   assert.equal(stamped.split("getSnapshot:()=>K.getState().exportSnapshot(),stateRef:()=>K.getState(),").length - 1, 4, "live hooks expose the store state");
   assert.equal(stamped.includes("onBlur:()=>{setF(!1);let t=G(i);a(ld(t,r)),t!==e&&i!==F0.current&&n(t)}"), true, "a value commits only what was typed since focus");
   assert.equal(stamped.includes("title:`Edit`,onClick:()=>{a(e.name),r(!0)}"), true, "target tab rename starts from the current name");
+  assert.equal(stamped.split("login-view-f2j6t0x4-11a3-p0ar.js?v=p0as80").length - 1, 2, "routes load the fixed login-view chunk");
+  assert.equal(login.includes("customReports:e.customReports||[],reportFolders:e.reportFolders||[],notices:e.notices,"), true, "exportSnapshot carries MIS report folders");
   assert.equal(
     stamped.length - base.length,
     3 * "D.current=!1;p.current&&(clearTimeout(p.current),p.current=0);".length +

@@ -14,6 +14,9 @@
  * the Target tab's rename starts from the current name (both wrote a stale
  * copy over another user's change).
  *
+ * The login-view chunk's exportSnapshot now carries reportFolders (MIS
+ * folders were never saved); routes load it as ?v=p0as80.
+ *
  * The live hooks also expose the store's state (`stateRef`), so the sync's
  * read-only screen checks copy the screen state once per change instead of
  * once per feed message.
@@ -69,6 +72,23 @@ const VALUE_SYNC_NEW = "return(0,Z.useEffect)(()=>{if(F&&i!==F0.current)return;l
 const RENAME_OLD = "title:`Edit`,onClick:()=>r(!0),children:(0,Q.jsx)(Ha,{className:`size-3.5`})";
 const RENAME_NEW = "title:`Edit`,onClick:()=>{a(e.name),r(!0)},children:(0,Q.jsx)(Ha,{className:`size-3.5`})";
 
+// login-view chunk (edited in place, like every earlier change to it): the
+// SPA's exportSnapshot (kp) listed every synced collection but
+// reportFolders, so MIS → Reports folders never left the browser and were
+// gone after a reload. The routes chunk loads it with a new ?v=.
+const LOGIN = "login-view-f2j6t0x4-11a3-p0ar.js";
+const KP_OLD = "customReports:e.customReports||[],notices:e.notices,";
+const KP_NEW = "customReports:e.customReports||[],reportFolders:e.reportFolders||[],notices:e.notices,";
+const LOGIN_REF_OLD = `${LOGIN}?v=p0as68`;
+const LOGIN_REF_NEW = `${LOGIN}?v=${V}`;
+
+export function stampLogin(src) {
+  if (src.includes(KP_NEW)) return src;
+  const n = src.split(KP_OLD).length - 1;
+  must(n === 1, `login-view exportSnapshot: expected 1 site, got ${n}`);
+  return src.split(KP_OLD).join(KP_NEW);
+}
+
 function once(src, from, to, what) {
   const n = src.split(from).length - 1;
   must(n === 1, `${what}: expected 1 site, got ${n}`);
@@ -85,6 +105,9 @@ export function stampRoutes(src) {
   out = once(out, VALUE_FOCUS_OLD, VALUE_FOCUS_NEW, "target value focus/blur");
   out = once(out, VALUE_SYNC_OLD, VALUE_SYNC_NEW, "target value follows the store while untouched");
   out = once(out, RENAME_OLD, RENAME_NEW, "target tab rename");
+  const l = out.split(LOGIN_REF_OLD).length - 1;
+  must(l === 2, `login-view reference: expected 2 sites, got ${l}`);
+  out = out.split(LOGIN_REF_OLD).join(LOGIN_REF_NEW);
   return out;
 }
 
@@ -101,6 +124,8 @@ function run() {
     const from = join(root, dir, FROM);
     if (!existsSync(from)) continue;
     writeFileSync(join(root, dir, TO), stampRoutes(readFileSync(from, "utf8")));
+    const login = join(root, dir, LOGIN);
+    if (existsSync(login)) writeFileSync(login, stampLogin(readFileSync(login, "utf8")));
     // index-*.js preloads the routes chunk by name
     for (const f of readdirSafe(join(root, dir))) {
       if (!/^index-.*\.js$/.test(f)) continue;
