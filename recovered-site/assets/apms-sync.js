@@ -2320,6 +2320,11 @@
     } catch (err) {}
     var view = uiView();
     var kind = nav && nav.kind ? String(nav.kind) : "apms";
+    // The person-month page is "scorecard" (APMS) or "rewards-scorecard".
+    if (view === "rewards-scorecard") {
+      view = "scorecard";
+      kind = "rewards";
+    }
     var pid = uiPerson();
     var month = uiMonth();
     var key = view === "scorecard" ? recordScreenKey(kind, pid, month) : view;

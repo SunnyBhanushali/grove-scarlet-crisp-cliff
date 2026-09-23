@@ -199,3 +199,38 @@ export async function notesValue(p, label = "Manager notes") {
     return "";
   }, label);
 }
+
+/** Month group "Add people": tick `names` and save. */
+export async function addPeople(p, monthLabel, names) {
+  await expandMonth(p, monthLabel);
+  const grp = monthButton(p, monthLabel);
+  await grp.locator("xpath=..").getByRole("button", { name: "Add people" }).click();
+  await p.waitForTimeout(600);
+  const d = p.locator("div.fixed.inset-0").last();
+  for (const name of names) {
+    await d.locator('input[placeholder="Search people…"]').fill(name);
+    await p.waitForTimeout(500);
+    await d.locator("button", { hasText: new RegExp("^" + name) }).first().click();
+    await p.waitForTimeout(200);
+  }
+  await d.getByRole("button", { name: "Save", exact: true }).click();
+  await p.waitForTimeout(600);
+}
+
+/** Person row "Delete" in the month list, then confirm. */
+export async function deleteFromList(p, name, monthLabel) {
+  await expandMonth(p, monthLabel);
+  const row = personRow(p, name, monthLabel);
+  await row.locator("xpath=..").getByRole("button", { name: "Delete", exact: true }).click();
+  await p.waitForTimeout(400);
+  await p.locator("div.fixed.inset-0 button", { hasText: /^Delete/ }).last().click();
+  await p.waitForTimeout(800);
+}
+
+/** Names listed under a month group (expanded). */
+export async function listedNames(p, monthLabel) {
+  await expandMonth(p, monthLabel);
+  const rows = p.locator("main button", { hasText: new RegExp(monthLabel + " ·") });
+  const texts = await rows.allInnerTexts();
+  return texts.map((t) => t.split("\n")[0].trim()).sort();
+}

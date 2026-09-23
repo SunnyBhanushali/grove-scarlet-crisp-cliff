@@ -107,6 +107,13 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
       return (await p.locator(sel).first().innerText()).replace(/ /g, " ");
     },
     async nav(p, top, sub) {
+      // A dialog left open (e.g. by a refused close) would swallow the click.
+      for (let i = 0; i < 3 && (await p.locator("div.fixed.inset-0").count()); i++) {
+        const cancel = p.locator("div.fixed.inset-0 button", { hasText: /^(Cancel|Close)$/ }).last();
+        if (await cancel.count()) await cancel.click().catch(() => {});
+        else await p.mouse.click(6, 994);
+        await p.waitForTimeout(250);
+      }
       await p.locator("aside, nav").first().getByText(top, { exact: true }).first().click();
       await p.waitForTimeout(500);
       if (sub) {

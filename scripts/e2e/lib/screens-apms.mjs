@@ -8,7 +8,7 @@ import { ScreenResult, realWrites, brief } from "./harness.mjs";
 import {
   openPerson, openPlansList, expandMonth, personRow, textareaAfter, setInput, kpiWeight, behaviourBox,
   addPriority, deletePersonMonth, pageHas, actualInputs, execSelects, scoreButton, scoreSelected, headerButton,
-  statusBadge, closePlan, fillAllScores, prepareClose, notesValue,
+  statusBadge, closePlan, fillAllScores, prepareClose, notesValue, addPeople, deleteFromList, listedNames,
 } from "./plan-page.mjs";
 
 export const P = {
@@ -193,13 +193,16 @@ export async function apmsPlanEditor(ctx, run) {
  * screen provably still shows W) makes `staleEdit`; the delete must stand in
  * the DB and after all three reload W must not be listed anywhere.
  */
-export async function staleDeleteCheck(ctx, R, kind, W, staleEdit, table = "month_records") {
+export async function staleDeleteCheck(ctx, R, kind, W, staleEdit, table = "month_records", deleteFn = null) {
   const { A, B } = ctx;
   await openPerson(ctx, B, kind, W.name, W.month);
   const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   await ctx.holdFeed(B, new RegExp(`/api/${table === "reward_records" ? "reward-records" : "month-records"}/${esc(W.period)}(/${esc(W.id)})?([?]|$)`));
-  await openPerson(ctx, A, kind, W.name, W.month);
-  await deletePersonMonth(A);
+  if (deleteFn) await deleteFn(A);
+  else {
+    await openPerson(ctx, A, kind, W.name, W.month);
+    await deletePersonMonth(A);
+  }
   await ctx.sleep(1500);
   const afterDel = await monthRecord(ctx, W, table);
   const bStill = await pageHas(B, W.name);
@@ -364,6 +367,88 @@ export async function apmsLockClose(ctx, run) {
     }
   }
   R.expect(5, !bad.length, bad.length ? bad.join("; ") : `statuses agree: ${Object.values(want).join(", ")}`);
+  await endChecks(ctx, R, m0);
+  return R;
+}
+
+
+// ---------------------------------------------------------------------------
+// APMS Plans month list: Add people, Delete from the list
+// ---------------------------------------------------------------------------
+export async function namedLive(ctx, period, table = "month_records") {
+  const rows = await ctx.sql(
+    `select p.payload->>'name' as name from ${table} m join people p on p.id = m.person_id
+      where m.period = $1 and m.deleted_at is null and p.deleted_at is null order by 1`,
+    [period],
+  );
+  return rows.map((r) => r.name.trim()).sort();
+}
+
+export async function apmsMonthList(ctx, run, kind = "apms") {
+  const table = kind === "rewards" ? "reward_records" : "month_records";
+  const R = new ScreenResult(kind === "rewards" ? "Rewards" : "APMS", `${kind}-month-list`, "Plans month list: Add people · Delete from list");
+  const { A, B, C } = ctx;
+  // Rewards has no October group yet: its second month is August.
+  const OCT = kind === "rewards" ? "August 2026" : "October 2026";
+  const OCT_P = kind === "rewards" ? "2026-08" : "2026-10";
+  const SEP = "September 2026";
+  // People not yet on those months in the seed.
+  const N = kind === "rewards"
+    ? { a2: "Fawaz Ghansar", b2: "Allan Gois", a1: "Jay Nikam", b1: "Hetal Soni" }
+    : { a2: "Nevil Prajapati", b2: "Rohan Jadhav", a1: "Jay Nikam", b1: "Sachin Yadav" };
+  const m0 = await openWithoutWrites(ctx, R, "the Plans month list", async (p) => {
+    await openPlansList(ctx, p, kind);
+    await expandMonth(p, OCT);
+  });
+
+  // Check 2 + 3: same month group, A and B each add a person at the same time; C idle on the list.
+  await Promise.all([addPeople(A, OCT, [N.a2]), addPeople(B, OCT, [N.b2])]);
+  const t0 = Date.now(); // both pressed Save
+  const both = async (p) => {
+    const n = await listedNames(p, OCT);
+    return n.includes(N.a2) && n.includes(N.b2);
+  };
+  const cSeen = await ctx.waitUntil(() => both(C), 12000);
+  const tC = cSeen === null ? null : Date.now() - t0;
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const oct = await namedLive(ctx, OCT_P, table);
+  const abOk = (await ctx.waitUntil(() => both(A), 5000)) !== null && (await ctx.waitUntil(() => both(B), 5000)) !== null;
+  R.expect(2, oct.includes(N.a2) && oct.includes(N.b2) && abOk, `DB ${OCT}: ${oct.join(", ")}; A and B list both: ${abOk}`);
+  R.expect(3, tC !== null && tC <= 5000, tC === null ? `C did not list both within 12 s (${(await listedNames(C, OCT)).join(", ")})` : `C listed both ${(tC / 1000).toFixed(1)} s after the adds`);
+
+  // Check 1: different months at the same time.
+  await Promise.all([addPeople(A, SEP, [N.a1]), addPeople(B, OCT, [N.b1])]);
+  await ctx.settled(A);
+  await ctx.settled(B);
+  const sep1 = await namedLive(ctx, "2026-09", table);
+  const oct1 = await namedLive(ctx, OCT_P, table);
+  const cBoth = await ctx.waitUntil(async () => (await listedNames(C, SEP)).includes(N.a1) && (await listedNames(C, OCT)).includes(N.b1), 5000);
+  R.expect(1, sep1.includes(N.a1) && oct1.includes(N.b1) && oct1.includes(N.a2), `DB: ${SEP} has ${N.a1} ${sep1.includes(N.a1)}, ${OCT} has ${N.b1} ${oct1.includes(N.b1)} and keeps ${N.a2} ${oct1.includes(N.a2)}; C listed both ${cBoth === null ? "no" : `in ${(cBoth / 1000).toFixed(1)} s`}`);
+
+  // Check 4: A deletes one of them from the list; B (stale) opens it and edits the notes.
+  const W = { name: N.a2, month: OCT, id: "", period: OCT_P };
+  const who = await ctx.sql("select id from people where payload->>'name' = $1 and deleted_at is null", [N.a2]);
+  if (who[0]) W.id = who[0].id;
+  await staleDeleteCheck(ctx, R, kind, W, async (p) => setInput(p, textareaAfter(p, "Manager notes"), `STALE ${run}`), table, async (a) => {
+    await openPlansList(ctx, a, kind);
+    await deleteFromList(a, W.name, W.month);
+  });
+
+  // Check 5: after reload the lists = DB (named people) for both months.
+  const want = { [SEP]: await namedLive(ctx, "2026-09", table), [OCT]: await namedLive(ctx, OCT_P, table) };
+  const bad = [];
+  for (const [t, p] of Object.entries({ A, B, C })) {
+    await openPlansList(ctx, p, kind);
+    for (const mon of [SEP, OCT]) {
+      const got = await listedNames(p, mon);
+      const w = want[mon];
+      const missing = w.filter((n) => !got.includes(n));
+      const extra = got.filter((n) => !w.includes(n));
+      if (missing.length || extra.length) bad.push(`${t} ${mon}: missing ${missing.join("/") || "-"}, extra ${extra.join("/") || "-"}`);
+    }
+  }
+  R.expect(5, !bad.length, bad.length ? bad.join("; ") : `lists = DB (${SEP} ${want[SEP].length}, ${OCT} ${want[OCT].length})`);
   await endChecks(ctx, R, m0);
   return R;
 }
