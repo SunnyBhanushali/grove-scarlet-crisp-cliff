@@ -61,7 +61,7 @@ export const AUTH_ROUTES_FIXES = [
     what:
       "Settings → Assign people → Download sheet: usernames only. A temporary password is shown once — in the one-time login dialog / the CSV downloaded when logins are issued — and never again (before, the sheet repeated every password issued in this browser session and said 'it has passwords').",
     old: "function D(){let e=E.map(e=>({name:e.name,email:e.email,username:e.username,password:e.password,access:e.access}));Ai(`aliens-logins-${new Date().toISOString().slice(0,10)}.csv`,Fe(e)),l(`Login sheet downloaded. Share one-to-one — it has passwords.`)}",
-    new: "function D(){let e=E.map(e=>({name:e.name,email:e.email,username:e.username,access:e.access}));Ai(`aliens-logins-${new Date().toISOString().slice(0,10)}.csv`,Fe(e)),l(`Login sheet downloaded (usernames only — temporary passwords are shown once, when they are issued).`)}",
+    new: "function D(){let q=v=>{let s=String(v??``);return/[\",\\n]/.test(s)?`\"${s.replace(/\"/g,`\"\"`)}\"`:s},e=[`name,email,username,access`,...E.map(e=>[e.name,e.email,e.username,e.access].map(q).join(`,`))].join(`\\n`);Ai(`aliens-logins-${new Date().toISOString().slice(0,10)}.csv`,e),l(`Login sheet downloaded (usernames only — temporary passwords are shown once, when they are issued).`)}",
     n: 1,
   },
   {

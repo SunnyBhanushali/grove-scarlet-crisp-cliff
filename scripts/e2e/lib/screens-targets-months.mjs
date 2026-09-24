@@ -395,9 +395,9 @@ export async function targetsImport(ctx, run) {
   await ctx.settled(B);
   const x1 = n1 ? (await cellRow(ctx, n1.id, M))?.payload : null;
   const bSame = await ctx.waitUntil(async () => (await cellValue(B, X1, 3)) === Number(x1?.ladder?.M3) && (await cellValue(B, X1, 0)) === (x1?.actual == null ? null : Number(x1.actual)), 5000);
-  // Import is a whole-month replace (the dialog says so before Import is pressed): it
-  // never edits one field, so "different fields of the same record" cannot happen here.
-  R.na(2, `import replaces whole months by design (warned in the dialog); measured: A's replace landed after B's actual, DB ${X1} M3 ${x1?.ladder?.M3}, actual ${x1?.actual} (B typed 95000 — replaced by the file's blank); B's screen = DB ${bSame !== null}`);
+  // BATCH-3: a blank cell in the file keeps the stored value, so A's import (M3 changed,
+  // actual blank) and B's actual typed at the same moment must both persist.
+  R.expect(2, Number(x1?.ladder?.M3) === 125000 && Number(x1?.actual) === 95000 && bSame !== null, `A's import changed ${X1} M3 → ${x1?.ladder?.M3} (want 125000) while B typed the actual 95000: DB actual ${x1?.actual} (blank in the file keeps it); B's screen = DB ${bSame !== null}`);
 
   // Check 4: A deletes the imported month; B (held stale, on it) edits X2's M2.
   await openTargetsList(ctx, A);

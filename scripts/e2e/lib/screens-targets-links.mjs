@@ -164,6 +164,18 @@ export async function targetsLinkGuard(ctx, run) {
   await ctx.settled(A);
   R.expect(2, noGuard && /Moves to Trash/.test(plainText), `a target nobody unlocks against keeps the plain confirm: ${noGuard} ("${plainText}")`);
   shared.deletedAt = t0;
+  R.expect(3, bGone !== null && bGone <= 5000, `B (on the month page, not acting) dropped the deleted target ${bGone === null ? "not within 8 s" : `${(bGone / 1000).toFixed(1)} s`} after Delete anyway`);
+  // Check 5: after reload every screen agrees with the DB (target gone, links kept).
+  await ctx.reloadAll();
+  const shows = [];
+  for (const p of [A, B]) {
+    await openTargetMonth(ctx, p);
+    shows.push((await shownTargets(p)).includes(T));
+  }
+  const dbCell = await cellRow(ctx, node);
+  const links2 = [];
+  for (const id of ids) links2.push((await rewardLink(ctx, id))?.targetNodeId);
+  R.expect(5, shows.every((x) => !x) && !!dbCell?.deleted_at && links2.every((l) => l === node), `after reload A/B list ${T}: ${shows.join("/")} (DB cell deleted ${!!dbCell?.deleted_at}); reward links in DB ${links2.join(", ")}`);
   await endChecks(ctx, R, m0);
   return R;
 }
@@ -238,6 +250,7 @@ export async function targetsLinkBroken(ctx, run) {
     if (i1 || !i2) bad.push(`${t}: icons ${P1.name} ${i1}, ${P2.name} ${i2}`);
   }
   R.expect(5, !bad.length, bad.length ? bad.join("; ") : `after reload A/B/C: ${P2.name} flagged, ${P1.name} (re-linked) not`);
+  R.na(4, "the broken-link warning is computed, not a record: nothing to delete; a stale Re-link after another user's delete / relink is the same Unlock against row PATCH (batch 1 rewards-plan-open check 4, targets-delete-recreate check 4)");
   await endChecks(ctx, R, m0);
   return R;
 }
@@ -388,6 +401,8 @@ export async function targetsSecondGroup(ctx, run) {
   await rowDelete(A, G2);
   await rowDelete(A, G1);
   await ctx.settled(A);
+  R.na(2, "two groups are two records; editing the same group's fields at once is batch 1 targets-groups check 2");
+  R.na(4, "delete of a group while another user adds members is batch 1 targets-groups check 4 (same rows)");
   await endChecks(ctx, R, m0);
   return R;
 }
