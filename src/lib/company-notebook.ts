@@ -445,8 +445,11 @@ async function applyBookSlices(book: BookId, list: BookSliceOpts[]): Promise<Boo
   }
   next.tombstones = unionTombMaps(stored.tombstones, tombs);
   stripEntityTombs(next, tombs);
-  const gens = normalizeBookGens(stored);
-  next.bookGens = { ...gens, [book]: (Number(gens[book]) || 0) + 1 };
+  // PERF: a mirror writes row-owned fields only, which a book PATCH ignores;
+  // it keeps the book's generation (bumping it made every book PATCH that
+  // flushed a pending mirror 409 against itself). Live gens still move on
+  // every row commit (publishEntityWrite).
+  next.bookGens = normalizeBookGens(stored);
   next.notebookUpdatedAt = Date.now();
   const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, stored));
   const assembled = await persistBooks(merged, "replace", [book], { mirror: true });
@@ -520,8 +523,8 @@ async function applyEntityRows(book: BookId, batch: Array<{ spec: EntityBookSpec
     if (value === undefined) delete next[spec.field];
     else next[spec.field] = value;
   }
-  const gens = normalizeBookGens(existing);
-  next.bookGens = { ...gens, [book]: (Number(gens[book]) || 0) + 1 };
+  // PERF: keeps the book generation (see applyBookSlices).
+  next.bookGens = normalizeBookGens(existing);
   next.notebookUpdatedAt = Date.now();
   const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, existing));
   const assembled = await persistBooks(merged, "replace", [book], { mirror: true });

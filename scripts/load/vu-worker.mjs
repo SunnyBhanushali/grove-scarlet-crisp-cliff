@@ -75,6 +75,13 @@ function changeKey(ch) {
   return `${ch.kind}|${ch.id}|`;
 }
 
+/** Fields of the org book the SPA sends with `PATCH /api/company` (row-owned ones are ignored server-side). */
+const ORG_BOOK_FIELDS = [
+  "companies", "brands", "businessUnits", "sbuMembers", "functions", "subFunctions", "roles", "accessRoles",
+  "customReports", "reportFolders", "notices", "appRequests", "roleCases", "trash", "logins",
+  "dismissedAlertIds", "setupDone", "companyFactor", "pendingRoleDeletes", "months", "seedGeneration",
+];
+
 class VU {
   constructor(idx, cfg, login) {
     this.idx = idx;
@@ -149,6 +156,12 @@ class VU {
       // Only the envelope fields we need; the SPA parses the whole snapshot.
       const snap = JSON.parse(outer.snapshotJson);
       feedSeq = Number(snap.feedSeq) || 0;
+      if (this.editor) {
+        // The SPA sends its org book (catalogs as it holds them) after org / people edits.
+        this.orgBook = {};
+        for (const f of ORG_BOOK_FIELDS) if (snap[f] !== undefined) this.orgBook[f] = snap[f];
+        this.bookGens = snap.bookGens || {};
+      }
       this.wireAt = Number(outer.notebookUpdatedAt) || 0;
       this.at = Math.max(this.at, this.wireAt);
     }
@@ -414,6 +427,7 @@ class VU {
     const mark = `${this.id}:${n}`;
     const edit = (p) => withMark(row.table, p || {}, this.id, n);
     const res = await this.save(row, edit, `save-${row.table === "entity" ? row.kind : row.table}${row.shared ? "-shared" : ""}`);
+    if (res.status === 200 && this.editor && this.orgBook && (row.table === "people" || row.table === "entity")) void this.bookPatch();
     if (res.status === 200) {
       metrics.events.push({ e: "ack", mark, vu: this.id, n, row: feedKey(row), path: hotPath(row), t: res.ackAt, sent: res.sentAt, attempts: res.attempts });
       // Read-after-write: the row right away, as the screen's next read does.
@@ -426,6 +440,16 @@ class VU {
       if (Math.random() < this.cfg.rawWireSample) await this.rawWire(row, mark, n);
     } else if (res.status !== "skip" && res.status !== "deleted") {
       metrics.error("save", `${res.status} ${hotPath(row)}`);
+    }
+  }
+
+  /** The SPA's org-book PATCH after an org / people edit (409 → rebase on the answer's gens, once). */
+  async bookPatch() {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await this.c.patch("/api/company", { books: { org: this.orgBook }, baseGens: this.bookGens, clientOpId: `${this.id}-b-${Date.now()}` }, { name: "book-patch" });
+      const b = r.json() || {};
+      if (b.bookGens && typeof b.bookGens === "object") this.bookGens = b.bookGens;
+      if (r.status !== 409) return;
     }
   }
 
