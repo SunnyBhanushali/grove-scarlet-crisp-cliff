@@ -1,0 +1,45 @@
+PASS [setup] admin sunny.b signs in — status 200
+PASS [setup] non-admin nikhil.pati signs in — status 200
+PASS [setup] issued token reads /api/people — status 200, 180 people
+PASS [b] no token → 401 on every API route — 44 routes
+PASS [b] random bearer → 401 on every API route — 44 routes
+PASS [b] hand-written apms-login.<admin> bearer → 401 on every API route — 44 routes
+PASS [b] hand-written apms-login.p-admin cookie → 401 on every API route — 44 routes
+PASS [b] apms-preview-sunny cookie → 401 on every API route — 44 routes
+PASS [b] well-formed never-issued apms-s. → 401 on every API route — 44 routes
+PASS [b] admin token with one char changed → 401 on every API route — 44 routes
+PASS [b] issued admin token is accepted on every GET route
+PASS [a] /api/issued-logins anonymous → 401 — status 401
+PASS [a] /api/issued-logins non-admin (someone else's row) → 403 — status 403
+PASS [a] /api/issued-logins non-admin via cookie → 403 — status 403
+PASS [a] /api/provision-logins anonymous → 401 — status 401
+PASS [a] /api/provision-logins non-admin (someone else's row) → 403 — status 403
+PASS [a] /api/provision-logins non-admin via cookie → 403 — status 403
+PASS [a] admin password unchanged after the refused writes — status 200
+PASS [a] /api/issued-logins admin → 200 — status 200
+PASS [a] the issued password signs in — status 200
+PASS [a] /api/provision-logins admin → 200 — status 200
+PASS [a] the provisioned password signs in — status 200
+PASS [a] the previous password stops working — status 401
+PASS [a] /api/issued-logins non-admin own row → 200 — status 200
+PASS [a] own new password signs in — status 200
+PASS [a] own old password stops working — status 401
+PASS [a] admin password reset ended the person's open session (BATCH-3) — status 401
+PASS [a] the person signs in again with the new password — status 200
+PASS [c] non-admin POST /api/company-restore → 403 — status 403 {"ok":false,"error":"forbidden","message":"Only an admin can do that."}
+PASS [c] non-admin GET /api/company-backups → 403 — status 403 {"ok":false,"error":"forbidden","message":"Only an admin can do that."}
+PASS [c] non-admin POST /api/company-backups → 403 — status 403 {"ok":false,"error":"forbidden","message":"Only an admin can do that."}
+PASS [c] non-admin POST /api/company → 403 — status 403 {"ok":false,"error":"forbidden","message":"Only an admin can do that."}
+PASS [c] non-admin POST /_serverFn/b4b4aa7e… → 403 — status 403 {"ok":false,"error":"forbidden","message":"Only an admin can do that."}
+PASS [c] non-admin POST /_serverFn/60f85321… → 403 — status 403 {"ok":false,"error":"forbidden","message":"Only an admin can do that."}
+PASS [c] non-admin PATCH /api/e/access-roles/employee → 403 — status 403 {"ok":false,"error":"forbidden","kind":"access-roles","message":"only an admin c
+PASS [c] non-admin PATCH /api/e/logins/sunny.b → 403 — status 403 {"ok":false,"error":"forbidden","kind":"logins","message":"only an admin can cha
+PASS [c] non-admin PATCH /api/people/p-1789386088551-ht5648 → 403 — status 403 {"ok":false,"error":"forbidden","kind":"people","field":"access","message":"only
+PASS [c] non-admin PATCH /api/people/p-admin → 403 — status 403 {"ok":false,"error":"forbidden","kind":"people","field":"password","message":"on
+PASS [c] non-admin is still an employee — accessRoleId employee
+PASS [c] non-admin can still edit their own profile — status 200 {"ok":true,"table":"people","id":"p-1789386088551-ht5648","payload":{"id":"p-178
+PASS [c] admin still lists backups — status 200
+PASS [b] signed-out token → 401 — before 200, after 401
+PASS [b] get-session with a signed-out token → null — null
+
+PASS — 43/43 — report: /tmp/claude-0/final2/e2e-security-batch2.json
