@@ -67,10 +67,9 @@ export function liveEntityHooks(): EntityHooks {
       return undefined;
     },
     async publish(spec: CollectionSpec, row: StoredEntity, seq: number) {
-      const { notifyCompanyLive, currentLiveGens, noteFeedSeq } = await import("./company-live");
+      const { notifyCompanyLive, rowWriteGens, noteFeedSeq } = await import("./company-live");
       noteFeedSeq(seq);
-      const prev = currentLiveGens() || { org: 0, plans: 0, months: 0, targets: 0 };
-      const gens = { ...prev, [spec.book]: (Number(prev[spec.book]) || 0) + 1 };
+      const gens = rowWriteGens();
       await notifyCompanyLive(Date.now(), gens, [
         {
           type: liveTypeForKind(row.kind),

@@ -341,7 +341,23 @@ export async function employeeD(ctx, run) {
     const tokenA = await adminToken(ctx);
     await fetch(`${ctx.base}/api/people/${other.id}`, { method: "PATCH", headers: { "content-type": "application/json", authorization: `Bearer ${tokenA}` }, body: JSON.stringify({ baseRev: other.rev, payload: { ...other.payload, salary: Number(other.payload.salary) + 1 } }) });
     await ctx.sleep(4000);
-    const leaks = seen.slice(mark).filter((x) => x.body.includes(other.id) && /"salary"\s*:/.test(x.body.slice(Math.max(0, x.body.indexOf(other.id) - 3000), x.body.indexOf(other.id) + 3000)));
+    // PERF p0as83: exact test — the other person's own object carries a salary,
+    // or the new salary value appears anywhere. (The old ±3000-character window
+    // around their id flagged D's own salary whenever D's filtered org book was
+    // in the reply; D re-reads it when the org book's generation moves.)
+    const newSalary = Number(other.payload.salary) + 1;
+    const carriesSalary = (body) => {
+      if (new RegExp(`"salary"\\s*:\\s*"?${newSalary}\\b`).test(body)) return true;
+      let hit = false;
+      const walk = (v) => {
+        if (hit || !v || typeof v !== "object") return;
+        if (!Array.isArray(v) && v.id === other.id && "salary" in v) hit = true;
+        for (const k of Object.keys(v)) walk(v[k]);
+      };
+      try { walk(JSON.parse(body)); } catch { if (body.includes(other.id)) hit = /"salary"\s*:/.test(body.slice(Math.max(0, body.indexOf(other.id) - 3000), body.indexOf(other.id) + 3000)); }
+      return hit;
+    };
+    const leaks = seen.slice(mark).filter((x) => x.body.includes(other.id) && carriesSalary(x.body));
     const allLeaks = seen.filter((x) => /"password"\s*:\s*"[^"]|scrypt\$/.test(x.body));
     R.expect(4, !leaks.length && !allLeaks.length, `A changed ${other.payload.name}'s salary: D received ${seen.length - mark} feed / row responses after it, none with that salary${leaks.length ? ` — LEAK in ${leaks.map((x) => x.u).join(", ")}` : ""}; responses to D with a password / hash: ${allLeaks.length}`);
     // Reload: D's screens agree with the DB.

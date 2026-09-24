@@ -243,8 +243,10 @@ function mutate(fn: Mutation, book?: BookId): boolean {
   if (S.journal) S.journal.push(fn);
   if (!cur || !cur.slim) return !!S.journal;
   const next = fn(cur.slim);
+  // Row commits keep the book generations (see rowWriteGens in company-live):
+  // the wire, the live tick and the stored books report the same numbers.
+  void book;
   const gens = { ...normalizeBookGens(next) };
-  if (book) gens[book] = (Number(gens[book]) || 0) + 1;
   next.bookGens = gens;
   const people = Array.isArray(next.people) ? (next.people as Array<Record<string, unknown>>) : [];
   S.cache = { ...cur, slim: next, people, bookGens: gens, at: nextAt(), encodePending: true };

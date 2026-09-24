@@ -279,6 +279,24 @@ function emptyGens(): BookGens {
   return { org: 0, plans: 0, months: 0, targets: 0 };
 }
 
+/**
+ * PERF (p0aw5): the book generations a row commit publishes — unchanged. The
+ * row reaches every tab on the change feed, and its book mirror keeps the
+ * stored generation (row-owned fields only). Bumping the live generation here
+ * (as before) left it one ahead of the stored book: a tab without a matching
+ * row pull then re-read the whole book (`/api/company?books=org|targets`) on
+ * every live pull, and a pulled book never caught up with it.
+ */
+export function rowWriteGens(): BookGens {
+  const prev = currentLiveGens() || emptyGens();
+  return {
+    org: Number(prev.org) || 0,
+    plans: Number(prev.plans) || 0,
+    months: Number(prev.months) || 0,
+    targets: Number(prev.targets) || 0,
+  };
+}
+
 export function liveTypeFromTable(table: string): string {
   if (table === "people") return "people";
   if (table === "reward_records" || table === "reward-records") return "reward-records";
@@ -315,15 +333,7 @@ export async function publishEntityWrite(
   hint?: LiveEntityHint | null,
   rec?: { payload?: Record<string, unknown> | null; deleted?: boolean } | null,
 ): Promise<BookGens> {
-  const book = bookForEntityTable(table);
-  const prev = currentLiveGens() || emptyGens();
-  const gens: BookGens = {
-    org: Number(prev.org) || 0,
-    plans: Number(prev.plans) || 0,
-    months: Number(prev.months) || 0,
-    targets: Number(prev.targets) || 0,
-  };
-  gens[book] = (Number(gens[book]) || 0) + 1;
+  const gens = rowWriteGens();
   const entities = hint && hint.id ? [hint] : [];
   await notifyCompanyLive(Date.now(), gens, entities);
   try {

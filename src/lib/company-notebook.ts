@@ -331,12 +331,14 @@ type BookSliceResult = { ok: boolean; snapshot: Snapshot };
  */
 export const MIRROR_GATHER_MS = Number(process.env.APMS_MIRROR_GATHER_MS ?? 5000) || 0;
 
-type MirrorQueue = { running: boolean; wake?: () => void; drained?: Promise<void>; items: unknown[] };
+type MirrorQueue = { running: boolean; wake?: () => void; drained?: Promise<void>; items: unknown[]; flushing?: number };
 const inBookChain = new AsyncLocalStorage<boolean>();
 
 /** The gather wait; a flush (a book reader) cuts it short. */
 function gatherWait(q: MirrorQueue): Promise<void> {
-  if (!MIRROR_GATHER_MS) return Promise.resolve();
+  // A reader is waiting for this queue to drain: rows that arrived after its
+  // flush started are written now too, not after another gather window.
+  if (!MIRROR_GATHER_MS || q.flushing) return Promise.resolve();
   return new Promise<void>((resolve) => {
     const t = setTimeout(done, MIRROR_GATHER_MS);
     function done() {
@@ -360,14 +362,21 @@ export async function flushBookMirrors(only?: readonly BookId[]): Promise<void> 
   const want = (book: BookId) => !only || only.includes(book);
   for (let round = 0; round < 5; round++) {
     const pending: Array<Promise<void> | undefined> = [];
-    const queues = [...bookSliceQueues.entries(), ...entityRowQueues.entries()].filter(([book]) => want(book)).map(([, q]) => q);
-    for (const q of queues as MirrorQueue[]) {
+    const queues = [...bookSliceQueues.entries(), ...entityRowQueues.entries()].filter(([book]) => want(book)).map(([, q]) => q) as MirrorQueue[];
+    const waiting: MirrorQueue[] = [];
+    for (const q of queues) {
       if (!q.items.length && !q.running) continue;
+      q.flushing = (q.flushing || 0) + 1;
+      waiting.push(q);
       q.wake?.();
       pending.push(q.drained);
     }
     if (!pending.length) return;
-    await Promise.all(pending.map((p) => p?.catch(() => undefined)));
+    try {
+      await Promise.all(pending.map((p) => p?.catch(() => undefined)));
+    } finally {
+      for (const q of waiting) q.flushing = Math.max(0, (q.flushing || 1) - 1);
+    }
   }
 }
 
@@ -447,8 +456,8 @@ async function applyBookSlices(book: BookId, list: BookSliceOpts[]): Promise<Boo
   stripEntityTombs(next, tombs);
   // PERF: a mirror writes row-owned fields only, which a book PATCH ignores;
   // it keeps the book's generation (bumping it made every book PATCH that
-  // flushed a pending mirror 409 against itself). Live gens still move on
-  // every row commit (publishEntityWrite).
+  // flushed a pending mirror 409 against itself). Row commits do not move
+  // the live gens either (rowWriteGens): live and stored stay equal.
   next.bookGens = normalizeBookGens(stored);
   next.notebookUpdatedAt = Date.now();
   const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, stored));

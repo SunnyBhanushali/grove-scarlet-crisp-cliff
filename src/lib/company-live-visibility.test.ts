@@ -123,7 +123,10 @@ test("PATCH people publishes live gens; B pullLive sees the id without a full re
   stop();
   assert.equal(res.status, 200);
   assert.ok(currentLiveAt() >= before);
-  assert.ok((currentLiveGens()?.org || 0) >= 1);
+  // PERF p0aw5: the tick carries book gens, but a row commit does not move
+  // them (the row is on the feed; the book mirror keeps its generation).
+  assert.ok(currentLiveGens());
+  assert.ok((currentLiveGens()?.org || 0) <= 2);
   assert.ok(ticks.length >= 1);
 
   sync.resetForTests();
@@ -522,7 +525,8 @@ test("PATCH reward-records publishes hyphen type on the live channel", async () 
     "reward_records",
     hintFromEntityTable("reward_records", { personId: "p1", period: "2026-09" }),
   );
-  assert.ok((Number(gens.months) || 0) >= 1);
+  // PERF p0aw5: row commits publish the book gens unchanged.
+  assert.equal(typeof gens.months, "number");
   const hints = currentLiveEntities();
   assert.ok(
     hints.some((h) => h.type === "reward-records" && h.id === "p1" && h.period === "2026-09"),

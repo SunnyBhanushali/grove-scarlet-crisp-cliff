@@ -8,7 +8,8 @@
  *   - the wire's feed position never passes a write still in flight;
  *   - generic-kind re-reads land in commit order;
  *   - encoding happens once per version, only when read;
- *   - cached screen reads: same generation → memory / 304, a write → rebuilt.
+ *   - cached screen reads: same generation → memory / 304, a write → rebuilt;
+ *   - row commits keep the book generations.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -154,4 +155,17 @@ test("screen reads: concurrent misses share one build", async () => {
     Array.from({ length: 20 }, () => cachedJsonResponse(new Request("http://x/api/people"), "p", hotGen("people"), build)),
   );
   assert.equal(builds, 1);
+});
+
+test("row commits keep the book generations (the wire never runs ahead of the stored books)", async () => {
+  resetWireForTests();
+  setCompanyWireForTests(wireOf({ people: [{ id: "p1", name: "A" }], records: {} }));
+  patchCompanyWireEntity("people", { id: "p1" }, { payload: { id: "p1", name: "B" } });
+  patchCompanyWireEntity("month_records", { id: "p1", period: "2026-09" }, { payload: { v: 1 } });
+  patchCompanyWireEntity("target_cells", { id: "t1", period: "2026-09" }, { payload: { actual: 1 } });
+  const w = await getCompanyWire();
+  // A tab whose book gen is behind re-reads the whole book; a pulled book
+  // reports the stored gen, so a bumped wire gen made it re-read forever.
+  assert.deepEqual(snap(w).bookGens, { org: 1, plans: 1, months: 1, targets: 1 });
+  assert.deepEqual(w.bookGens, { org: 1, plans: 1, months: 1, targets: 1 });
 });
