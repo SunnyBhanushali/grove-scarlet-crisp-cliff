@@ -237,6 +237,57 @@ export async function importHotTables(
   return liveHotTableCounts(sql);
 }
 
+/**
+ * BATCH-3: first import on an empty database as ONE statement (data-modifying
+ * CTEs), so a GET assembling at the same moment sees either no rows (and
+ * waits / falls back to books) or all of them — never 53 of 180 people. The
+ * two server module copies both reach this on a fresh boot; a partial read was
+ * cached as the wire. Falls back to the row-by-row import on any error.
+ */
+export async function importHotTablesAtomic(
+  sql: HotSql,
+  snapshot: Snapshot,
+  opts: { updatedBy?: string } = {},
+): Promise<HotTableCounts> {
+  const updatedBy = opts.updatedBy || "book-import";
+  const last = <T,>(rows: T[], key: (r: T) => string) => [...new Map(rows.map((r) => [key(r), r])).values()];
+  const people = last(flattenPeople(snapshot.people), (r) => r.id);
+  const months = last(flattenPersonPeriodMap(snapshot.records), (r) => `${r.personId}\u001f${r.period}`);
+  const rewards = last(flattenPersonPeriodMap(snapshot.rewardRecords), (r) => `${r.personId}\u001f${r.period}`);
+  const cells = last(flattenTargetCells(snapshot.targetCells), (r) => r.id);
+  const keyed = (table: string, param: string) => `
+    insert into ${table} (id, payload, rev, updated_at, updated_by, deleted_at)
+    select x.id, x.payload, 1, now(), $5, null from jsonb_to_recordset(${param}::jsonb) as x(id text, payload jsonb)
+    on conflict (id) do nothing returning 1`;
+  const period = (table: string, param: string) => `
+    insert into ${table} (person_id, period, payload, rev, updated_at, updated_by, deleted_at)
+    select x."personId", x.period, x.payload, 1, now(), $5, null
+      from jsonb_to_recordset(${param}::jsonb) as x("personId" text, period text, payload jsonb)
+    on conflict (person_id, period) do nothing returning 1`;
+  try {
+    await sql.query(
+      `with p as (${keyed("people", "$1")}),
+            m as (${period("month_records", "$2")}),
+            r as (${period("reward_records", "$3")}),
+            c as (${keyed("target_cells", "$4")})
+       select (select count(*) from p) as p, (select count(*) from m) as m,
+              (select count(*) from r) as r, (select count(*) from c) as c`,
+      [
+        JSON.stringify(people),
+        JSON.stringify(months),
+        JSON.stringify(rewards),
+        JSON.stringify(cells),
+        updatedBy,
+      ],
+    );
+    await upsertTombstoneRows(sql, flattenTombstones(snapshot.tombstones), updatedBy);
+    return liveHotTableCounts(sql);
+  } catch (err) {
+    console.error("[hot-tables] atomic import failed; row-by-row", err);
+    return importHotTables(sql, snapshot, opts);
+  }
+}
+
 export async function liveHotTableCounts(sql: HotSql): Promise<HotTableCounts> {
   const one = async (text: string) => {
     const rows = await sql.query<{ n: number }>(text);

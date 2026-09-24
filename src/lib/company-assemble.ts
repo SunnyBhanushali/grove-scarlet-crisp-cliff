@@ -2,6 +2,7 @@ import type { BookId, Snapshot } from "./company-books.ts";
 import {
   flattenPeople,
   importHotTables,
+  importHotTablesAtomic,
   liveHotTableCounts,
   type HotSql,
   type PersonPeriodRow,
@@ -324,7 +325,7 @@ export async function assembleForGet(sql: HotSql, snapshot: Snapshot): Promise<{
   if (counts.people < 1 && bookPeople > 0 && !getImportAttempted) {
     getImportAttempted = true;
     console.info("[assemble] empty hot tables; importHotTables from books people=", bookPeople);
-    await importHotTables(sql, snapshot, { updatedBy: "get-assemble" });
+    await importHotTablesAtomic(sql, snapshot, { updatedBy: "get-assemble" });
     imported = true;
     counts = await liveHotTableCounts(sql);
   }
