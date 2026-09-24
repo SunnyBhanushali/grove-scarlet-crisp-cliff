@@ -18,6 +18,9 @@
  *  4. Settings → Backup: the list of server copies re-reads every 3 s while
  *     the screen is open (it was read once on open, so other admins never saw
  *     a new copy without a reload).
+ *  8. Autosave: a change made while the previous save was in flight (e.g. a
+ *     person's Core role picked right after Save) waited for the next edit;
+ *     the save now runs once more when the in-flight one ends.
  *
  *  5. Routes load the login-view chunk as ?v=p0as81 (see below).
  *
@@ -28,6 +31,9 @@
  *     siblings (same manager / parent / brand / company) now get `sortKey`
  *     0..n-1 in their new order, which is saved as row data; the server and
  *     the sync keep those lists sorted by it (apms-collections siblingOrder).
+ *  7. Derived reminders (plan due / late / month close) had a random id per
+ *     page load, so the bell counted them unseen again after every reload.
+ *     They now get a stable id from their dedupe key (qf).
  *
  * apms-sync.js and apms-collections.js get ?v=p0as81 (apms-sync.js is edited
  * in recovered-site/assets and copied to public/assets by this script).
@@ -68,6 +74,14 @@ const ROLE_STATE_OLD = "[fl,setFl]=(0,Z.useState)(init.flags||{});";
 const ROLE_STATE_NEW =
   "[fl,setFl]=(0,Z.useState)(init.flags||{}),[o0]=(0,Z.useState)(()=>r?{name:r.name||``,base:r.base||`manager`,note:r.note||``,scope:r.scope||init.scope||`team`,grants:JSON.parse(JSON.stringify(init.grants||{})),flags:JSON.parse(JSON.stringify(init.flags||{}))}:null);";
 
+// 8. autosave: a change made while the previous save was in flight was only
+//    sent on the next store change (the timer found a save running and gave
+//    up; the save's end then cleared the dirty flag). It now runs once more.
+const SAVE_BUSY_OLD = "async function g(){if(f.current)return;p.current=0;";
+const SAVE_BUSY_NEW = "async function g(){if(f.current){f.again=!0;return}f.again=!1;p.current=0;";
+const SAVE_END_OLD = "}catch{}finally{f.current=!1}}}function _(){D.current=!0;";
+const SAVE_END_NEW = "}catch{}finally{f.current=!1;if(f.again){f.again=!1;setTimeout(()=>{g().catch(()=>void 0)},0)}}}}function _(){D.current=!0;";
+
 // 3. save trigger lists setupDone / companyFactor
 const SUB_OLD = "`customReports`,`reportFolders`,`tombstones`])";
 const SUB_NEW = "`customReports`,`reportFolders`,`tombstones`,`setupDone`,`companyFactor`])";
@@ -84,8 +98,17 @@ const LOGIN_REF_NEW = `${LOGIN}?v=${V}`;
 
 // 6. sibling order (login-view)
 const SK_FN = "function _sk(a,t,k){let m=a.find(x=>x&&x.id===t);if(!m)return a;let g=k(m),i=0;return a.map(x=>{if(!x||k(x)!==g)return x;let s=i++;return x.sortKey===s?x:{...x,sortKey:s}})}";
+const NT_HASH = "function __ntk(s){let h=5381;for(let i=0;i<s.length;i++)h=(Math.imul(h,33)^s.charCodeAt(i))>>>0;return h.toString(36)}";
 const LOGIN_PAIRS = [
-  ["function nestAtTop(e,t,n,r){", SK_FN + "function nestAtTop(e,t,n,r){", 1, "sibling sortKey helper"],
+  ["function nestAtTop(e,t,n,r){", SK_FN + NT_HASH + "function nestAtTop(e,t,n,r){", 1, "sibling sortKey helper + notice key hash"],
+  // 7. derived reminders (plan due / late / close) get a stable id from their
+  //    dedupe key, so the bell's "seen" list still matches them after a reload.
+  [
+    "id:n.id||`nt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`}",
+    "id:n.id||(/^(plan_due|plan_late|month_close_due)$/.test(n.kind||``)?`nt-a-${__ntk(qf(n))}`:`nt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`)}",
+    1,
+    "stable id for derived reminders",
+  ],
   ["people:_e(e.people,n,r,i)", "people:_sk(_e(e.people,n,r,i),n,x=>x.managerId||``)", 2, "people reorder / nudge"],
   ["people:nestAtTop(e.people,n,r,`managerId`)", "people:_sk(nestAtTop(e.people,n,r,`managerId`),n,x=>x.managerId||``)", 1, "people nest"],
   ["businessUnits:_e(e.businessUnits,n,r,i)", "businessUnits:_sk(_e(e.businessUnits,n,r,i),n,x=>(x.parentId||``)+`|`+(x.brandId||``))", 1, "SBU reorder"],
@@ -100,10 +123,13 @@ const LOGIN_PAIRS = [
   ],
 ];
 
+/** Edited in place: each change is applied once (skipped when already there). */
 export function stampLogin(src) {
-  if (src.includes(SK_FN)) return src;
   let out = src;
-  for (const [from, to, n, what] of LOGIN_PAIRS) out = times(out, from, to, n, what);
+  for (const [from, to, n, what] of LOGIN_PAIRS) {
+    if (out.split(to).length - 1 === n) continue;
+    out = times(out, from, to, n, what);
+  }
   return out;
 }
 
@@ -114,6 +140,8 @@ export function stampRoutes(src) {
   out = times(out, SUB_OLD, SUB_NEW, 1, "save trigger fields");
   out = times(out, BK_OLD, BK_NEW, 1, "backup list refresh");
   out = times(out, LOGIN_REF_OLD, LOGIN_REF_NEW, 2, "login-view reference");
+  out = times(out, SAVE_BUSY_OLD, SAVE_BUSY_NEW, 1, "autosave while a save is in flight");
+  out = times(out, SAVE_END_OLD, SAVE_END_NEW, 1, "autosave reruns after the in-flight save");
   return out;
 }
 

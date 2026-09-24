@@ -303,6 +303,38 @@ export async function claimWriteId(
   return rows.length > 0;
 }
 
+/**
+ * BATCH-2: a book save re-sends every tombstone the client holds. A person
+ * restored from Trash (a live people row written after the delete) must not
+ * be deleted again by that echo: a people tombstone older than the row's last
+ * write is dropped (neither stored nor applied).
+ */
+export async function dropSupersededPeopleTombs(sql: HotSql, tombs: TombRow[]): Promise<TombRow[]> {
+  const people = tombs.filter((t) => t.field === "people");
+  if (!people.length) return tombs;
+  const ids = [...new Set(people.map((t) => tombPersonId(t.key)))];
+  const rows = await sql.query<{ id: string; updated_at: string | Date }>(
+    "select id, updated_at from people where id = any($1) and deleted_at is null",
+    [ids],
+  );
+  const liveAt = new Map(rows.map((r) => [r.id, new Date(r.updated_at).getTime()]));
+  return tombs.filter((t) => {
+    if (t.field !== "people") return true;
+    const at = Number(t.payload.at) || 0;
+    const rowAt = liveAt.get(tombPersonId(t.key));
+    return rowAt === undefined || !at || at > rowAt;
+  });
+}
+
+/** An explicit restore (a live people row over its tombstone) clears the person's tombstones. */
+export async function clearPeopleTombs(sql: HotSql, personId: string, updatedBy: string): Promise<void> {
+  await sql.query(
+    `update tombstones set deleted_at = now(), updated_at = now(), updated_by = $2, rev = rev + 1
+      where field = 'people' and key in ($1, 'id:' || $1) and deleted_at is null`,
+    [personId, updatedBy],
+  );
+}
+
 function tombPersonId(key: string): string {
   return key.startsWith("id:") ? key.slice(3) : key;
 }
@@ -431,7 +463,7 @@ export async function dualWriteHotTables(
     }
   }
 
-  const tombs = flattenTombstones(input.committed?.tombstones);
+  const tombs = await dropSupersededPeopleTombs(sql, flattenTombstones(input.committed?.tombstones));
   if (tombs.length) {
     await upsertTombstoneRows(sql, tombs, updatedBy);
     await applyTombstoneDeletes(sql, tombs);

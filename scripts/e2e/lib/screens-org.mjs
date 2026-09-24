@@ -192,7 +192,11 @@ export async function orgUnits(ctx, run) {
     R.note(`double-click on the SBU name "${U1b}" did not open the inline rename: the first click of the double-click opens the SBU page (row onClick = onOpen), so brand/SBU rename by double-click is unreachable; company rows rename fine`);
     await openOrg(ctx, A, "Brands & SBUs");
   } else {
+    const dbx = await waitDb(async () => (await entityById(ctx, "sbus", u1.id))?.payload?.name === `${U1b} x`, 4000);
+    R.note(`double-click on the SBU name opened the inline rename; saved in DB ${!!dbx}`);
+    await openOrg(ctx, A, "Brands & SBUs");
     await dblRename(A, `${U1b} x`, U1b);
+    await waitDb(async () => (await entityById(ctx, "sbus", u1.id))?.payload?.name === U1b, 4000);
   }
 
   // Check 4: A deletes U2 while B (feed held) has U2's Edit page open, renames and saves.
@@ -318,12 +322,16 @@ export async function orgUnitsDrag(ctx, run) {
   // Sibling reorder: A drags D3 above LILA (same brand, same depth).
   await openOrg(ctx, A, "Brands & SBUs");
   const orderOf = async (p) => (await treeRows(p)).map((r) => r.name).filter((n) => n === "LILA" || n === D3);
+  const mR = ctx.mark();
   await dragAbove(A, D3, "LILA");
   const tR = Date.now();
   const aOrder = await orderOf(A);
   const cR = await ctx.waitUntil(async () => (await orderOf(C)).join() === [D3, "LILA"].join(), 5000);
+  await ctx.settled(A);
+  await ctx.sleep(1000);
+  const reorderWrites = realWritesOf(mR, "A");
   R.expect(3, c1 !== null && c2 !== null && cR !== null,
-    `C (idle) showed the nests ${c1 === null ? "NOT within 5 s" : `${secs(c1)} s`}, the rename + un-nest ${c2 === null ? "NOT within 5 s" : `${secs(c2)} s`}, A's reorder (D3 above LILA; A's own screen ${aOrder.join(" > ")}) ${cR === null ? `NOT within 5 s (C still ${(await orderOf(C)).join(" > ")}; A sent ${brief(ctx.net.A.filter((n) => n.t >= tR - 3000 && n.m !== "GET")).join(", ") || "no write"})` : `${secs(cR)} s`} after the drops`);
+    `C (idle) showed the nests ${c1 === null ? "NOT within 5 s" : `${secs(c1)} s`}, the rename + un-nest ${c2 === null ? "NOT within 5 s" : `${secs(c2)} s`}, A's reorder (D3 above LILA; A's own screen ${aOrder.join(" > ")}; A sent ${reorderWrites.join(", ") || "no write"}) ${cR === null ? `NOT within 5 s (C still ${(await orderOf(C)).join(" > ")})` : `${secs(cR)} s`} after the drops`);
 
   // Check 4: A deletes D4 (in D3) while B, feed held, drags D4 out of D3.
   await ctx.holdFeed(B, ORG_READ);
@@ -357,8 +365,8 @@ export async function orgUnitsDrag(ctx, run) {
     got.push({ d2Out: (await hasRow(p, D2b)) && !((await childrenShown(p, D1)) || []).includes(D2b), order: (await orderOf(p)).join(" > ") });
   }
   const want = { d2Out: !dbRows[D2].payload.parentId, order: aOrder.join(" > ") };
-  R.expect(5, got.every((g) => g.d2Out === want.d2Out && g.order === want.order),
-    `DB: D2 parent ${JSON.stringify(dbRows[D2].payload.parentId)}; want order as A left it (${want.order}); screens A/B/C ${got.map((g) => (g.d2Out === want.d2Out && g.order === want.order ? "same" : JSON.stringify(g))).join(" / ")}${got.some((g) => g.order !== want.order) ? " — the SBU sibling order is not stored (no write on reorder; rows come back in storage order)" : ""}`);
+  R.expect(5, got.every((g) => g.d2Out === want.d2Out && g.order === want.order) && reorderWrites.length > 0,
+    `DB: D2 parent ${JSON.stringify(dbRows[D2].payload.parentId)}; want order as A left it (${want.order}); screens A/B/C ${got.map((g) => (g.d2Out === want.d2Out && g.order === want.order ? "same" : JSON.stringify(g))).join(" / ")}${!reorderWrites.length ? " — A's reorder wrote nothing, so any order after reload is storage order" : ""}`);
 
   // Clean up (A).
   await openOrg(ctx, A, "Brands & SBUs");
@@ -911,9 +919,12 @@ export async function orgChartDrag(ctx, run) {
   if (first && second) await dragAbove(A, second, first);
   const aOrder = await order(A);
   const tR = Date.now();
-  const reorderWrites = realWritesOf(mR, "A");
   // C must move from its own earlier order to A's new one (both must have agreed before).
   const cR = cBefore.join() === before.join() ? await ctx.waitUntil(async () => (await order(C)).join() === aOrder.join(), 5000) : null;
+  // The save is debounced: count A's writes once A has nothing left to save.
+  await ctx.settled(A);
+  await ctx.sleep(1000);
+  const reorderWrites = realWritesOf(mR, "A");
   if (cBefore.join() !== before.join()) R.note(`before the reorder A showed ${before.join(" > ")} but C showed ${cBefore.join(" > ")}: sibling order differs per browser`);
   if (!reorderWrites.length) R.note("A's sibling reorder sent no write");
   R.expect(3, c1 !== null && c2 !== null && cR !== null && aOrder.join() !== before.join(),

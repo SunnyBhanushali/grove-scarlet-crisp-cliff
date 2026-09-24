@@ -374,6 +374,22 @@
     return true;
   }
 
+  /**
+   * Passwords this client saved that the server accepted but never echoes back
+   * (NO-SECRETS-WIRE strips `password` from every read). Without this the
+   * saved row looks edited forever (local has the password, the acked copy
+   * from the server has none) and every later save re-sends this screen's copy
+   * of the whole row — over other users' newer fields.
+   */
+  var sentSecrets = {};
+  function sansSentSecret(revKey, next, prev) {
+    if (!isPlainObject(next) || !next.password || (isPlainObject(prev) && prev.password)) return next;
+    if (sentSecrets[revKey] !== next.password) return next;
+    var out = Object.assign({}, next);
+    delete out.password;
+    return out;
+  }
+
   function genericOpsFor(spec, snap, ops) {
     // A field the UI snapshot does not carry (e.g. roleKrocs, a book-storage
     // split) is "not held here", never "every row deleted".
@@ -382,7 +398,7 @@
     var nextValue = spec.ordered ? withPositions(spec, snap[spec.field], ackedFieldValue(spec)) : snap[spec.field];
     var next = rowsById(spec, nextValue);
     Object.keys(next).forEach(function (id) {
-      if (prev[id] && eq(next[id].payload, prev[id].payload)) return;
+      if (prev[id] && eq(sansSentSecret("e:" + spec.kind + ":" + id, next[id].payload, prev[id].payload), prev[id].payload)) return;
       var row = next[id];
       if (!prev[id] && isPlaceholderRow(spec, row.payload)) return;
       ops.push({
@@ -464,6 +480,29 @@
    * SPA list rebuilt from memory — so it is not sent: the delete stands.
    */
   var remoteDeletedKeys = {};
+  /**
+   * Rows this client puts back from Trash in the current save (explicit user
+   * action). Only set after the trash row itself was deleted on the server by
+   * this save; such a row may re-create its tombstone (baseRev = tombstone rev).
+   */
+  var trashRestoreKeys = {};
+  function trashRestoredKeys(trashOp, ops) {
+    var item = ackedSlice(trashOp) || trashOp.payload || {};
+    var snap = isPlainObject(item.snapshot) ? item.snapshot : null;
+    if (!snap) return [];
+    var keys = [];
+    ops.forEach(function (op) {
+      if (op.deleted) return;
+      // BATCH-2: a person put back from Trash (hot people row) counts too.
+      if (op.kind === "people") {
+        if (Array.isArray(snap.people) && snap.people.some(function (x) { return isPlainObject(x) && String(x.id) === String(op.personId); })) keys.push(op.revKey);
+        return;
+      }
+      if (!op.spec || op.spec.kind === "trash" || snap[op.spec.field] === undefined) return;
+      if (rowsById(op.spec, snap[op.spec.field])[op.rowId]) keys.push(op.revKey);
+    });
+    return keys;
+  }
   function rememberRows(snapshot) {
     if (!C || !isPlainObject(snapshot)) return;
     C.SPECS.forEach(function (spec) {
@@ -1266,7 +1305,12 @@
         changesInFlight = null;
         feedLog.push({ at: Date.now(), since: since, n: body && Array.isArray(body.changes) ? body.changes.length : -1, seq: body && body.seq });
         if (feedLog.length > 40) feedLog.shift();
-        if (!body || !Array.isArray(body.changes)) return null;
+        if (!body || !Array.isArray(body.changes)) {
+          // The poll failed (network / 5xx): the tick that asked for it is not
+          // consumed, so the next tick polls again from the same cursor.
+          lastChangesAt = 0;
+          return null;
+        }
         var hooks = liveHooks;
         var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
         if (body.changes.length && !local) {
@@ -1322,6 +1366,7 @@
       })
       .catch(function () {
         changesInFlight = null;
+        lastChangesAt = 0;
         return null;
       })
       .then(function (body) {
@@ -2439,7 +2484,7 @@
     // live view — for many seconds). Clearing a field that had a value still
     // differs from the baseline, so real edits are unaffected.
     Object.keys(nextPeople).forEach(function (id) {
-      if (!eq(personContent(nextPeople[id]), personContent(prevPeople[id]))) {
+      if (!eq(personContent(sansSentSecret(entityRevKey("people", id), nextPeople[id], prevPeople[id])), personContent(prevPeople[id]))) {
         ops.push({
           kind: "people",
           url: "/api/people/" + encodeURIComponent(id),
@@ -2777,6 +2822,9 @@
       }
       if (result.status === 200 && result.json && result.json.ok) {
         entityRevs[op.revKey] = Number(result.json.rev) || baseRev;
+        if (!op.deleted && isPlainObject(op.payload) && op.payload.password && !(isPlainObject(result.json.payload) && result.json.payload.password)) {
+          sentSecrets[op.revKey] = op.payload.password;
+        }
         if (result.json.bookGens) noteAck({ bookGens: result.json.bookGens }, BOOK_IDS);
         if (result.json.deleted === true && !op.deleted) {
           // The server stored my create as a tombstone (a duplicate auto
@@ -2802,6 +2850,12 @@
         }
         baseRev = serverRev;
         if (serverDeleted && !op.deleted) {
+          if (trashRestoreKeys[op.revKey]) {
+            // Restored from Trash: re-create on top of the tombstone (baseRev = its rev).
+            delete trashRestoreKeys[op.revKey];
+            lastMergeTrace.push({ revKey: op.revKey, kind: "trash-restore-recreate" });
+            continue;
+          }
           if (base === undefined && !knownRowKeys[op.revKey] && !staleHotReadd(op)) {
             // I never had this row: it is a genuine create that collided with
             // an old tombstone id. Re-create it on top of the tombstone.
@@ -2994,6 +3048,41 @@
   async function saveEntities(snap) {
     var ops = collectEntityOps(snap);
     if (!ops.length) return { ok: true, applied: [], ops: [], snapshot: snap };
+    // Trash → Restore: the trash row's delete goes first. Only when this save
+    // really removed it from the server (not a stale screen whose item someone
+    // already restored or deleted forever) may its rows re-create their tombstones.
+    var trashOps = ops.filter(function (op) { return op.kind === "e:trash" && op.deleted && trashRestoredKeys(op, ops).length; });
+    var trashResults = [];
+    var staleDropped = [];
+    trashRestoreKeys = {};
+    if (trashOps.length) {
+      trashResults = await Promise.all(trashOps.map(function (op) { return saveOneEntity(op, snap); }));
+      var staleRestore = {};
+      trashResults.forEach(function (r) {
+        if (!r || !r.op) return;
+        if (!r.ok || r.adopted) {
+          // Someone else already restored it or deleted it forever: this
+          // screen's restore is stale — its rows are not re-created.
+          if (r.ok) trashRestoredKeys(r.op, ops).forEach(function (k) { staleRestore[k] = 1; });
+          return;
+        }
+        trashRestoredKeys(r.op, ops).forEach(function (k) {
+          trashRestoreKeys[k] = 1;
+          delete remoteDeletedKeys[k];
+        });
+      });
+      ops = ops.filter(function (op) { return trashOps.indexOf(op) < 0; });
+      if (Object.keys(staleRestore).length) {
+        ops = ops.filter(function (op) {
+          if (op.deleted || !staleRestore[op.revKey]) return true;
+          remoteDeletedKeys[op.revKey] = 1;
+          staleDropped.push(op);
+          trashResults.push({ ok: true, json: { ok: true, deleted: true, payload: op.payload }, op: op, adopted: true, deleted: true });
+          lastMergeTrace.push({ revKey: op.revKey, kind: "stale-trash-restore-dropped" });
+          return false;
+        });
+      }
+    }
     // A target month's order row goes first. If another user deleted that
     // month (this screen still had it), whatever this save adds to it (new
     // cells, memberships, targets) is stale: dropped, so the month stays gone.
@@ -3047,6 +3136,11 @@
     var restResults = await Promise.all((cellResults ? otherOps : ops).map(function (op) { return saveOneEntity(op, snap); }));
     var results = orderResults.concat(dropped, cellResults ? cellResults.concat(restResults) : restResults);
     ops = orderOps.length && orderResults.length ? orderOps.concat(dropped.map(function (r) { return r.op; }), cellResults ? cellOps.concat(otherOps) : ops) : (cellResults ? cellOps.concat(otherOps) : ops);
+    if (trashOps.length) {
+      results = trashResults.concat(results);
+      ops = trashOps.concat(staleDropped, ops);
+      trashRestoreKeys = {};
+    }
     var conflict = results.find(function (r) { return r && r.error === "person-month-conflict"; });
     if (conflict) {
       return {

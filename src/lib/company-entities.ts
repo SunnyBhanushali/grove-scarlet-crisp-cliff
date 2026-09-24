@@ -8,6 +8,7 @@ import {
   liveHotTableCounts,
   rememberWriteId,
   type HotSql,
+  clearPeopleTombs,
 } from "./company-hot-tables.ts";
 import { unauthorizedJson, hasValidSession } from "./apms-request-auth.ts";
 import { publishEntityWrite, hintFromEntityTable, liveTypeFromTable } from "./company-live.ts";
@@ -471,6 +472,10 @@ async function patchEntityUnlocked(
     await rememberWriteId(sql, parsed.clientOpId, { table: key.table, rev: nextRev }, updatedBy);
   }
   const next: EntityRow = { payload, rev: nextRev, deleted: parsed.deleted };
+  if (key.table === "people" && stored.deleted && !parsed.deleted) {
+    // BATCH-2: restore from Trash (re-create over the tombstone at its rev).
+    await clearPeopleTombs(sql, key.id, updatedBy);
+  }
 
   // ROWS-V2: hot-table commits ride the same change feed as every other row,
   // so followers no longer depend on the hint channel for these four kinds.
