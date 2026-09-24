@@ -77,9 +77,11 @@ export async function handleCompanyBackupsRequest(request: Request): Promise<Res
         if (!full) return json({ ok: false, error: "That copy could not be read." }, 500);
         // BATCH-3: a downloaded copy carries no password or hash (restore keeps the stored ones).
         const snapshot = slimForWire(full);
+        const { snapshotJson: _drop, ...meta } = row as typeof row & { snapshotJson?: string };
+        void _drop;
         return json({
           ok: true,
-          item: row,
+          item: meta,
           snapshot,
           filename: filenameFor(row),
           file: wrapBackupDownload(snapshot, row),
