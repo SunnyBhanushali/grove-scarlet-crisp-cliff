@@ -2,7 +2,7 @@
 
 Product host is **https://apms.alienstattoo.in** (production SPA). `app.alienstattoo.in` is the older tree. This workspace is Aliens APMS, not a new app. Do not scaffold. Do not invent OT / CRDT / Yjs / Automerge / WebRTC. Do not disable multi-user.
 
-Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10 G9 still **0/3**. This tree is **p0as80** (ROWS-V2 + HOT-FEED + THREE-USERS: sync p0as80; routes p0as80; login-view p0as80).
+Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10 G9 still **0/3**. This tree is **p0as81** (ROWS-V2 + HOT-FEED + THREE-USERS + BATCH-2: sync / collections / login-view / dnd-engine `?v=p0as81`; routes `routes-e2g7y5q8-13m-p0as81.js`).
 
 ## LOCKS
 
@@ -123,6 +123,8 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - **HOT-FEED** — 23 Sep 2026 IST. Stamp **p0as79** (sync), server **p0aw4**. Live p0as78 G9 was RED (B entityGets=0) and three testers lost APMS / Rewards work and saw deleted targets return. (1) people / month-records / reward-records / target-cells commits now append to `entity_log` **with payload** (`appendHotTableChange`), so followers get them from `/api/changes` like every other row; the hint channel is no longer needed for them. Client `mergeHotRow`: clean row → take + ack (in screen shape), dirty row → 3-way merge and stays dirty, deleted → gone; rev learned only when the UI takes it. (2) `merge3` on lists of ids (target root order, …): a removal by either side sticks — this was putting deleted targets back. (3) Assemble drops `targetRootOrder` entries and `targetMembers` rows that point at a deleted target node. (4) `entity_log.payload` column is ensured at runtime (`ensureFeedSchema`), because live does not apply migration files on boot; `0009_entity_log_payload.sql` is the same statement. Tests `rows-v2-hot-feed.test.ts`.
 - **THREE-USERS** — 23 Sep 2026 IST. Stamp **p0as80** (sync + routes + login-view `?v=p0as80`). Every APMS / Rewards / Targets screen checked with three admins (different records, same record different fields, idle viewer ≤ 5 s, stale edit of a deleted record, reload = DB, no banner / no writes on open / no 5xx) plus a module smoke — `scripts/e2e/rows-v2-three-users.mjs`. Fixed without changing the ROWS-V2 design: writes on sign-in / open (placeholder reviews and derived reminders are not written); deleted plans / EOs / targets stay deleted (stale re-add, `merge3` id-array removal stands, server refuses members of a deleted cell); stale write-backs; live latency (LISTEN ticks, missed-tick re-poll, SPA dirty flag after a feed apply, one snapshot copy per state, background group-committed book mirror, one SSE stream per tab); focused Targets value wrote a stale copy back (stamp); MIS report folders were never saved (`exportSnapshot` lacked `reportFolders`); LISTEN kept a stopping server alive. **Deviation:** hydrate replays the change feed from the wire's `feedSeq` (not `head=1`) so a reload cannot miss commits made after the wire was cached. See `REPORT-THREE-USERS.md`.
 
+- **BATCH-2** — 24 Sep 2026 IST. Stamp **p0as81** (`scripts/stamp-p0as81-batch2.mjs`: routes from p0as80 + login-view in place), migration `0010_apms_sessions.sql`. **Security:** server-issued session tokens only (`apms_sessions`, SHA-256; forged / `apms-login.*` / `apms-preview-sunny` → 401 on every `/api/*` and `/_serverFn/*`), HttpOnly cookie, sign-out revokes; `/api/issued-logins` + `/api/provision-logins` anonymous 401 / non-admin 403 (own row allowed on issued-logins) / admin 200; admin-only restore, backups, legacy snapshot save, access-role rows, other people's login rows, access-role changes and other people's passwords via `/api/people/:id`; forgot password never returns a temp password and changes nothing unless it was emailed. **Three users on Org / People / Me / Home / Settings** (`scripts/e2e/batch2-three-users.mjs`): restore reaches every screen (resync logged last + `pg_notify`, `restorePull`, apply reason `restore` wins over unsaved edits); access-role Save sends only changed fields; setupDone / companyFactor saved; backup list live; failed feed poll retries; accepted passwords not re-sent; Trash restore re-creates over the tombstone only when this save removed the trash row (people too; stale book tombstones dropped); autosave reruns after an in-flight save; stable ids for derived reminders; KROC editor no stale autosave; Brands & SBUs tree depth / un-nest / reorder; drag-left at the end of a subtree un-nests; **sibling reorder saved** (`sortKey` on sibling rows, `siblingOrder` collections, people in book order). See `REPORT-BATCH-2.md`.
+
 ## OPEN
 
 - ROWS-V2: **built (node-server) and two-browser tested on local Postgres (p0as78 / p0aw3) — `REPORT-ROWS-V2-SMOKE.md`. NOT on live.** Next: staging 3010 with `aliens_apms_test`, then live.
@@ -184,6 +186,7 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - ROSTER-R1: **done in tree** (p0as43). People identity vs period overlay. Seed / copy-from / lock / OCC / overlay. R2 split-day still open.
 - ROSTER-LOCK: **done in tree** (p0as44). Rewards/APMS/award store `rosterId`; reads use that roster; rebind is admin+audit only.
 - BOOT-PAREN: **done in tree** (p0as45). Extra `)` in routes G9 patch removed; SPA parses. Hard refresh `?v=p0as45`.
+- BATCH-2: **done in tree** (p0as81). Open design decisions: server-side read scoping and write permissions per access role (today only the SPA enforces grants), hashing stored passwords, sign-in rate limit, revoking sessions on an admin password reset, `sunny.b`/`0000` and the `0000` default (pending Sunny). Live until Eng cuts p0as81 (every browser signs in once after the cut).
 - Do not start Step 8.
 
 ## ACCEPTANCE
@@ -234,13 +237,19 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 | Team option is full name’s team; KRA/KPI pointer dnd; weight empty does not become `020` | **pass** (unit) | untested until p0as52 is cut |
 | Employee status is Active / Paused / Exited | **pass** (unit) | untested until p0as53 is cut |
 | Click Role on person file does not React #318 | **pass** (unit: `$o` useState before early return) | **fail** on live until p0as54 is cut |
+| Forged / hand-written session tokens → 401 on every `/api/*` (44 routes × 7 tokens); issued token works; sign-out revokes | **pass** (BATCH-2 e2e on built server + unit) | **fail** on live (any bearer > 8 chars accepted) until p0as81 is cut |
+| `/api/issued-logins` + `/api/provision-logins`: anon 401, non-admin 403, admin 200 | **pass** (BATCH-2 e2e) | **fail** on live (unauthenticated) until cut |
+| Forgot password never returns a temp password, never changes a password it did not email | **pass** (BATCH-2 e2e) | untested on live until cut |
+| Org / People / Me / Home / Settings × six checks, three users | **pass** (BATCH-2, fresh DB; see REPORT-BATCH-2.md) | untested until cut |
+| Restore wins over B's unsaved edit; B and C switch without reload | **pass** (BATCH-2) | untested until cut |
 
 No fake live G9 pass.
 
 ## KNOWN BROKEN
 
 - ROWS-V2 two-browser smoke passes locally; SPA editors still write derived role fields (`band`) from their own state and re-seed award prizes on load (one 409 probe per row, no write). See `REPORT-ROWS-V2-SMOKE.md` → Follow-ups.
-- Legacy sign-in (`apms-credentials.ts`): `sunny.b` / `sunny` with password `0000` always signs in, and any person with no stored password signs in with `0000`. Server-side only now (the wire no longer carries passwords), but still a hard-coded credential — decide with Sunny before removing.
+- Legacy sign-in (`apms-credentials.ts`): `sunny.b` / `sunny` with password `0000` always signs in, and any person with no stored password signs in with `0000` (167 of 176 active people on the seed). Server-side only now (the wire no longer carries passwords), but still a hard-coded credential — **pending Sunny's decision** (BATCH-2 left it in place as instructed).
+- BATCH-2: any signed-in person can still READ the whole company and WRITE most rows through the API; access-role grants are enforced in the SPA only (admin-only exceptions listed in LOCKS). Passwords at rest are plain text. No sign-in rate limit.
 - Live G9 on p0as14: B entityGets=0 / pulls=55. Fixed in tree p0as69 (hop B: do not drop hints vs lastWireAt; hyphen URL; no company GET). Next LOAD-10 must be LIVE_SEES_HIRE 3/3, LIVE_SEES_LOCK 3/3, B entityGets >= 2.
 - This tree is not on Contabo. Hard refresh on live still loads p0as12/p0as14. Preview must load `routes-e2g7y5q8-13m-p0as72.js` and `apms-sync.js?v=p0as77`.
 - Restore targets still a separate hole until p0as41 is cut.
@@ -249,8 +258,7 @@ No fake live G9 pass.
 
 ## HANDOFF
 
-- Stamp / host: **tree SPA p0as77 (sync) + routes p0as72 + server p0aw1**, **live p0as39 / LOAD-10 p0as14** https://apms.alienstattoo.in
-- What passed: MOD-APMS — APMS month GET `/api/month-records/:period?limit=80`; scorecard/plan/execution/values GET `/api/month-records/:period/:personId`; fetch on access from nav session; save PATCH that row; concurrent 200+409; Home/People/Rewards fetch nothing APMS. People/Rewards listHits≥1. Idle company 0. Plans 200/409. p0aw1 SWR. ARMY-2 via=init kept.
-- What is still broken: **live still company-GET on APMS until Eng cuts p0as77**
-- Exact next named job: Eng cut `NITRO_PRESET=node-server` when asked. Do not start Org extras / Rewards extras / Targets / Plans studio / Awards / Settings / Step 8. Do not undo p0aw1 / Plans 200/409 / idle company GET=0.
-
+- Stamp / host: **tree p0as81** (routes `routes-e2g7y5q8-13m-p0as81.js`, sync / collections / login-view / dnd-engine `?v=p0as81`), server migration `0010_apms_sessions.sql`; **live p0as39 / LOAD-10 p0as14** https://apms.alienstattoo.in
+- What passed (fresh DB, built node-server, three real admins): batch 2 Org / People / Me / Home / Settings × six checks, restore-wins and password-reset special cases; security suite (44 routes × forged tokens 401; login writes 401/403/200); batch 1 APMS / Rewards / Targets + module smoke. `npm test` and `npm run typecheck` clean. See `REPORT-BATCH-2.md`.
+- What is still open: see OPEN (design decisions) and KNOWN BROKEN; `sunny.b`/`0000` pending Sunny.
+- Exact next named job: Sunny decides on `0000`; Eng cut p0as81 when asked (`NITRO_PRESET=node-server`; everyone signs in once). Do not start Step 8.
