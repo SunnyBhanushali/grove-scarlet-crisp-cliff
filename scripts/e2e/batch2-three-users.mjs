@@ -92,7 +92,8 @@ async function main() {
     const cells = [1, 2, 3, 4, 5, 6].map((n) => String(r.checks[n] ? r.checks[n].status : "-").padEnd(5)).join(" ");
     console.log(`${String(r.module).padEnd(9)} ${String(r.id).padEnd(30)} ${cells}${r.checks[0] ? "  STOPPED: " + r.checks[0].detail : ""}`);
   }
-  writeFileSync(OUT, JSON.stringify({ base: BASE, at: new Date().toISOString(), screens: SCREENS, results }, null, 1));
+  // Non-GET and 5xx requests per browser (the evidence behind each failure).
+  writeFileSync(OUT, JSON.stringify({ base: BASE, at: new Date().toISOString(), screens: SCREENS, results, net: ctx.net }, null, 1));
   const failed = results.some((r) => Object.values(r.checks).some((c) => c.status === "fail"));
   console.log(failed ? "\nFAIL" : "\nPASS", "— report:", OUT);
   process.exit(failed ? 1 : 0);
