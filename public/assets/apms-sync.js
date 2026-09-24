@@ -1555,6 +1555,11 @@
 
   function handleLiveEvent(tick) {
     if (!tick || typeof tick !== "object") return { queued: 0, shouldPull: false, at: 0 };
+    if (tick.sessionEnded) {
+      // p0as83: the live stream says this browser's session ended.
+      if (rawFetch) checkSessionEnded(rawFetch);
+      return { queued: 0, shouldPull: false, at: 0 };
+    }
     var at = Number(tick.at || tick.notebookUpdatedAt) || 0;
     // PERF (p0as83): the server says how far the change feed is (`seq`). One
     // save moved `at` up to three times (commit, LISTEN, book mirror) and each

@@ -210,6 +210,14 @@ export async function handleCompanyLiveRequest(request: Request): Promise<Respon
       const poll = setInterval(() => {
         if (closed) return;
         if (pid) void loadViewer(pid).then((v) => (viewer = stream.viewer = v)).catch(() => undefined);
+        // PERF / BATCH-3: an ended session (password reset / change, sign-out
+        // elsewhere) is told on its stream within ~2 s — the tab no longer
+        // learns it from a 2.5 s tick — and the stream closes.
+        void sessionPersonId(request.headers).then((still) => {
+          if (closed || still) return;
+          stream.write(`data: ${JSON.stringify({ sessionEnded: 1 })}\n\n`);
+          abort();
+        });
         void readLiveAt().then((at) => {
           if (closed || !at) return;
           const list = currentLiveEntities();
