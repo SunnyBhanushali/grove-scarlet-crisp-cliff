@@ -46,6 +46,13 @@ green (same as `REPORT-THREE-USERS.md`). Reports of the final run:
 `e2e-batch1.json` and the three console logs (the batch-2 JSON also keeps
 every write / 5xx request per browser).
 
+Pack: **`aliens-apms-p0as81.zip`** (same layout as `aliens-apms-g9-p0as47.zip`:
+`src/`, `server/`, `public/`, `recovered-site/`, `scripts/`, `migrations/`,
+configs, contract, this report; from the tested commit). Rebuild:
+`npm install --include=dev && NITRO_PRESET=node-server npm run build:app`;
+apply `migrations/0010_apms_sessions.sql` (the server also creates the table
+on first sign-in). Every browser signs in once after the cut.
+
 ## 1. Screens and save actions (Org, People, Me, Home, Settings)
 
 Every page, tab, view, dialog and button that saves data in these areas, and
