@@ -1,0 +1,250 @@
+{
+ "file": "docs/perf/runs/before-u50/cpuprof/CPU.20260924.160615.11063.0.001.cpuprofile",
+ "wallS": 229.40542,
+ "busyS": 203.277155,
+ "gcShare": 0.22696876095102766,
+ "self": [
+  [
+   "(garbage collector) :0",
+   0.22696876095102766
+  ],
+  [
+   "slice node:buffer:640",
+   0.12988378846604776
+  ],
+  [
+   "(idle) :0",
+   0.12023290074086289
+  ],
+  [
+   "parseSnapshot _ssr/router-2w3nD4Hh.mjs:31983",
+   0.10330973984754951
+  ],
+  [
+   "encodeCompanyWire _ssr/company-wire-cache-BVYlB_Es.mjs:699",
+   0.07416640103999882
+  ],
+  [
+   "parseRow _libs/pg.mjs:1526",
+   0.0601002606515228
+  ],
+  [
+   "processChunkSync node:zlib:408",
+   0.04098165384103295
+  ],
+  [
+   "serializeJavascriptValueToJSONString undici/undici:4601",
+   0.031109944449980127
+  ],
+  [
+   "writeCombined _ssr/router-2w3nD4Hh.mjs:32067",
+   0.03080874975842711
+  ],
+  [
+   "parseSnapshot _chunks/company-notebook.mjs:32111",
+   0.022075559843406898
+  ],
+  [
+   "stableStringify _ssr/company-wire-cache-BVYlB_Es.mjs:206",
+   0.021839296206206744
+  ],
+  [
+   "sortValue _ssr/company-wire-cache-BVYlB_Es.mjs:196",
+   0.02040022647896661
+  ],
+  [
+   "loadCompanySnapshot _chunks/company-notebook.mjs:32350",
+   0.02035381201591492
+  ],
+  [
+   "(anon) :0",
+   0.01783467502779641
+  ],
+  [
+   "readCompany index.mjs:2467",
+   0.016530578657498428
+  ],
+  [
+   "writev :0",
+   0.01544431788215454
+  ],
+  [
+   "utf8Write node:internal/buffer:1054",
+   0.01482770653692
+  ],
+  [
+   "writeBook _ssr/router-2w3nD4Hh.mjs:32041",
+   0.009950926359629542
+  ],
+  [
+   "runMicrotasks :0",
+   0.009777453841283838
+  ],
+  [
+   "(program) :0",
+   0.00830227577712803
+  ],
+  [
+   "update crypto/hash:132",
+   0.007088558475742146
+  ],
+  [
+   "loadCompanySnapshot _ssr/router-2w3nD4Hh.mjs:32347",
+   0.0060186891143768715
+  ],
+  [
+   "encode node:internal/encoding:351",
+   0.005764322114799374
+  ],
+  [
+   "_copyActual node:buffer:243",
+   0.004984869057223867
+  ],
+  [
+   "encodeUtf8String :0",
+   0.00474198883785047
+  ],
+  [
+   "promiseInitHook node:internal/async_hooks:328",
+   0.0024128732025986885
+  ],
+  [
+   "addFields _libs/pg.mjs:1541",
+   0.0021994994961435778
+  ],
+  [
+   "createUnsafeBuffer node:internal/buffer:1082",
+   0.002070606507652077
+  ],
+  [
+   "_propagate async_local_storage/async_hooks:64",
+   0.001801756818172706
+  ],
+  [
+   "emit node:events:466",
+   0.0017316554828800117
+  ]
+ ],
+ "inclusive": [
+  [
+   "(anon) _libs/pg.mjs:2498",
+   0.23691696196751671
+  ],
+  [
+   "parse _libs/pg.mjs:2214",
+   0.23649039657210866
+  ],
+  [
+   "handlePacket _libs/pg.mjs:2259",
+   0.1325543836935341
+  ],
+  [
+   "parseDataRowMessage _libs/pg.mjs:2387",
+   0.1311369346939158
+  ],
+  [
+   "string _libs/pg.mjs:2174",
+   0.13079820996117345
+  ],
+  [
+   "encodeCompanyWire _ssr/company-wire-cache-BVYlB_Es.mjs:699",
+   0.12759587765777222
+  ],
+  [
+   "flushEncode _ssr/company-wire-cache-BVYlB_Es.mjs:801",
+   0.10601791922953664
+  ],
+  [
+   "persistBooks _ssr/router-2w3nD4Hh.mjs:32076",
+   0.10364474551997739
+  ],
+  [
+   "parseSnapshot _ssr/router-2w3nD4Hh.mjs:31983",
+   0.10330973984754951
+  ],
+  [
+   "(anon) _ssr/company-wire-cache-BVYlB_Es.mjs:795",
+   0.09983053924578981
+  ],
+  [
+   "(anon) _libs/pg.mjs:2658",
+   0.09317125675042039
+  ],
+  [
+   "rowsToBooks _ssr/router-2w3nD4Hh.mjs:32032",
+   0.08682184183461246
+  ],
+  [
+   "_handleDataRow _libs/pg.mjs:3298",
+   0.06088484463490253
+  ],
+  [
+   "handleDataRow _libs/pg.mjs:1601",
+   0.060636400583233274
+  ],
+  [
+   "parseRow _libs/pg.mjs:1526",
+   0.06062046667270604
+  ],
+  [
+   "bookHash _ssr/company-wire-cache-BVYlB_Es.mjs:209",
+   0.04910933055905864
+  ],
+  [
+   "stableStringify _ssr/company-wire-cache-BVYlB_Es.mjs:206",
+   0.04223952268517335
+  ],
+  [
+   "loadCompanySnapshot _chunks/company-notebook.mjs:32350",
+   0.038580203466543006
+  ],
+  [
+   "handleScreenReadHttp index.mjs:2897",
+   0.036988986785062
+  ],
+  [
+   "_pulseQueue _libs/pg.mjs:3642",
+   0.030834163337242693
+  ],
+  [
+   "writeCombined _ssr/router-2w3nD4Hh.mjs:32067",
+   0.03083008024192389
+  ],
+  [
+   "_acquireClient _libs/pg.mjs:3774",
+   0.030119233024488167
+  ],
+  [
+   "(anon) _libs/pg.mjs:3840",
+   0.030003696185141905
+  ],
+  [
+   "query _libs/pg.mjs:3451",
+   0.02975203485113711
+  ],
+  [
+   "_pulseQueryQueue _libs/pg.mjs:3408",
+   0.029262117526192257
+  ],
+  [
+   "submit _libs/pg.mjs:1640",
+   0.029018769964583576
+  ],
+  [
+   "_handleReadyForQuery _libs/pg.mjs:3247",
+   0.027831651815473313
+  ],
+  [
+   "handleReadyForQuery _libs/pg.mjs:1629",
+   0.02771014775369126
+  ],
+  [
+   "(anon) _libs/pg.mjs:3852",
+   0.02741905257381234
+  ],
+  [
+   "(anon) _libs/pg.mjs:3793",
+   0.02651024902429395
+  ]
+ ]
+}

@@ -1,0 +1,66 @@
+profile docs/perf/runs/before-u250/cpuprof/CPU.20260924.161947.26766.0.001.cpuprofile
+wall 311.4 s, busy 261.1 s (84% of one core), GC 24.5% of busy
+
+-- self time (share of busy) --
+  24.5% (garbage collector) :0
+  15.9% (idle) :0
+  12.5% slice node:buffer:640
+   7.4% parseSnapshot _chunks/company-notebook.mjs:32111
+   6.8% loadCompanySnapshot _chunks/company-notebook.mjs:32350
+   6.1% encodeCompanyWire _ssr/company-wire-cache-BVYlB_Es.mjs:699
+   6.1% parseRow _libs/pg.mjs:1526
+   5.0% readCompany index.mjs:2467
+   3.8% serializeJavascriptValueToJSONString undici/undici:4601
+   3.4% (program) :0
+   3.2% processChunkSync node:zlib:408
+   2.2% parseSnapshot _ssr/router-2w3nD4Hh.mjs:31983
+   2.1% writev :0
+   1.1% (anon) :0
+   1.0% runMicrotasks :0
+   0.9% encode node:internal/encoding:351
+   0.7% writeCombined _ssr/router-2w3nD4Hh.mjs:32067
+   0.7% utf8Write node:internal/buffer:1054
+   0.6% encodeUtf8String :0
+   0.5% createUnsafeBuffer node:internal/buffer:1082
+   0.5% nextTick process/task_queues:111
+   0.4% stableStringify _ssr/company-wire-cache-BVYlB_Es.mjs:206
+   0.4% sortValue _ssr/company-wire-cache-BVYlB_Es.mjs:196
+   0.4% readLiveAt _ssr/company-live-CmF_KpWE.mjs:181
+   0.3% _copyActual node:buffer:243
+   0.3% handleCompanyTickRequest _ssr/router-2w3nD4Hh.mjs:33924
+   0.2% readFileHandle fs/promises:512
+   0.2% promiseInitHook node:internal/async_hooks:328
+   0.2% encodeSse _ssr/company-live-CmF_KpWE.mjs:103
+   0.2% emit node:events:466
+
+-- inclusive time of app functions (share of busy) --
+  22.9% (anon) _libs/pg.mjs:2498
+  22.9% parse _libs/pg.mjs:2214
+  13.1% loadCompanySnapshot _chunks/company-notebook.mjs:32350
+  12.7% handlePacket _libs/pg.mjs:2259
+  12.6% parseDataRowMessage _libs/pg.mjs:2387
+  12.6% string _libs/pg.mjs:2174
+  10.3% encodeCompanyWire _ssr/company-wire-cache-BVYlB_Es.mjs:699
+  10.0% flushEncode _ssr/company-wire-cache-BVYlB_Es.mjs:801
+   9.8% (anon) _ssr/company-wire-cache-BVYlB_Es.mjs:795
+   8.9% (anon) _libs/pg.mjs:2658
+   7.4% parseSnapshot _chunks/company-notebook.mjs:32111
+   7.4% rowsToBooks _chunks/company-notebook.mjs:32160
+   6.3% _handleDataRow _libs/pg.mjs:3298
+   6.2% handleDataRow _libs/pg.mjs:1601
+   6.2% parseRow _libs/pg.mjs:1526
+   5.0% readCompany index.mjs:2467
+   3.2% handleScreenReadHttp index.mjs:2897
+   2.4% persistBooks _ssr/router-2w3nD4Hh.mjs:32076
+   2.2% parseSnapshot _ssr/router-2w3nD4Hh.mjs:31983
+   2.2% handleChangesHttp _ssr/router-2w3nD4Hh.mjs:32875
+   2.1% rowsToBooks _ssr/router-2w3nD4Hh.mjs:32032
+   2.1% _handleReadyForQuery _libs/pg.mjs:3247
+   2.1% handleReadyForQuery _libs/pg.mjs:1629
+   2.1% (anon) _libs/pg.mjs:3852
+   2.0% (anon) _libs/pg.mjs:3793
+   2.0% _release _libs/pg.mjs:3799
+   1.9% _pulseQueue _libs/pg.mjs:3642
+   1.7% _acquireClient _libs/pg.mjs:3774
+   1.7% (anon) _libs/pg.mjs:3840
+   1.7% query _libs/pg.mjs:3451

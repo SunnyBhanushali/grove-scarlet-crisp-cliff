@@ -1,0 +1,250 @@
+{
+ "file": "docs/perf/runs/before-u250/cpuprof/CPU.20260924.161947.26766.0.001.cpuprofile",
+ "wallS": 311.388774,
+ "busyS": 261.111734,
+ "gcShare": 0.24499567683158965,
+ "self": [
+  [
+   "(garbage collector) :0",
+   0.24499567683158965
+  ],
+  [
+   "(idle) :0",
+   0.1585666272661649
+  ],
+  [
+   "slice node:buffer:640",
+   0.12475580664636082
+  ],
+  [
+   "parseSnapshot _chunks/company-notebook.mjs:32111",
+   0.07408399731281322
+  ],
+  [
+   "loadCompanySnapshot _chunks/company-notebook.mjs:32350",
+   0.06796472042118183
+  ],
+  [
+   "encodeCompanyWire _ssr/company-wire-cache-BVYlB_Es.mjs:699",
+   0.06143977428452143
+  ],
+  [
+   "parseRow _libs/pg.mjs:1526",
+   0.06143061728508915
+  ],
+  [
+   "readCompany index.mjs:2467",
+   0.049602075715218526
+  ],
+  [
+   "serializeJavascriptValueToJSONString undici/undici:4601",
+   0.03830932776081216
+  ],
+  [
+   "(program) :0",
+   0.03398327935733444
+  ],
+  [
+   "processChunkSync node:zlib:408",
+   0.031997393881961655
+  ],
+  [
+   "parseSnapshot _ssr/router-2w3nD4Hh.mjs:31983",
+   0.022224918471109384
+  ],
+  [
+   "writev :0",
+   0.02135174055410317
+  ],
+  [
+   "(anon) :0",
+   0.010593499409720132
+  ],
+  [
+   "runMicrotasks :0",
+   0.010060742808287582
+  ],
+  [
+   "encode node:internal/encoding:351",
+   0.009362332985004803
+  ],
+  [
+   "writeCombined _ssr/router-2w3nD4Hh.mjs:32067",
+   0.0072076538697414495
+  ],
+  [
+   "utf8Write node:internal/buffer:1054",
+   0.006904147785254262
+  ],
+  [
+   "encodeUtf8String :0",
+   0.005808846568343037
+  ],
+  [
+   "createUnsafeBuffer node:internal/buffer:1082",
+   0.005226597744550232
+  ],
+  [
+   "nextTick process/task_queues:111",
+   0.004640905950247337
+  ],
+  [
+   "stableStringify _ssr/company-wire-cache-BVYlB_Es.mjs:206",
+   0.004433672827587289
+  ],
+  [
+   "sortValue _ssr/company-wire-cache-BVYlB_Es.mjs:196",
+   0.004338184970270237
+  ],
+  [
+   "readLiveAt _ssr/company-live-CmF_KpWE.mjs:181",
+   0.003942710594538046
+  ],
+  [
+   "_copyActual node:buffer:243",
+   0.0034958750647337816
+  ],
+  [
+   "handleCompanyTickRequest _ssr/router-2w3nD4Hh.mjs:33924",
+   0.002635990307505675
+  ],
+  [
+   "readFileHandle fs/promises:512",
+   0.0022910000666611177
+  ],
+  [
+   "promiseInitHook node:internal/async_hooks:328",
+   0.0021440859490443275
+  ],
+  [
+   "encodeSse _ssr/company-live-CmF_KpWE.mjs:103",
+   0.0020951567040644755
+  ],
+  [
+   "emit node:events:466",
+   0.002075230368620661
+  ]
+ ],
+ "inclusive": [
+  [
+   "(anon) _libs/pg.mjs:2498",
+   0.22915397972884666
+  ],
+  [
+   "parse _libs/pg.mjs:2214",
+   0.2286147852704314
+  ],
+  [
+   "loadCompanySnapshot _chunks/company-notebook.mjs:32350",
+   0.13083837511492302
+  ],
+  [
+   "handlePacket _libs/pg.mjs:2259",
+   0.1273644676573593
+  ],
+  [
+   "parseDataRowMessage _libs/pg.mjs:2387",
+   0.12622847887793506
+  ],
+  [
+   "string _libs/pg.mjs:2174",
+   0.12576719359536712
+  ],
+  [
+   "encodeCompanyWire _ssr/company-wire-cache-BVYlB_Es.mjs:699",
+   0.1030657243461912
+  ],
+  [
+   "flushEncode _ssr/company-wire-cache-BVYlB_Es.mjs:801",
+   0.09962962828778886
+  ],
+  [
+   "(anon) _ssr/company-wire-cache-BVYlB_Es.mjs:795",
+   0.09755891705732382
+  ],
+  [
+   "(anon) _libs/pg.mjs:2658",
+   0.08869802457824434
+  ],
+  [
+   "parseSnapshot _chunks/company-notebook.mjs:32111",
+   0.07408399731281322
+  ],
+  [
+   "rowsToBooks _chunks/company-notebook.mjs:32160",
+   0.0738009001158102
+  ],
+  [
+   "_handleDataRow _libs/pg.mjs:3298",
+   0.06285445601613598
+  ],
+  [
+   "handleDataRow _libs/pg.mjs:1601",
+   0.062444432313409556
+  ],
+  [
+   "parseRow _libs/pg.mjs:1526",
+   0.062320642395948395
+  ],
+  [
+   "readCompany index.mjs:2467",
+   0.0500825366967231
+  ],
+  [
+   "handleScreenReadHttp index.mjs:2897",
+   0.03161636542921507
+  ],
+  [
+   "persistBooks _ssr/router-2w3nD4Hh.mjs:32076",
+   0.023789635589490588
+  ],
+  [
+   "parseSnapshot _ssr/router-2w3nD4Hh.mjs:31983",
+   0.022224918471109384
+  ],
+  [
+   "handleChangesHttp _ssr/router-2w3nD4Hh.mjs:32875",
+   0.021948760832019906
+  ],
+  [
+   "rowsToBooks _ssr/router-2w3nD4Hh.mjs:32032",
+   0.021267933519984974
+  ],
+  [
+   "_handleReadyForQuery _libs/pg.mjs:3247",
+   0.021254130999719838
+  ],
+  [
+   "handleReadyForQuery _libs/pg.mjs:1629",
+   0.02115392102600797
+  ],
+  [
+   "(anon) _libs/pg.mjs:3852",
+   0.020834812425549593
+  ],
+  [
+   "(anon) _libs/pg.mjs:3793",
+   0.01987371046296985
+  ],
+  [
+   "_release _libs/pg.mjs:3799",
+   0.019780600897851646
+  ],
+  [
+   "_pulseQueue _libs/pg.mjs:3642",
+   0.019212656295254812
+  ],
+  [
+   "_acquireClient _libs/pg.mjs:3774",
+   0.01739575594867751
+  ],
+  [
+   "(anon) _libs/pg.mjs:3840",
+   0.017225564439781172
+  ],
+  [
+   "query _libs/pg.mjs:3451",
+   0.01683630196412391
+  ]
+ ]
+}
