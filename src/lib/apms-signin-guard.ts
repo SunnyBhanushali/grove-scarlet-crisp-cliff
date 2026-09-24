@@ -13,6 +13,15 @@ type Q = { query<T = Record<string, unknown>>(text: string, params?: unknown[]):
 
 export const USER_LIMIT = 5;
 export const IP_LIMIT = 30;
+
+/** Limits in force: APMS_SIGNIN_USER_LIMIT / APMS_SIGNIN_IP_LIMIT override the defaults (test runs only). */
+export function signinLimits(env: Record<string, string | undefined> = process.env): { user: number; ip: number } {
+  const n = (v: string | undefined, d: number) => {
+    const x = Math.floor(Number(v));
+    return Number.isFinite(x) && x > 0 ? x : d;
+  };
+  return { user: n(env.APMS_SIGNIN_USER_LIMIT, USER_LIMIT), ip: n(env.APMS_SIGNIN_IP_LIMIT, IP_LIMIT) };
+}
 export const WINDOW_MS = 15 * 60 * 1000;
 export const LOCK_MS = 15 * 60 * 1000;
 
@@ -101,8 +110,9 @@ async function bump(sql: Q, key: string, limit: number): Promise<{ fails: number
 export async function recordSigninFailure(username: string, ip: string): Promise<SigninLock | null> {
   await ensureTable();
   const sql = await db();
-  const u = username ? await bump(sql, `u:${username}`, USER_LIMIT) : { locked: false, fails: 0 };
-  const i = ip ? await bump(sql, `ip:${ip}`, IP_LIMIT) : { locked: false, fails: 0 };
+  const lim = signinLimits();
+  const u = username ? await bump(sql, `u:${username}`, lim.user) : { locked: false, fails: 0 };
+  const i = ip ? await bump(sql, `ip:${ip}`, lim.ip) : { locked: false, fails: 0 };
   if (u.locked) return { scope: "user", until: Date.now() + LOCK_MS, minutes: LOCK_MS / 60000 };
   if (i.locked) return { scope: "ip", until: Date.now() + LOCK_MS, minutes: LOCK_MS / 60000 };
   return null;

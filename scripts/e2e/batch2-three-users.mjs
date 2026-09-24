@@ -97,6 +97,12 @@ async function main() {
     } catch (err) {
       const r = new ScreenResult("?", name, name);
       r.fail(0, `scenario stopped: ${String((err && err.message) || err).split("\n")[0].slice(0, 300)}`);
+      // BATCH-3: keep where it stopped (stack + one screenshot per browser) next to the report.
+      console.log(String((err && err.stack) || err).split("\n").slice(0, 8).join("\n"));
+      const dir = (process.env.OUT || "e2e.json").replace(/[^/]*$/, "") || "./";
+      for (const [t, p] of Object.entries(ctx.pages || {})) {
+        await p.screenshot({ path: `${dir}stop-${name}-${t}.png` }).catch(() => {});
+      }
       results.push(r);
     }
   }

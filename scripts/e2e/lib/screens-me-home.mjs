@@ -4,7 +4,7 @@
  * browser D = nikhil.pati (plain employee) where a check needs the person
  * whose own page it is. Passwords are put back through the UI at the end.
  */
-import { ScreenResult, realWrites, brief } from "./harness.mjs";
+import { ScreenResult, realWrites, brief, pwEq } from "./harness.mjs";
 import { openWithoutWrites, endChecks } from "./screens-apms.mjs";
 import {
   personByName, personById, waitDb, openFile, openPeople, search, rowShown, trashPerson, restoreFromTrash, detail, startEdit, setField,
@@ -174,7 +174,7 @@ export async function mePassword(ctx, run) {
     };
     const il = await ctx.sql("select username, password from issued_logins where username = any($1)", [[NIK.user, FLOYD.user]]);
     R.expect(1, s1.nOld === 401 && s1.nNew === 200 && s1.fOld === 401 && s1.fNew === 200,
-      `sign-in status after the change — Nikhil old ${s1.nOld} / new ${s1.nNew}; Floyd old ${s1.fOld} / new ${s1.fNew}; issued_logins ${il.map((r) => `${r.username}=${r.password === nNew || r.password === fNew ? "new" : "old"}`).join(", ")}; messages "${msgD.slice(-40)}" / "${msgB.slice(-40)}"`);
+      `sign-in status after the change — Nikhil old ${s1.nOld} / new ${s1.nNew}; Floyd old ${s1.fOld} / new ${s1.fNew}; issued_logins ${il.map((r) => `${r.username}=${pwEq(r.password, nNew) || pwEq(r.password, fNew) ? "new" : "old"}`).join(", ")}; messages "${msgD.slice(-40)}" / "${msgB.slice(-40)}"`);
     dPass = s1.nNew === 200 ? nNew : dPass;
 
     // Check 2 + 3: same person: Nikhil changes his password on Me while A edits
@@ -212,8 +212,8 @@ export async function mePassword(ctx, run) {
     const il5 = await ctx.sql("select password from issued_logins where username = $1", [NIK.user]);
     await openFile(ctx, C, NIK.name);
     const cLoc = await detail(C, "Location");
-    R.expect(5, uiNew && !uiOld && uiF && il5[0]?.password === dPass && cLoc === pn.location && dStill,
-      `fresh UI sign-in: Nikhil current ${uiNew}, previous ${uiOld}, Floyd new ${uiF}; issued_logins holds the current ${il5[0]?.password === dPass}; Nikhil's session survived reload ${dStill}; C's file Location ${JSON.stringify(cLoc)} = DB ${JSON.stringify(pn.location)}`);
+    R.expect(5, uiNew && !uiOld && uiF && pwEq(il5[0]?.password, dPass) && cLoc === pn.location && dStill,
+      `fresh UI sign-in: Nikhil current ${uiNew}, previous ${uiOld}, Floyd new ${uiF}; issued_logins holds the current ${pwEq(il5[0]?.password, dPass)}; Nikhil's session survived reload ${dStill}; C's file Location ${JSON.stringify(cLoc)} = DB ${JSON.stringify(pn.location)}`);
 
     // Put the fixture passwords back through the same screen.
     const backB = await changeOwnPassword(B, FLOYD.pw);

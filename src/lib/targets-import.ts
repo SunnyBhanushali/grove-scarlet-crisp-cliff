@@ -35,6 +35,14 @@ export type TargetImportReport = {
   unmappedRows?: UnmappedReward[];
   aborted?: boolean;
   needsConfirm?: boolean;
+  /** Value cells (M1–M5, actual) in the file that change a stored value. */
+  changed?: number;
+  /** Value cells equal to what is stored (or blank where nothing is stored). */
+  unchanged?: number;
+  /** Blank value cells where the stored value is kept. */
+  blankKept?: number;
+  /** Targets on a replaced month that are not in the file (they leave that month). */
+  removed?: number;
   errors: TargetImportError[];
 };
 
@@ -236,13 +244,11 @@ export function rowsFromTable(table: string[][]): { rows: TargetImportRow[]; err
     const M4 = money(idx.M4);
     const M5 = money(idx.M5);
     if (mode === "set") {
-      const ladder = [M1, M2, M3, M4, M5];
-      if (ladder.some((n) => n == null)) {
-        errors.push({ row, message: "mode=set needs M1–M5." });
-        return;
-      }
+      // A blank floor keeps the stored value (checked against it on apply);
+      // the floors given must still go up.
+      const ladder = [M1, M2, M3, M4, M5].filter((n) => n != null) as number[];
       for (let i = 1; i < ladder.length; i++) {
-        if ((ladder[i] as number) <= (ladder[i - 1] as number)) {
+        if (ladder[i] <= ladder[i - 1]) {
           errors.push({ row, message: "M1–M5 must each be higher than the one before." });
           return;
         }
@@ -633,6 +639,59 @@ function emptyLadder() {
   return { M1: 0, M2: 0, M3: 0, M4: 0, M5: 0 };
 }
 
+const RUNGS = ["M1", "M2", "M3", "M4", "M5"] as const;
+
+/**
+ * A blank value cell in the file keeps the stored value; only an explicit
+ * value (0 included) changes it. `prev` is the stored cell of the same
+ * target in the same month (undefined for a new target / month).
+ */
+export function mergeImportRow(
+  r: Pick<TargetImportRow, "mode" | "M1" | "M2" | "M3" | "M4" | "M5" | "actual">,
+  prev: Pick<Cell, "ladder" | "actual"> | undefined,
+): { ladder: Cell["ladder"]; actual: number | null; error?: string; counts: { changed: number; unchanged: number; blankKept: number } } {
+  const counts = { changed: 0, unchanged: 0, blankKept: 0 };
+  const count = (v: number | null, old: number | null | undefined) => {
+    if (v == null) {
+      if (prev && old != null) counts.blankKept++;
+      else counts.unchanged++;
+    } else if (prev && old === v) counts.unchanged++;
+    else counts.changed++;
+  };
+  const prevLadder = (prev && prev.ladder) || null;
+  let ladder: Cell["ladder"];
+  let error: string | undefined;
+  if (r.mode === "set") {
+    const out = emptyLadder();
+    let missing = false;
+    for (const k of RUNGS) {
+      const v = r[k];
+      const old = prevLadder ? prevLadder[k] : undefined;
+      count(v, old);
+      if (v != null) out[k] = v;
+      else if (old != null) out[k] = old;
+      else missing = true;
+    }
+    ladder = out;
+    if (missing) error = "mode=set needs M1–M5 (a blank keeps the current value; this target has none).";
+    else {
+      for (let i = 1; i < RUNGS.length; i++) {
+        if (out[RUNGS[i]] <= out[RUNGS[i - 1]]) {
+          error = "M1–M5 must each be higher than the one before (blank cells keep the current value).";
+          break;
+        }
+      }
+    }
+  } else {
+    // roll: floors come from the members; a group with no members keeps its floors.
+    ladder = prevLadder ? { ...emptyLadder(), ...prevLadder } : emptyLadder();
+  }
+  const oldActual = prev ? prev.actual : undefined;
+  count(r.actual, oldActual);
+  const actual = r.actual != null ? r.actual : oldActual != null ? oldActual : null;
+  return { ladder, actual, error, counts };
+}
+
 function rollFillMonth(
   nodes: Record<string, Node>,
   members: Member[],
@@ -713,6 +772,11 @@ export function applyTargetImport(
   const root: Record<string, string[]> = { ...(state.targetRootOrder || {}) };
   const status: Record<string, string> = { ...(state.targetMonthStatus || {}) };
   const errors: TargetImportError[] = [];
+  const prevCells: Record<string, Cell> = state.targetCells || {};
+  const merged = new Map<number, ReturnType<typeof mergeImportRow>>();
+  let changed = 0;
+  let unchanged = 0;
+  let blankKept = 0;
   let created = 0;
   let updated = 0;
   let nested = 0;
@@ -740,6 +804,17 @@ export function applyTargetImport(
         continue;
       }
     }
+    // Blank cells keep the stored value of the same target in the same month.
+    const org = r.brand_or_sbu ? findOrg(r.brand_or_sbu, state) : null;
+    const scope = org && org !== "missing" ? org : { sbuId: null as string | null };
+    const hit = findReusableNode(nodes, r.kind, r.name, scope.sbuId, r.unit);
+    const m = mergeImportRow(r, hit ? prevCells[cellKey(hit.id, r.month)] : undefined);
+    if (m.error) {
+      errors.push({ row: r.row, message: m.error });
+      skipped++;
+      continue;
+    }
+    merged.set(r.row, m);
   }
 
   const usable = rows.filter((r) => !errors.some((e) => e.row === r.row));
@@ -778,16 +853,17 @@ export function applyTargetImport(
     }
     idOf[`${r.month}|${r.kind}|${norm(r.name)}`] = node.id;
     const key = cellKey(node.id, r.month);
-    const had = !!cells[key];
-    const ladder =
-      r.mode === "set"
-        ? { M1: r.M1 || 0, M2: r.M2 || 0, M3: r.M3 || 0, M4: r.M4 || 0, M5: r.M5 || 0 }
-        : cells[key]?.ladder || emptyLadder();
+    const had = !!prevCells[key];
+    // Merged against the stored cell before the month was cleared (blank = keep).
+    const m = merged.get(r.row) || mergeImportRow(r, prevCells[key]);
+    changed += m.counts.changed;
+    unchanged += m.counts.unchanged;
+    blankKept += m.counts.blankKept;
     cells[key] = {
       nodeId: node.id,
       month: r.month,
-      ladder,
-      actual: r.mode === "roll" ? cells[key]?.actual ?? r.actual : r.actual,
+      ladder: m.ladder,
+      actual: m.actual,
       mode: r.mode,
       status: "open",
     };
@@ -835,6 +911,11 @@ export function applyTargetImport(
   for (const month of wipeMonths) rollFillMonth(nodes, members, cells, month);
 
   const usedIds = usedNodeIdsForMonths(cells, members, root, wipeMonths);
+  let removed = 0;
+  for (const [key, c] of Object.entries(prevCells)) {
+    const month = c && (c.month || key.slice(key.lastIndexOf("::") + 2));
+    if (c && wipeMonths.includes(month) && !usedIds.has(c.nodeId)) removed++;
+  }
   const origNodes = state.targetNodes || {};
   const ptrs = collectRewardPointers(state, new Set(wipeMonths));
   const remapPlan: { ptr: RewardPointer; next: string }[] = [];
@@ -874,6 +955,10 @@ export function applyTargetImport(
       unmappedRows,
       aborted: false,
       needsConfirm: unmapped.length > 0,
+      changed,
+      unchanged,
+      blankKept,
+      removed,
       errors,
     },
   };

@@ -6,6 +6,18 @@
  * the screens show with what the database holds.
  */
 import pg from "pg";
+import { scryptSync, timingSafeEqual } from "node:crypto";
+
+/** BATCH-3: stored passwords are scrypt hashes (src/lib/apms-password.ts); true when `plain` matches. */
+export function pwEq(stored, plain) {
+  const s = String(stored || "");
+  if (!s || !plain) return false;
+  if (!s.startsWith("scrypt$")) return s === plain;
+  const [, n, r, p, salt, key] = s.split("$");
+  const k = Buffer.from(key, "base64url");
+  const got = scryptSync(String(plain), Buffer.from(salt, "base64url"), k.length, { N: Number(n), r: Number(r), p: Number(p), maxmem: 64 * 1024 * 1024 });
+  return got.length === k.length && timingSafeEqual(got, k);
+}
 
 export const LIVE_LIMIT_MS = 5000;
 const FEED = /\/api\/(changes|company-tick|company-live)(\?|$)/;

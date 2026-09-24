@@ -522,10 +522,22 @@ export async function readLiveSnapshot(): Promise<Snapshot | null> {
 }
 
 export async function loadCompanySnapshot(): Promise<CompanyLoad> {
-  const rows = await loadBookRows();
-  const books = rowsToBooks(rows);
-  const haveAny = BOOK_IDS.some((id) => books[id]);
-  const haveAll = BOOK_IDS.every((id) => books[id]);
+  let rows = await loadBookRows();
+  let books = rowsToBooks(rows);
+  let haveAny = BOOK_IDS.some((id) => books[id]);
+  let haveAll = BOOK_IDS.every((id) => books[id]);
+  // BATCH-3: on a fresh database the two server module copies (Nitro
+  // middleware and SSR routes) seed the books at the same moment, one book at
+  // a time. A caller that sees only some of them is looking at the other
+  // writer mid-way: wait for it instead of "filling" the missing books with
+  // empty ones (that left months / targets empty on a fresh e2e database).
+  for (let i = 0; haveAny && !haveAll && i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 150));
+    rows = await loadBookRows();
+    books = rowsToBooks(rows);
+    haveAny = BOOK_IDS.some((id) => books[id]);
+    haveAll = BOOK_IDS.every((id) => books[id]);
+  }
   const live = haveAny ? assembleSnapshot(books) : null;
 
   if (!isThinSnapshot(live)) {

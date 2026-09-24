@@ -8,7 +8,7 @@
  * them; passwords it changes are put back (B = Floyd-e2e-1), the restore
  * scenario restores the backup it takes at its start. Purge is not run.
  */
-import { ScreenResult, realWrites, brief } from "./harness.mjs";
+import { pwEq, ScreenResult, realWrites, brief } from "./harness.mjs";
 import { openWithoutWrites, endChecks } from "./screens-apms.mjs";
 import {
   dialog, field, openSettings, accessRoleRow, accessRoleShown, accessRoleNote, createAccessRole, openEditAccessRole,
@@ -264,8 +264,8 @@ export async function settingsAssign(ctx, run) {
   const sNew = await apiSignIn(ctx.base, uname, cred.password);
   const shows = [];
   for (const p of [A, B, C]) shows.push((await ctx.waitUntil(async () => (await assignRole(p, X.name)) === "HR", 5000)) !== null);
-  R.expect(2, px?.payload?.accessRoleId === "hr" && px?.payload?.mustResetPassword === true && iss?.password === cred.password && sNew.status === 200 && shows.every(Boolean),
-    `DB: role ${px?.payload?.accessRoleId}, mustResetPassword ${px?.payload?.mustResetPassword}, issued password = B's new one ${iss?.password === cred.password}; sign-in with it ${sNew.status}; A/B/C show HR ${shows.join("/")}`);
+  R.expect(2, px?.payload?.accessRoleId === "hr" && px?.payload?.mustResetPassword === true && pwEq(iss?.password, cred.password) && sNew.status === 200 && shows.every(Boolean),
+    `DB: role ${px?.payload?.accessRoleId}, mustResetPassword ${px?.payload?.mustResetPassword}, issued password = B's new one ${pwEq(iss?.password, cred.password)}; sign-in with it ${sNew.status}; A/B/C show HR ${shows.join("/")}`);
   R.expect(3, tC1 !== null && tC2 !== null, `C showed A's row change and B's bulk assign ${secs(tC1)} after, the same-person role change ${secs(tC2)} after`);
   R.na(4, "Assign people has no delete; a person is deleted under Org → People (not this area). The stale edit of a deleted access role is check 4 of settings-access-roles");
 
@@ -360,8 +360,8 @@ export async function settingsLogins(ctx, run) {
   const i1 = await issuedDb(ctx, P1.username);
   const s1 = { temp: (await apiSignIn(base, P1.username, cred1.password)).status, old: (await apiSignIn(base, P1.username, "0000")).status };
   const s4 = { up: (await apiSignIn(base, P4.username, upPw)).status, old: (await apiSignIn(base, P4.username, "0000")).status };
-  R.expect(1, i1?.password === cred1.password && p1?.payload?.mustResetPassword === true && s1.temp === 200 && s1.old === 401 && s4.up === 200 && s4.old === 401,
-    `A reset ${P1.name}: issued_logins = shown password ${i1?.password === cred1.password}, mustResetPassword ${p1?.payload?.mustResetPassword}, sign-in new ${s1.temp} / old 0000 ${s1.old}. ` +
+  R.expect(1, pwEq(i1?.password, cred1.password) && p1?.payload?.mustResetPassword === true && s1.temp === 200 && s1.old === 401 && s4.up === 200 && s4.old === 401,
+    `A reset ${P1.name}: issued_logins = shown password ${pwEq(i1?.password, cred1.password)}, mustResetPassword ${p1?.payload?.mustResetPassword}, sign-in new ${s1.temp} / old 0000 ${s1.old}. ` +
     `B uploaded a password for ${P4.name} ("${upMsg}"): mustResetPassword ${p4?.payload?.mustResetPassword}, sign-in with the uploaded password ${s4.up} (want 200) / old 0000 ${s4.old} (want 401)`);
 
   // First sign-in (mustResetPassword): P1 signs in with the temp password and must set a new one.
@@ -374,9 +374,9 @@ export async function settingsLogins(ctx, run) {
   const p1b = await personDb(ctx, P1.id);
   const i1b = await issuedDb(ctx, P1.username);
   const s1b = { next: (await apiSignIn(base, P1.username, new1)).status, temp: (await apiSignIn(base, P1.username, cred1.password)).status };
-  const firstOk = f1.ok && p1b?.payload?.mustResetPassword === false && i1b?.password === new1 && s1b.next === 200 && s1b.temp === 401;
+  const firstOk = f1.ok && p1b?.payload?.mustResetPassword === false && pwEq(i1b?.password, new1) && s1b.next === 200 && s1b.temp === 401;
   R.set("must-reset", firstOk ? "pass" : "fail",
-    `${P1.name} signed in with the temporary password: ${f1.why}; DB mustResetPassword ${p1b?.payload?.mustResetPassword}, issued = new ${i1b?.password === new1}; sign-in new ${s1b.next} / temporary ${s1b.temp}; C dropped "Must set password" ${secs(tC1b)} after`);
+    `${P1.name} signed in with the temporary password: ${f1.why}; DB mustResetPassword ${p1b?.payload?.mustResetPassword}, issued = new ${pwEq(i1b?.password, new1)}; sign-in new ${s1b.next} / temporary ${s1b.temp}; C dropped "Must set password" ${secs(tC1b)} after`);
 
   // Check 2 (+3): same person P2 — A resets the login, B uploads a new access role for P2.
   t0 = Date.now();
@@ -394,8 +394,8 @@ export async function settingsLogins(ctx, run) {
   const s2 = (await apiSignIn(base, P2.username, cred2.password)).status;
   const shows2 = [];
   for (const p of [A, B, C]) shows2.push((await ctx.waitUntil(async () => (await assignRole(p, P2.name)) === "Function head", 5000)) !== null);
-  R.expect(2, p2?.payload?.accessRoleId === "function_head" && p2?.payload?.mustResetPassword === true && i2?.password === cred2.password && s2 === 200 && shows2.every(Boolean),
-    `DB: access ${p2?.payload?.accessRoleId} (B's upload "${upMsg2}"), mustResetPassword ${p2?.payload?.mustResetPassword}, issued = A's password ${i2?.password === cred2.password}; sign-in ${s2}; A/B/C show Function head ${shows2.join("/")}`);
+  R.expect(2, p2?.payload?.accessRoleId === "function_head" && p2?.payload?.mustResetPassword === true && pwEq(i2?.password, cred2.password) && s2 === 200 && shows2.every(Boolean),
+    `DB: access ${p2?.payload?.accessRoleId} (B's upload "${upMsg2}"), mustResetPassword ${p2?.payload?.mustResetPassword}, issued = A's password ${pwEq(i2?.password, cred2.password)}; sign-in ${s2}; A/B/C show Function head ${shows2.join("/")}`);
   R.expect(3, tC1 !== null && tC1b !== null && tC2 !== null,
     `C showed "Must set password" on ${P1.name} ${secs(tC1)} after A's reset, dropped it ${secs(tC1b)} after ${P1.name} set a password, showed B's access change + A's reset on ${P2.name} ${secs(tC2)} after`);
   const f2 = await firstSignIn(ctx, P2.username, cred2.password, `Sarv-${run}-1`);
@@ -428,8 +428,13 @@ export async function settingsLogins(ctx, run) {
   const sOld = await apiSignIn(base, bUser, bOld);
   const sNew = await apiSignIn(base, bUser, credB.password);
   const bSess = await fetch(base + "/api/auth/get-session", { headers: { cookie: `better-auth.session_token=${encodeURIComponent(await tokenOf(B))}` } }).then((r) => r.json()).catch(() => null);
-  await ctx.sleep(2000);
-  const bScreen = (await B.getByText("Set a new password", { exact: true }).count()) ? "the first-sign-in 'Set a new password' screen" : "the app as before";
+  // BATCH-3: an admin reset ends every session of that person; B's open
+  // browser must land on the sign-in page within seconds.
+  const tB0 = Date.now();
+  const onSignIn = async () => (await B.getByRole("button", { name: "Continue" }).count()) > 0 && (await B.locator('input[type="password"]').count()) > 0;
+  const bOut = await ctx.waitUntil(onSignIn, 15000, 250);
+  const bOutSecs = bOut === null ? null : (Date.now() - tB0) / 1000;
+  const bScreen = bOut !== null ? `the sign-in page ${bOutSecs.toFixed(1)} s after the reset` : (await B.getByText("Set a new password", { exact: true }).count()) ? "the first-sign-in 'Set a new password' screen" : "the app as before";
   // Browser check too: a fresh browser signing in with the old password is refused.
   const pOld = await freshPage(ctx);
   const uiOld = await uiSignIn(pOld, bUser, bOld);
@@ -443,10 +448,16 @@ export async function settingsLogins(ctx, run) {
   if (await B.getByText("Set a new password", { exact: true }).count()) {
     await B.reload({ waitUntil: "load" });
   }
+  // B's own browser was signed out by the reset: sign it back in.
+  if (!(await B.locator("aside, nav").first().getByText("Org", { exact: true }).count())) {
+    await ctx.signIn(B, [bUser, bOld]).catch(() => {});
+    await ctx.sleep(1500);
+  }
   const bBack = (await B.locator("aside, nav").first().getByText("Org", { exact: true }).count()) > 0;
-  R.set("special", sOld.status === 401 && sNew.status === 200 && uiOld !== "app" && fb.ok && sBack.status === 200 && sTempAfter.status === 401 && pb?.payload?.mustResetPassword === false ? "pass" : "fail",
+  const revoked = !(bSess && bSess.user) && bOut !== null && bOutSecs <= 10;
+  R.set("special", revoked && sOld.status === 401 && sNew.status === 200 && uiOld !== "app" && fb.ok && sBack.status === 200 && sTempAfter.status === 401 && pb?.payload?.mustResetPassword === false && bBack ? "pass" : "fail",
     `A reset B (${bUser}): old password → ${sOld.status} (want 401), browser sign-in with the old password → ${uiOld}; new password → ${sNew.status}. ` +
-    `B's open session after the reset: get-session ${bSess && bSess.user ? "still valid (not revoked)" : "gone"}, B's screen showed ${bScreen}. ` +
+    `B's open session after the reset: get-session ${bSess && bSess.user ? "still valid (NOT revoked)" : "gone (revoked)"}, B's screen showed ${bScreen}. ` +
     `B then signed in with the new password → ${fb.why}; put back ${bOld} → ${sBack.status}, temporary → ${sTempAfter.status}, mustResetPassword ${pb?.payload?.mustResetPassword}; B's browser back in the app ${bBack}`);
 
   // Non-admin / anonymous login writes (server rule: admin only, except own row on issued-logins).
@@ -493,7 +504,7 @@ export async function settingsLogins(ctx, run) {
   const issuedAfter = Number((await ctx.sql("select count(*) n from issued_logins"))[0].n);
   const issuedMap = new Map((await ctx.sql("select username, password from issued_logins")).map((r) => [r.username, r.password]));
   const csvRows = rows2.slice(1).map((l) => l.split(",").map((x) => x.replace(/"/g, "")));
-  const mismatched = csvRows.filter((c) => c[ui] !== "nikhil.pati" && issuedMap.get(c[ui].toLowerCase()) !== c[pi]).map((c) => c[ui]);
+  const mismatched = csvRows.filter((c) => c[ui] !== "nikhil.pati" && !pwEq(issuedMap.get(c[ui].toLowerCase()), c[pi])).map((c) => c[ui]);
   const sSample = sample ? (await apiSignIn(base, sample[ui].replace(/"/g, ""), sample[pi].replace(/"/g, ""))).status : 0;
   const sSample0 = sample ? (await apiSignIn(base, sample[ui].replace(/"/g, ""), "0000")).status : 0;
   const msg2 = await A.locator("main p.text-sm").filter({ hasText: /^Issued / }).first().innerText().catch(() => "");
