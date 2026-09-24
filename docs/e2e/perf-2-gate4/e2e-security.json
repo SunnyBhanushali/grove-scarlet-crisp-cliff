@@ -1,0 +1,264 @@
+{
+ "base": "http://127.0.0.1:3010",
+ "at": "2026-09-24T21:09:41.060Z",
+ "results": [
+  {
+   "group": "setup",
+   "name": "admin sunny.b signs in",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "setup",
+   "name": "non-admin nikhil.pati signs in",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "setup",
+   "name": "issued token reads /api/people",
+   "ok": true,
+   "detail": "status 200, 180 people"
+  },
+  {
+   "group": "b",
+   "name": "no token → 401 on every API route",
+   "ok": true,
+   "detail": "44 routes"
+  },
+  {
+   "group": "b",
+   "name": "random bearer → 401 on every API route",
+   "ok": true,
+   "detail": "44 routes"
+  },
+  {
+   "group": "b",
+   "name": "hand-written apms-login.<admin> bearer → 401 on every API route",
+   "ok": true,
+   "detail": "44 routes"
+  },
+  {
+   "group": "b",
+   "name": "hand-written apms-login.p-admin cookie → 401 on every API route",
+   "ok": true,
+   "detail": "44 routes"
+  },
+  {
+   "group": "b",
+   "name": "apms-preview-sunny cookie → 401 on every API route",
+   "ok": true,
+   "detail": "44 routes"
+  },
+  {
+   "group": "b",
+   "name": "well-formed never-issued apms-s. → 401 on every API route",
+   "ok": true,
+   "detail": "44 routes"
+  },
+  {
+   "group": "b",
+   "name": "admin token with one char changed → 401 on every API route",
+   "ok": true,
+   "detail": "44 routes"
+  },
+  {
+   "group": "b",
+   "name": "issued admin token is accepted on every GET route",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "a",
+   "name": "/api/issued-logins anonymous → 401",
+   "ok": true,
+   "detail": "status 401"
+  },
+  {
+   "group": "a",
+   "name": "/api/issued-logins non-admin (someone else's row) → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "a",
+   "name": "/api/issued-logins non-admin via cookie → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "a",
+   "name": "/api/provision-logins anonymous → 401",
+   "ok": true,
+   "detail": "status 401"
+  },
+  {
+   "group": "a",
+   "name": "/api/provision-logins non-admin (someone else's row) → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "a",
+   "name": "/api/provision-logins non-admin via cookie → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "a",
+   "name": "admin password unchanged after the refused writes",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "a",
+   "name": "/api/issued-logins admin → 200",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "a",
+   "name": "the issued password signs in",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "a",
+   "name": "/api/provision-logins admin → 200",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "a",
+   "name": "the provisioned password signs in",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "a",
+   "name": "the previous password stops working",
+   "ok": true,
+   "detail": "status 401"
+  },
+  {
+   "group": "a",
+   "name": "/api/issued-logins non-admin own row → 200",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "a",
+   "name": "own new password signs in",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "a",
+   "name": "own old password stops working",
+   "ok": true,
+   "detail": "status 401"
+  },
+  {
+   "group": "a",
+   "name": "admin password reset ended the person's open session (BATCH-3)",
+   "ok": true,
+   "detail": "status 401"
+  },
+  {
+   "group": "a",
+   "name": "the person signs in again with the new password",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "c",
+   "name": "non-admin POST /api/company-restore → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"message\":\"Only an admin can do that.\"}"
+  },
+  {
+   "group": "c",
+   "name": "non-admin GET /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"message\":\"Only an admin can do that.\"}"
+  },
+  {
+   "group": "c",
+   "name": "non-admin POST /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"message\":\"Only an admin can do that.\"}"
+  },
+  {
+   "group": "c",
+   "name": "non-admin POST /api/company → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"message\":\"Only an admin can do that.\"}"
+  },
+  {
+   "group": "c",
+   "name": "non-admin POST /_serverFn/b4b4aa7e… → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"message\":\"Only an admin can do that.\"}"
+  },
+  {
+   "group": "c",
+   "name": "non-admin POST /_serverFn/60f85321… → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"message\":\"Only an admin can do that.\"}"
+  },
+  {
+   "group": "c",
+   "name": "non-admin PATCH /api/e/access-roles/employee → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"access-roles\",\"message\":\"only an admin c"
+  },
+  {
+   "group": "c",
+   "name": "non-admin PATCH /api/e/logins/sunny.b → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"logins\",\"message\":\"only an admin can cha"
+  },
+  {
+   "group": "c",
+   "name": "non-admin PATCH /api/people/p-1789386088551-ht5648 → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"people\",\"field\":\"access\",\"message\":\"only"
+  },
+  {
+   "group": "c",
+   "name": "non-admin PATCH /api/people/p-admin → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"people\",\"field\":\"password\",\"message\":\"on"
+  },
+  {
+   "group": "c",
+   "name": "non-admin is still an employee",
+   "ok": true,
+   "detail": "accessRoleId employee"
+  },
+  {
+   "group": "c",
+   "name": "non-admin can still edit their own profile",
+   "ok": true,
+   "detail": "status 200 {\"ok\":true,\"table\":\"people\",\"id\":\"p-1789386088551-ht5648\",\"payload\":{\"id\":\"p-178"
+  },
+  {
+   "group": "c",
+   "name": "admin still lists backups",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "b",
+   "name": "signed-out token → 401",
+   "ok": true,
+   "detail": "before 200, after 401"
+  },
+  {
+   "group": "b",
+   "name": "get-session with a signed-out token → null",
+   "ok": true,
+   "detail": "null"
+  }
+ ]
+}

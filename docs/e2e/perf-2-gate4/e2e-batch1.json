@@ -1,0 +1,928 @@
+{
+ "base": "http://127.0.0.1:3010",
+ "at": "2026-09-24T21:59:36.739Z",
+ "results": [
+  {
+   "module": "All",
+   "id": "sign-in",
+   "title": "Sign in (three admins at once)",
+   "checks": {
+    "6": {
+     "status": "pass",
+     "detail": "no writes, no 5xx"
+    }
+   },
+   "notes": []
+  },
+  {
+   "module": "APMS",
+   "id": "apms-month-list",
+   "title": "Plans month list: Add people · Delete from list",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: September 2026 has Jay Nikam true, October 2026 has Sachin Yadav true and keeps Nevil Prajapati true; C listed both in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB October 2026: Nevil Prajapati, Rohan Jadhav, Siddhesh Gawde; A and B list both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C listed both 0.4 s after the adds"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "lists = DB (September 2026 9, October 2026 3)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "APMS",
+   "id": "apms-plan-open",
+   "title": "Person page, open plan: KPI structure · Execution · Values · Manager notes",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: X notes true, Y notes true, X keeps A's earlier weight true; C saw X in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB weights 0.25/0.15, priority true, value off true, notes true; A and B screens show both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 2.0 s after the edit"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "deleted in DB true; B still saw it true; after B's stale save still deleted true, stale notes kept out true; rows after reload A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "DB {\"w1\":\"25\",\"w2\":\"15\",\"bx\":false,\"notes\":\"E2E-A Fawaz Ghansar mug221c614\"}; screens same / same / same"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "APMS",
+   "id": "apms-plan-locked",
+   "title": "Person page, locked plan: KPI actuals · Execution scores · Values scores · Manager notes",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Allan 2nd actual 9, Hetal actual 5, Allan keeps 1st 7; C saw in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB actual 7, exec score 4, value score 3, notes true; A and B screens show both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 1.4 s after the edit"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "DB 7|9|4|true|E2E-B locked notes mug221c614; screens same / same / same"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "APMS",
+   "id": "apms-plan-drag",
+   "title": "Plan editing: drag to reorder KPIs / KRAs",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Fawaz July KPIs Aliens Stuff › Advanced Booked by BC › Revenue By BC; Rohan September KRAs Consultation NPS Score › Art Score › Studio Audit + Mystery Audit"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB order Advanced Booked by BC › Revenue By BC › Aliens Stuff, notes true; A and B show both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 0.9 s after the drop"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "order on all screens = DB (Aliens Stuff › Advanced Booked by BC › Revenue By BC)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "APMS",
+   "id": "apms-self-comments",
+   "title": "Self comments (employee) vs Manager notes",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Ronlind Menezes September 2026 created, Siddhesh Gawde July 2026 created"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB selfNotes true, notes true; B and C screens show both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "A (idle) showed both 0.7 s after the edits"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "DB: Ronlind Menezes September deleted"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "APMS",
+   "id": "apms-eo",
+   "title": "EO: execution outcomes (status, manager rating, notes, trash)",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Test for School ongoing; Pipeline Design and … rating 3"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB Test for Studio: status overdue, B's note true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C's EO list: Started 1.9 s; Overdue 1.7 s"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's trash: gone true; B still listed it true; after B's stale rating: in DB false; listed after reload A/B/C false/false/false"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "EO list on A/B/C = DB (Test for Studio OVERDUE, Pipeline Design  PLANNED)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "APMS",
+   "id": "apms-quarter-review",
+   "title": "Quarterly review: open · self comments · manager discussion notes",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Floyd Q2 self_open, Ronlind Q2 self_open"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB Floyd Q2: selfNote \"Self c617\", managerNote \"Manager c617\""
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 0.7 s after"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "a quarterly review cannot be deleted (no delete control on the page)"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "Floyd's Q2 review on A/B/C = DB"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "APMS",
+   "id": "apms-lock-close",
+   "title": "Lock plan · Close plan (Super admin)",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Pritam closed, Henson closed; C saw Pritam closed in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB status plan_locked, notes true; A and B show both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed lock + notes 1.0 s after the click"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "statuses agree: Closed, Closed, Closure pending"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-delete-recreate",
+   "title": "Delete a target with linked rewards · re-create it",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Ahmedabad's September cell deleted true; Goa M4 1650000; reward links kept on the node: tn-m-mu29qhpk, tn-m-mu29qhpk"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB Ahmedabad M2 560000, actual 430000; A shows both true, B shows both true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C (idle on Nevil's Rewards page): target left the choice 2.4 s after the delete; showed Ahmedabad again 0.8 s after the re-create"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "B still showed Ahmedabad true; after B's stale actual: still deleted true, actual 0; on A/B after reload false/false"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "DB Ahmedabad live true (M1 500000); month pages and Nevil's page agree on A/B/C"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "links: before tn-m-mu29qhpk, tn-m-mu29qhpk (Nevil's page: Ahmedabad); after the delete the rows keep targetNodeId tn-m-mu29qhpk, tn-m-mu29qhpk and the page shows \"Select a target…\"; re-created from Brand or SBU → same node (tn-m-mu29qhpk), cell back true, links tn-m-mu29qhpk, tn-m-mu29qhpk",
+    "custom-name re-create: nodes named Ahmedabad tn-m-mu29qhpk; reward links tn-m-mu29qhpk, tn-m-mu29qhpk; Nevil's page shows \"Ahmedabad\"",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Rewards",
+   "id": "rewards-month-list",
+   "title": "Plans month list: Add people · Delete from list",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: September 2026 has Jay Nikam true, August 2026 has Hetal Soni true and keeps Fawaz Ghansar true; C listed both in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB August 2026: Allan Gois, Aman Vishwakarma, Bhupendra Kumar, Biri tahu, Dinesh Murkar, Fawaz Ghansar, Gaurav Mokale, Grishita Suthar, Priti Thombre, Rohan Jadhav, Sachin Yadav, Sameer Kureshi, Sunny Kumar, Vikas Kumar, Vishal Maurya; A and B list both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C listed both 0.3 s after the adds"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "lists = DB (September 2026 15, August 2026 15)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Rewards",
+   "id": "rewards-plan-open",
+   "title": "Person page, open plan: Unlock against (target link) · KPI structure · Disqualifiers · Manager notes",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Rohan notes true, Nevil notes true, Rohan keeps A's weight true; C saw Rohan in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB target tn-imp-3-63t328 (picked Goa), weights 0.5/0.3, disqualifier true, notes true; A and B screens show both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 1.4 s after the edit"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "DB tn-imp-3-63t328|50|30|true|E2E-A Rohan Jadhav mug221c615; screens same / same / same"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Rewards",
+   "id": "rewards-mass-update",
+   "title": "Month list → Mass update (Unlock against for several people)",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Biri true, Dinesh true (Pune); Gaurav true, Grishita true (Delhi); Aman still Goa true"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB: Aman target Goa, notes true; Bhupendra target Goa; B's screen shows both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed target + notes 0.0 s after the update"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still listed it true; after B's stale mass update still deleted true; listed after reload A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "targets on screen = DB for the people checked (A, B, C)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Rewards",
+   "id": "rewards-my-rewards",
+   "title": "My rewards · Self comments (employee) vs Manager notes",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Ronlind Menezes September 2026 created, Siddhesh Gawde August 2026 created; C's My rewards showed September in 1.5 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB selfNotes true, notes true; B and C screens show both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "A (idle) showed both 0.8 s after the edits"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "DB: Ronlind Menezes September deleted; C's My rewards September \"—\""
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Rewards",
+   "id": "rewards-lock-close",
+   "title": "Lock plan · locked plan: Month-end actuals · Close plan",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: Sunny Kumar August 2026 closed actuals 4/5/6/7/8; Vikas Kumar closed actuals 85/86/87/88/89; C saw Sunny Kumar closed in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB status plan_locked, notes true; A and B show both: true; alert: Move this EO to trash?"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed lock + notes 1.2 s after the click"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "statuses agree: Plan locked, Closed, Closed"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-cells",
+   "title": "Month page: actuals · ladders M1–M5 (cells)",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB Goa 1200000, Kochi 1300000; C saw both in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB Pune M2 2800000, actual 2500000; A shows both true, B shows both true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 0.9 s after the edits"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete: off September in DB true; B still saw it true; after B's stale edit still off true, cell deleted; after reload off true, shown A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "actual and M2 on all screens = DB (Pune, Goa, Kochi)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-groups",
+   "title": "New target · New group with members · second group keeps the first · Switch to set floors · remove member · delete group",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: 4 targets created and on September ✓✓✓✓; C listed all in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB: G1 mode set, members E2E A1 1c613, E2E A2 1c613 removed true; A shows both true, B shows both true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 0.1 s after"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete: G2 off September true; B still saw it true; after B's stale edit of a G2 member's actual still off true; shown after reload A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "top-level targets and G1 members on all screens = DB (5 top level, G1 1)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "group 1 then group 2: DB G1 = E2E A1 1c613, E2E A2 1c613; G2 = E2E B1 1c613, E2E B2 1c613; both groups top level, members nested: true; C shows 2 + 2 nested: true",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-drag",
+   "title": "Reorder and nest by drag",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "order in Nikhil Bangalore › Chennai → Chennai › Bangalore (C same: true); DB: Gurgaon in tn-imp-19-y8xqph (Vishal true)"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB: Aliens Tattoo School in tn-imp-19-y8xqph, Vishal mode set; A shows both true, B shows both true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 0.5 s after the drop"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete: Delhi off September true; B still saw it true; after B's stale drag still off true; shown after reload A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "nested counts on all screens = DB (Vishal 4, Nikhil 3)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-month-list",
+   "title": "Month list: Add target · Duplicate · Edit · Delete month",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: October has 21 of September's 21 targets; E2E Nov 1c616 in November true"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB: both in October true (23 targets); lists A/B/C show 23: true/true/true; C's Edit opens October with both: true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C's list showed October (21) and November 0.9 s after"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete: October gone true; B still lists it true; after B's stale Add target: October targets 0; listed after reload A/B/C false/false/false"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "lists on A/B/C = DB (April 2099:0, April 2088:0, November 2026:1, September 2026:21, August 2026:19, July 2026:19, June 2026:19, May 2026:18, April 2026:18)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "after Duplicate A is on Targets · October 2026; after Add target B is on Targets · November 2026",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-copy-month",
+   "title": "Month page: Copy month (copy all targets from another month)",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: December 20 targets (August 19); Pune actual 2610000"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB Goa (December) M5 1900000, actual 1100000; A shows both true, B shows both true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed the copied targets 0.0 s after"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "B still showed Kochi true; after B's stale M1: deleted true; on A/B/C after reload false/false/false"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "December on A/B/C = DB (19 targets, Goa M5 1900000)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Copy month into a month that already has a target: December has 20 (August 19); the existing target is kept",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-import",
+   "title": "Import spreadsheet (new month, replace month)",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: March 2027 has 2 targets (Imp One c613 M1 100000); Pune M4 3340000"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "A's import changed Imp One c613 M3 → 125000 (want 125000) while B typed the actual 95000: DB actual 95000 (blank in the file keeps it); B's screen = DB true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C's list showed March 2027 with 2 targets 1.1 s after"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete: March 2027 gone true; after B's stale M2: 0 targets; listed after reload A/B/C false/false/false"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "lists on A/B/C = DB (10 months)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "import preview: 2 rows across 2027-03.",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-target-tab",
+   "title": "Target / Group tabs: one target across months",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB Pune M1 2512000, Goa M1 1234000"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB Pune M1 2530000, actual 2745000"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C's Target tab: two targets 0.7 s; same target (M1 + achieved) 0.7 s"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "B still showed Kolkatta true; after B's stale actual: deleted true; September row on A/B/C's Target tab false/false/false"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "Target tab Pune (M1 2530000, achieved 2745000) and Group tab Vishal (September row) on A/B/C = DB"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-month-status",
+   "title": "Month status: Unlock / Lock plan · Change log · month delete",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: September plan_locked; E2E 2088 1c618 on April 2088 true; C saw the lock in 0.0 s"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB: September plan_open, Goa M3 1400000; A shows both true, B shows both true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed both 0.9 s after; C's change log has the unlock: true"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A's delete: April 2088 status gone true; B still on it true; after B's stale New target: month still gone true, stale target on it false; listed after reload A/B/C 0/0/0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "DB Plan locked; screens Plan locked / Plan locked / Plan locked"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Home",
+   "id": "smoke-home",
+   "title": "Smoke: Home",
+   "checks": {
+    "5": {
+     "status": "n/a",
+     "detail": "no edit: read-only dashboard (figures, alerts, awards won)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: Home ok"
+   ]
+  },
+  {
+   "module": "Me",
+   "id": "smoke-me",
+   "title": "Smoke: Me",
+   "checks": {
+    "5": {
+     "status": "pass",
+     "detail": "edit \"smoke-me-21c6\" in the DB true, still there after reload true"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: Me ok"
+   ]
+  },
+  {
+   "module": "Org",
+   "id": "smoke-org",
+   "title": "Smoke: Org",
+   "checks": {
+    "5": {
+     "status": "pass",
+     "detail": "edit \"smoke-org-21c6\" in the DB true, still there after reload true"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: Org › Overview ok; Org › Brands & SBUs ok; Org › Functions ok; Org › Roles ok; Org › People ok"
+   ]
+  },
+  {
+   "module": "KPI",
+   "id": "smoke-kpi",
+   "title": "Smoke: KPI",
+   "checks": {
+    "5": {
+     "status": "pass",
+     "detail": "edit \"smoke-kpi-21c6\" in the DB true, still there after reload true"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: KPI › KPI library ok; KPI › KPI scores ok"
+   ]
+  },
+  {
+   "module": "Awards",
+   "id": "smoke-awards",
+   "title": "Smoke: Awards",
+   "checks": {
+    "5": {
+     "status": "pass",
+     "detail": "edit \"smoke-awards-21c6\" in the DB true, still there after reload true"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: Rewards › Awards ok; Rewards › Awards › Prizes ok"
+   ]
+  },
+  {
+   "module": "MIS",
+   "id": "smoke-mis",
+   "title": "Smoke: MIS",
+   "checks": {
+    "5": {
+     "status": "pass",
+     "detail": "edit \"smoke-mis-21c6\" in the DB true, still there after reload true"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: MIS › Reports ok; MIS › Create ok"
+   ]
+  },
+  {
+   "module": "Settings",
+   "id": "smoke-settings",
+   "title": "Smoke: Settings",
+   "checks": {
+    "5": {
+     "status": "pass",
+     "detail": "edit \"smoke-settings-21c6\" in the DB true, still there after reload true"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: Settings › Setup ok; Settings › Access roles ok; Settings › Assign people ok; Settings › Backup ok; Settings › Trash ok"
+   ]
+  },
+  {
+   "module": "Improve",
+   "id": "smoke-improve",
+   "title": "Smoke: Improve",
+   "checks": {
+    "5": {
+     "status": "pass",
+     "detail": "edit \"smoke-improve-21c6\" in the DB true, still there after reload true"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "opened: Improve ok"
+   ]
+  },
+  {
+   "module": "Roster",
+   "id": "smoke-roster",
+   "title": "Smoke: Roster",
+   "checks": {
+    "6": {
+     "status": "n/a",
+     "detail": "not reached: the Roster link opens no page in this build"
+    }
+   },
+   "notes": []
+  }
+ ]
+}

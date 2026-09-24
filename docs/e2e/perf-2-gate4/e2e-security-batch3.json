@@ -1,0 +1,1062 @@
+{
+ "base": "http://127.0.0.1:3015",
+ "at": "2026-09-24T21:09:32.973Z",
+ "results": [
+  {
+   "group": "setup",
+   "name": "admin signs in",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "setup",
+   "name": "admin makes komal.laks HR",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "setup",
+   "name": "admin issues logins for E / M / F / H",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "setup",
+   "name": "E (nikhil.pati) signs in",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "setup",
+   "name": "M (sarvjeet.sand) signs in",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "setup",
+   "name": "F (ravi.kuma) signs in",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "setup",
+   "name": "H (komal.laks) signs in",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "P",
+   "name": "admin wire: every person, every salary, every record",
+   "ok": true,
+   "detail": "people 180, records 53, reward records 49"
+  },
+  {
+   "group": "P",
+   "name": "admin wire carries no password or hash",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "E wire: every person listed (directory)",
+   "ok": true,
+   "detail": "180/180"
+  },
+  {
+   "group": "P",
+   "name": "E wire: pay fields only on their own row",
+   "ok": true,
+   "detail": "rows with pay fields: 1 (p-1789386088551-ht5648)"
+  },
+  {
+   "group": "P",
+   "name": "E wire: personal fields (dob / phone) only on their own row",
+   "ok": true,
+   "detail": "rows with dob/phone: 1"
+  },
+  {
+   "group": "P",
+   "name": "E wire: no password / hash",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "E wire: APMS / Rewards records only in scope (own)",
+   "ok": true,
+   "detail": "records of 0 + 0 people; outside scope: 0"
+  },
+  {
+   "group": "P",
+   "name": "E wire: Trash hidden",
+   "ok": true,
+   "detail": "trash rows 0"
+  },
+  {
+   "group": "P",
+   "name": "E wire: other people's login rows hidden",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "E wire: job-role salary bands / slabs hidden",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "E ?books=org,months filtered like the wire",
+   "ok": true,
+   "detail": "org people w/ salary 1"
+  },
+  {
+   "group": "P",
+   "name": "E legacy LOAD server fn filtered like the wire",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "E /api/people list: pay + personal only on own row",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "E /api/people/:id of someone else: no salary / dob / password",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "E /api/people/:id own row: own salary visible",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/month-records/:period/:person outside scope → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"month-records\",\"message\":\"You cannot see"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/month-records/:period list: no row outside scope",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/reward-records/:period/:person outside scope → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/reward-records/:period list: no row outside scope",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/e/trash: no rows",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/e/custom-reports: no rows",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/e/logins: own row only",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/e/trash/:id → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/org?kind=roles: no salary bands",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/org/roles/:id: no salary bands",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/org?kind=trash → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E POST /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E POST /api/company-restore → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E POST /api/company → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E POST /_serverFn/b4b4aa7e… → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E POST /_serverFn/60f85321… → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E GET /api/login-locks → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "E POST /api/login-locks → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M wire: every person listed (directory)",
+   "ok": true,
+   "detail": "180/180"
+  },
+  {
+   "group": "P",
+   "name": "M wire: pay fields only on their own row",
+   "ok": true,
+   "detail": "rows with pay fields: 1 (p-1788346069555)"
+  },
+  {
+   "group": "P",
+   "name": "M wire: personal fields (dob / phone) only on their own row",
+   "ok": true,
+   "detail": "rows with dob/phone: 1"
+  },
+  {
+   "group": "P",
+   "name": "M wire: no password / hash",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "M wire: APMS / Rewards records only in scope (team)",
+   "ok": true,
+   "detail": "records of 0 + 8 people; outside scope: 0"
+  },
+  {
+   "group": "P",
+   "name": "M wire: Trash hidden",
+   "ok": true,
+   "detail": "trash rows 0"
+  },
+  {
+   "group": "P",
+   "name": "M wire: other people's login rows hidden",
+   "ok": true,
+   "detail": "sarvjeet.sand"
+  },
+  {
+   "group": "P",
+   "name": "M wire: job-role salary bands / slabs hidden",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "M ?books=org,months filtered like the wire",
+   "ok": true,
+   "detail": "org people w/ salary 1"
+  },
+  {
+   "group": "P",
+   "name": "M legacy LOAD server fn filtered like the wire",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "M /api/people list: pay + personal only on own row",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "M /api/people/:id of someone else: no salary / dob / password",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "M /api/people/:id own row: own salary visible",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/month-records/:period/:person outside scope → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"month-records\",\"message\":\"You cannot see"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/month-records/:period list: no row outside scope",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/reward-records/:period/:person outside scope → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/reward-records/:period list: no row outside scope",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/e/trash: no rows",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/e/custom-reports: no rows",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/e/logins: own row only",
+   "ok": true,
+   "detail": "rows 1"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/e/trash/:id → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/org?kind=roles: no salary bands",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/org/roles/:id: no salary bands",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/org?kind=trash → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M POST /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M POST /api/company-restore → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M POST /api/company → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M POST /_serverFn/b4b4aa7e… → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M POST /_serverFn/60f85321… → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M GET /api/login-locks → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "M POST /api/login-locks → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F wire: every person listed (directory)",
+   "ok": true,
+   "detail": "180/180"
+  },
+  {
+   "group": "P",
+   "name": "F wire: pay fields only on their own row",
+   "ok": true,
+   "detail": "rows with pay fields: 1 (p-1788170605272)"
+  },
+  {
+   "group": "P",
+   "name": "F wire: personal fields (dob / phone) only on their own row",
+   "ok": true,
+   "detail": "rows with dob/phone: 1"
+  },
+  {
+   "group": "P",
+   "name": "F wire: no password / hash",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "F wire: team records visible, another function's records hidden",
+   "ok": true,
+   "detail": "records of 6 people; outsider p-1788353125607-dh3zfb hidden true"
+  },
+  {
+   "group": "P",
+   "name": "F wire: Trash hidden",
+   "ok": true,
+   "detail": "trash rows 0"
+  },
+  {
+   "group": "P",
+   "name": "F wire: other people's login rows hidden",
+   "ok": true,
+   "detail": "ravi.kuma"
+  },
+  {
+   "group": "P",
+   "name": "F wire: job-role salary bands / slabs hidden",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "F ?books=org,months filtered like the wire",
+   "ok": true,
+   "detail": "org people w/ salary 1"
+  },
+  {
+   "group": "P",
+   "name": "F legacy LOAD server fn filtered like the wire",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "F /api/people list: pay + personal only on own row",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "F /api/people/:id of someone else: no salary / dob / password",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "F /api/people/:id own row: own salary visible",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/month-records/:period/:person outside scope → 403",
+   "ok": true,
+   "detail": "status 403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"month-records\",\"message\":\"You cannot see"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/month-records/:period list: no row outside scope",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/reward-records/:period/:person outside scope → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/reward-records/:period list: no row outside scope",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/e/trash: no rows",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/e/custom-reports: no rows",
+   "ok": true,
+   "detail": "rows 0"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/e/logins: own row only",
+   "ok": true,
+   "detail": "rows 1"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/e/trash/:id → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/org?kind=roles: no salary bands",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/org/roles/:id: no salary bands",
+   "ok": true,
+   "detail": "status 200"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/org?kind=trash → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F POST /api/company-backups → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F POST /api/company-restore → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F POST /api/company → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F POST /_serverFn/b4b4aa7e… → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F POST /_serverFn/60f85321… → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F GET /api/login-locks → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "F POST /api/login-locks → 403",
+   "ok": true,
+   "detail": "status 403"
+  },
+  {
+   "group": "P",
+   "name": "HR (company scope + pay + personal) reads the full wire",
+   "ok": true,
+   "detail": "salaries 180, records 53/53"
+  },
+  {
+   "group": "P",
+   "name": "HR GET /api/company-backups → 403 (admin only, unchanged)",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "admin edits a reward record and a salary (setup)",
+   "ok": true,
+   "detail": "200 / 200"
+  },
+  {
+   "group": "P",
+   "name": "E /api/changes?payload=1: reward row outside scope dropped, salary not carried",
+   "ok": true,
+   "detail": "1 rows; cursor 5"
+  },
+  {
+   "group": "P",
+   "name": "E /api/changes: reward row outside scope dropped, salary not carried",
+   "ok": true,
+   "detail": "1 rows; cursor 5"
+  },
+  {
+   "group": "P",
+   "name": "admin feed has the reward row and the salary",
+   "ok": true,
+   "detail": "2 rows"
+  },
+  {
+   "group": "P",
+   "name": "tick hints: admin gets the reward-record hint, E does not",
+   "ok": true,
+   "detail": "admin 2, E 1"
+  },
+  {
+   "group": "P",
+   "name": "E PATCH own row, field outside the Me page (location) → 403 field location",
+   "ok": true,
+   "detail": "403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"people\",\"field\":\"location\",\"message\":\"You cannot change location for this person"
+  },
+  {
+   "group": "P",
+   "name": "E PATCH own row, Me fields (mobile, name) → 200",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "P",
+   "name": "E PATCH own salary → 403 field salary",
+   "ok": true,
+   "detail": "403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"people\",\"field\":\"salary\",\"message\":\"You cannot change compensation.\"}"
+  },
+  {
+   "group": "P",
+   "name": "E PATCH own access role → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E PATCH someone else's row → 403 (kind people)",
+   "ok": true,
+   "detail": "403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"people\",\"field\":\"title\",\"message\":\"You cannot change title for this person.\"}"
+  },
+  {
+   "group": "P",
+   "name": "E create a person → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E delete a person → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "M (People view only) edits a person → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E create own APMS plan → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E edit someone else's APMS plan → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "M edits a team member's reward plan → 200",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "P",
+   "name": "M deletes a team member's reward plan (no delete grant) → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "M edits a reward plan outside the team → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E edits a target cell → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "M (no Targets grant) edits a target cell → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E PATCH /api/e/<kind> refused (403 kind) on every granted kind (31)",
+   "ok": true,
+   "detail": "companies:403 brands:403 sbus:403 sbu-members:403 functions:403 sub-functions:403 roles:403 role-krocs:403 access-roles:403 custom-reports:403 report-folders:403 values-catalog:403 kpi-master:403 apms-plans:403 apms-months:403 role-months:403 period-reviews:403 award-instances:403 award-measures:403 award-prizes:403 gate-units:403 gate-months:403 reward-role-months:403 ags-months:403 ags-reviews:403 sbu-targets:403 target-history:403 target-nodes:403 target-members:403 target-month-status:403 target-root-order:403"
+  },
+  {
+   "group": "P",
+   "name": "E may file notices / app requests / role cases / a trash row (open kinds)",
+   "ok": true,
+   "detail": "trash:200 notices:200 app-requests:200 role-cases:200"
+  },
+  {
+   "group": "P",
+   "name": "no unexpected status on /api/e writes (E and admin)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "P",
+   "name": "E PATCH settings/companyFactor → 403 (field companyFactor)",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E PATCH /api/org/functions/:id → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "F (Functions: edit, no create) creates a function via /api/org → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "E book PATCH with tombstones (a whole APMS month, a person) deletes nothing",
+   "ok": true,
+   "detail": "PATCH 409; 2026-09 records 12 → 12; person alive true"
+  },
+  {
+   "group": "P",
+   "name": "book PATCH conflict reply carries no password / hash / hidden salary",
+   "ok": true,
+   "detail": "status 409"
+  },
+  {
+   "group": "P",
+   "name": "E POST /api/issued-logins for someone else → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "P",
+   "name": "M POST /api/provision-logins → 403",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "group": "F",
+   "name": "F reads a function member without salary / dob",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "F",
+   "name": "F saves the member (form sends salary 0 / slabs 0): salary and slabs kept",
+   "ok": true,
+   "detail": "200; salary 2080800 → 2080800"
+  },
+  {
+   "group": "F",
+   "name": "F sets a real salary value → 403 field salary",
+   "ok": true,
+   "detail": "403 {\"ok\":false,\"error\":\"forbidden\",\"kind\":\"people\",\"field\":\"salary\",\"message\":\"You cannot change salary"
+  },
+  {
+   "group": "F",
+   "name": "F's stale save → 409; the 409 row carries no salary",
+   "ok": true,
+   "detail": "200 / 409"
+  },
+  {
+   "group": "F",
+   "name": "F's merged retry → 200; A's salary 777777 stands",
+   "ok": true,
+   "detail": "200; salary 777777"
+  },
+  {
+   "group": "L",
+   "name": "5 wrong passwords → the 5th reply is 429 LOCKED",
+   "ok": true,
+   "detail": "401,401,401,401,429"
+  },
+  {
+   "group": "L",
+   "name": "while locked the right password is refused (429) with a clear message",
+   "ok": true,
+   "detail": "429 Too many wrong passwords for this username. Sign-in is locked for 15 minutes. Try again later, or ask an admin to unlock it (Settings → Assign people)."
+  },
+  {
+   "group": "L",
+   "name": "the lock is per username (another IP is refused too)",
+   "ok": true,
+   "detail": "429"
+  },
+  {
+   "group": "L",
+   "name": "lock stored in the database",
+   "ok": true,
+   "detail": "{\"key\":\"u:sarvjeet.sand\",\"locked_until\":\"2026-09-24T21:24:10.773Z\"}"
+  },
+  {
+   "group": "L",
+   "name": "lock survives a server restart",
+   "ok": true,
+   "detail": "429"
+  },
+  {
+   "group": "L",
+   "name": "admin sees the locked username",
+   "ok": true,
+   "detail": "[{\"username\":\"sarvjeet.sand\",\"until\":\"2026-09-24T21:24:10.773Z\",\"minutes\":15}]"
+  },
+  {
+   "group": "L",
+   "name": "admin unlock → the right password works at once",
+   "ok": true,
+   "detail": "200 / 200"
+  },
+  {
+   "group": "L",
+   "name": "30 wrong tries from one IP → that IP is locked (even a right password)",
+   "ok": true,
+   "detail": "29×401 then 429; right password 429"
+  },
+  {
+   "group": "L",
+   "name": "another IP still signs in",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "H",
+   "name": "no plain-text password anywhere (issued_logins, people, logins rows, feed, books)",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "group": "H",
+   "name": "issued_logins holds an scrypt hash that verifies",
+   "ok": true,
+   "detail": "scrypt$16384$8$1$D7i"
+  },
+  {
+   "group": "H",
+   "name": "restart converts the plain text once and logs the count",
+   "ok": true,
+   "detail": "plain-text passwords converted: 2 (backup table apms_password_backup_20260924210914)"
+  },
+  {
+   "group": "H",
+   "name": "backup table written first, with the plain values, not granted to PUBLIC",
+   "ok": true,
+   "detail": "apms_password_backup_20260924210914: 2 rows, owner postgres"
+  },
+  {
+   "group": "H",
+   "name": "converted value is a hash and the same password still signs in",
+   "ok": true,
+   "detail": "scrypt$16384$8$1"
+  },
+  {
+   "group": "H",
+   "name": "second boot converts 0 (idempotent)",
+   "ok": true,
+   "detail": "[apms-passwords] plain-text passwords converted: 0 (already hashed)"
+  },
+  {
+   "group": "H",
+   "name": "no password or hash on any read (wire, books, people, logins, feed, trash, backup download)",
+   "ok": true,
+   "detail": "backup bk-mug0yh2d-08q8q3"
+  },
+  {
+   "group": "S",
+   "name": "admin password reset ends every session of that person (API 401 within 3 s)",
+   "ok": true,
+   "detail": "7 ms"
+  },
+  {
+   "group": "S",
+   "name": "get-session after the reset → null",
+   "ok": true,
+   "detail": "null"
+  },
+  {
+   "group": "S",
+   "name": "own password change: this browser stays signed in, the other session ends",
+   "ok": true,
+   "detail": "own 200; this 200; other 401"
+  },
+  {
+   "group": "S",
+   "name": "own password via the person row (Me): same rule",
+   "ok": true,
+   "detail": "patch 200; this 200; other 401"
+  },
+  {
+   "group": "S",
+   "name": "re-sending the current password is not a change (no sign-out)",
+   "ok": true,
+   "detail": "200 / 200"
+  },
+  {
+   "group": "D",
+   "name": "APMS_DEFAULT_PIN=on: sunny.b / 0000 → 200",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "D",
+   "name": "APMS_DEFAULT_PIN=on: a person with no password + 0000 → 200",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "D",
+   "name": "APMS_DEFAULT_PIN=off: sunny.b / 0000 → 401 DEFAULT_PIN_OFF",
+   "ok": true,
+   "detail": "401 DEFAULT_PIN_OFF"
+  },
+  {
+   "group": "D",
+   "name": "APMS_DEFAULT_PIN=off: no-password person + 0000 → 401",
+   "ok": true,
+   "detail": "401"
+  },
+  {
+   "group": "D",
+   "name": "APMS_DEFAULT_PIN=off: a real password still signs in",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "D",
+   "name": "switched back on: sunny.b / 0000 → 200 (not locked out)",
+   "ok": true,
+   "detail": "200"
+  },
+  {
+   "group": "X",
+   "name": "no token → 401 on every route (incl. /api/login-locks)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "X",
+   "name": "random bearer → 401 on every route (incl. /api/login-locks)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "X",
+   "name": "never-issued apms-s. → 401 on every route (incl. /api/login-locks)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "X",
+   "name": "hand-written apms-login.p-admin cookie → 401 on every route (incl. /api/login-locks)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "group": "X",
+   "name": "public company dump /aliens-apms-restore-2026-09-19.json is gone",
+   "ok": true,
+   "detail": "status 404"
+  },
+  {
+   "group": "X",
+   "name": "public company dump /aliens-apms-merged-2026-09-07.json is gone",
+   "ok": true,
+   "detail": "status 404"
+  },
+  {
+   "group": "X",
+   "name": "no uat.* test accounts in the seed",
+   "ok": true,
+   "detail": "0"
+  }
+ ]
+}
