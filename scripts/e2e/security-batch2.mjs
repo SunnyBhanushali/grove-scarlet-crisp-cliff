@@ -136,7 +136,7 @@ function routes(ids) {
 async function main() {
   const admin = await signIn(A);
   check("setup", `admin ${A[0]} signs in`, admin.status === 200 && admin.token, `status ${admin.status}`);
-  const non = await signIn(N);
+  let non = await signIn(N);
   check("setup", `non-admin ${N[0]} signs in`, non.status === 200 && non.token, `status ${non.status}`);
   const nonId = non.user?.id || "";
   const adminId = admin.user?.id || "p-admin";
@@ -217,6 +217,12 @@ async function main() {
   check("a", "own old password stops working", oo.status === 401, `status ${oo.status}`);
   // Put N's test password back for later runs.
   await call("POST", "/api/issued-logins", { token: admin.token, body: { rows: [{ username: N[0], password: N[1], personId: nonPid }] } });
+  // BATCH-3: an admin reset ends every session of that person — N signs in again.
+  await new Promise((r) => setTimeout(r, 2500));
+  const oldTok = await call("GET", "/api/people?limit=1", { token: non.token });
+  check("a", "admin password reset ended the person's open session (BATCH-3)", oldTok.status === 401, `status ${oldTok.status}`);
+  non = await signIn(N);
+  check("a", "the person signs in again with the new password", non.status === 200, `status ${non.status}`);
 
   // (c) admin-only writes refused for the non-admin (403, not 401 / 200).
   const me = await call("GET", `/api/people/${nonPid}`, { token: non.token });
