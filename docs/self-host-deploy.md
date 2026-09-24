@@ -41,6 +41,19 @@ SMTP_FROM=Aliens APMS <reset@alienstattoo.in>
 
 Staging: same keys, different `DATABASE_URL`, `BETTER_AUTH_URL`, `PORT=3010`.
 
+BATCH-3 (p0as82) switches — all optional, defaults shown:
+
+```
+APMS_DEFAULT_PIN=on          # off: 0000 never signs anyone in (not sunny.b, not people without a password)
+APMS_PW_BACKUP_OWNER=postgres  # DB role that owns apms_password_backup_<stamp> (the app role loses access)
+# APMS_PASSWORD_SWEEP=off    # only to skip the one-time plain-text → hash conversion (not recommended)
+# APMS_SIGNIN_USER_LIMIT / APMS_SIGNIN_IP_LIMIT  # test runs only; live keeps 5 / 30 per 15 min
+```
+
+The per-IP sign-in limit trusts the **last** `X-Forwarded-For` entry (the one
+nginx appends with `proxy_add_x_forwarded_for`). Keep the app behind the proxy
+(bound to 127.0.0.1); a directly exposed port would let a client choose its IP.
+
 `BETTER_AUTH_URL` must be the **public** origin browsers use (https://app.alienstattoo.in), not grok-sandbox.
 
 ## Build and run
@@ -116,7 +129,15 @@ Hard reload must not request `*09c*` assets.
 
 ## UAT fixtures
 
-Company snapshot save keeps `uat.*` / `p-uat-*` people and logins (`mergePreserveUatFixtures`). Org/People saves must not wipe those accounts.
+BATCH-3: `uat.*` / `p-uat-*` test people are **no longer kept alive** by org saves (`mergePreserveUatFixtures` is a pass-through). Removing the provisioned test admins on live is the deploy bot's job.
+
+## BATCH-3 cut (p0as82) — what happens on first start
+
+1. **Passwords are hashed once.** Before serving, the server copies every plain-text password it finds (issued_logins, people rows, logins rows, change feed, books, notebook) into `apms_password_backup_<yyyymmddhhmmss>` and replaces each with an scrypt hash. The log says `[apms-passwords] plain-text passwords converted: N (backup table …)`. Old backup copies are converted in the background a few seconds later (`…_copies` table). Idempotent: the next start logs `converted: 0`. Everyone keeps their password.
+2. The backup table is revoked from PUBLIC and, when the app role may, handed to `APMS_PW_BACKUP_OWNER`. If the log says it could not, run as a DB admin: `ALTER TABLE apms_password_backup_<stamp> OWNER TO postgres; REVOKE ALL ON apms_password_backup_<stamp> FROM <app role>;`. **Drop it** once sign-in works: `DROP TABLE apms_password_backup_<stamp>; DROP TABLE IF EXISTS apms_password_backup_<stamp>_copies;`
+3. `apms_signin_failures` is created at runtime (also in `migrations/0011_batch3_security.sql`).
+4. Sign-outs: live is still on a pre-p0as81 build, so after this cut **every browser signs in once** (the p0as81 server-issued sessions replace the old `apms-login.*` tokens). Sessions issued by p0as81/p0as82 survive restarts. From now on a person's sessions also end when an admin resets their password or they change it in another browser.
+5. `APMS_DEFAULT_PIN` stays **on** until Sunny decides. Before switching it off, give `sunny.b` a real password (Me → Password) and issue logins to everyone still on 0000 (Settings → Assign people → Issue remaining).
 
 ## Zip / sync
 
