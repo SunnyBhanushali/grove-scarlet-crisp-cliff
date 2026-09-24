@@ -1712,13 +1712,17 @@
     // Baseline in exactly the shape the screen holds (the store normalises
     // plan records, stamps cell ids, …) so an untouched row never looks dirty.
     var theirs = deleted ? undefined : hotRowPair(kind, k1, k2, placeEntityPayload({}, hint, { ok: true, payload: payload, deleted: false }, {})).local;
+    // BATCH-2: a server row at a newer rev is authoritative. Placing it with
+    // the `updatedAt` rule of mergeKeepPeopleClient let an older local copy win
+    // whenever the row's updatedAt came from the client that clicked first but
+    // committed last (A's access-role change never reached B's / C's screens).
     if (deleted || !localDirty) {
       ackHotRow(kind, k1, k2, theirs, deleted);
-      return placeEntityPayload(local, hint, { ok: true, payload: payload, deleted: deleted }, {});
+      return placeEntityPayload(local, hint, { ok: true, payload: payload, deleted: deleted }, {}, true);
     }
     var merged = merge3(pair.acked, pair.local, theirs, []);
     ackHotRow(kind, k1, k2, theirs, false);
-    return placeEntityPayload(local, hint, { ok: true, payload: merged, deleted: false }, {});
+    return placeEntityPayload(local, hint, { ok: true, payload: merged, deleted: false }, {}, true);
   }
 
   /**
@@ -1742,7 +1746,7 @@
     return placeEntityPayload(local, hint, body, slices);
   }
 
-  function placeEntityPayload(local, hint, body, slices) {
+  function placeEntityPayload(local, hint, body, slices, authoritative) {
     var out = Object.assign({}, local);
     var payload = isPlainObject(body && body.payload) ? body.payload : {};
     var t = normEntityType(hint.type);
@@ -1756,7 +1760,7 @@
         });
       } else {
         var row = Object.assign({}, payload, { id: hint.id });
-        out.people = mergeKeepPeopleClient(out.people, [row]);
+        out.people = authoritative ? replacePersonRow(out.people, row) : mergeKeepPeopleClient(out.people, [row]);
       }
       return out;
     }
@@ -2043,6 +2047,23 @@
       });
     });
     return hits;
+  }
+
+  /** The server's row replaces the screen's (fields the wire never carries, e.g. password, are kept). */
+  function replacePersonRow(stored, row) {
+    var list = Array.isArray(stored) ? stored.slice() : [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && String(list[i].id) === String(row.id)) {
+        var keep = {};
+        ["password", "passwordHash"].forEach(function (f) {
+          if (list[i][f] !== undefined && row[f] === undefined) keep[f] = list[i][f];
+        });
+        list[i] = Object.assign({}, row, keep);
+        return list;
+      }
+    }
+    list.push(row);
+    return list;
   }
 
   function mergeKeepPeopleClient(stored, incoming) {
