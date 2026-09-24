@@ -409,7 +409,7 @@
         k1: row.k1,
         k2: row.k2,
         url: C.rowPath(row),
-        payload: row.payload,
+        payload: sansSentSecret("e:" + spec.kind + ":" + row.id, row.payload, prev[id] && prev[id].payload),
         deleted: false,
         revKey: "e:" + spec.kind + ":" + row.id,
       });
@@ -2509,7 +2509,12 @@
         ops.push({
           kind: "people",
           url: "/api/people/" + encodeURIComponent(id),
-          payload: nextPeople[id],
+          // BATCH-3: a password this browser already saved (and the server
+          // accepted) is not sent again with a later edit of another field:
+          // the server stores a hash and would take the re-sent temporary
+          // password as a new one (resetting the person and ending their
+          // sessions after they had set their own).
+          payload: sansSentSecret(entityRevKey("people", id), nextPeople[id], prevPeople[id]),
           deleted: false,
           revKey: entityRevKey("people", id),
           personId: id,
@@ -3808,6 +3813,14 @@
               },
             },
           );
+        }
+        if (String(href).indexOf("books=") < 0 && !everLoaded && typeof input === "string" && /[?&]at=/.test(input)) {
+          // BATCH-3: no baseline yet (page load): ask for the whole file. An
+          // "unchanged" answer (the SPA's cached copy looked current) left the
+          // sync without a baseline, and the first save then took the screen —
+          // with the edit just made (a new hire) — as already saved: the edit
+          // was never sent. The full answer goes through noteLoaded below.
+          input = input.replace(/([?&])at=[^&]*&?/, "$1").replace(/[?&]$/, "");
         }
         if (String(href).indexOf("books=") < 0 && lastWireAt) {
           init = Object.assign({}, init || {});
