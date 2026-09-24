@@ -94,10 +94,23 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl });
-    return toSql(async <T>(text: string, params: unknown[]) => {
+    const sql = toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
     });
+    // BATCH-3: live does not apply migration files on boot — hash any
+    // plain-text password before this process serves its first query.
+    const client = await pool.connect();
+    try {
+      // One connection: the advisory lock is per session.
+      await runPasswordSweep(
+        toSql(async <T>(text: string, params: unknown[]) => (await client.query(text, params)).rows as T[]),
+        sql,
+      );
+    } finally {
+      client.release();
+    }
+    return sql;
   })().catch((err) => {
     globalRef.__pgSqlPromise__ = undefined;
     throw err;
@@ -165,6 +178,23 @@ async function createPgliteSql(): Promise<Sql> {
     const result = await pg.query<T>(text, params);
     return result.rows;
   });
+}
+
+/**
+ * One-time plain-text → scrypt conversion (idempotent; see
+ * apms-password-migrate.ts). A failure is logged and never blocks the app:
+ * sign-in still accepts a legacy plain-text value, and the next boot retries.
+ */
+async function runPasswordSweep(one: Sql, sql: Sql): Promise<void> {
+  try {
+    const m = await import("./apms-password-migrate.ts");
+    await m.sweepPlaintextPasswords(one);
+    setTimeout(() => {
+      m.sweepBackupPasswords(sql).catch((err) => console.error("[apms-passwords] backup copies", err));
+    }, 5000).unref?.();
+  } catch (err) {
+    console.error("[apms-passwords] conversion failed (will retry on next boot)", err);
+  }
 }
 
 let sqlPromise: Promise<Sql> | null = null;

@@ -119,7 +119,17 @@ export async function handleEntityV2Http(request: Request): Promise<Response | n
     const k1 = url.searchParams.get("k1") || undefined;
     const limitRaw = Number(url.searchParams.get("limit") || 0);
     const rows = await listEntities(sql, parsed.kind, { k1, limit: limitRaw > 0 ? limitRaw : undefined });
-    return Response.json({ ok: true, kind: parsed.kind, rows: rows.map((r) => entityBody(r)), seq: await latestSeq(sql) });
+    // BATCH-3: rows / fields filtered by the caller's access role.
+    const perm = await import("./apms-permissions.ts");
+    const viewer = await perm.loadViewer(personId);
+    const seen = rows
+      .map((r) => {
+        const body = entityBody(r);
+        const p = perm.readEntityPayload(viewer, r.kind, { k1: r.k1, payload: body.payload as Record<string, unknown> });
+        return p ? { ...body, payload: p } : null;
+      })
+      .filter(Boolean);
+    return Response.json({ ok: true, kind: parsed.kind, rows: seen, seq: await latestSeq(sql) });
   }
 
   const key = entityIdFromParts(parsed.kind, parsed.k1 || "", parsed.k2);
@@ -129,10 +139,21 @@ export async function handleEntityV2Http(request: Request): Promise<Response | n
     return Response.json({ ok: false, error: "missing-k2", kind: parsed.kind }, { status: 400 });
   }
 
+  const perm = await import("./apms-permissions.ts");
+  const viewer = await perm.loadViewer(personId);
+  const seenBody = (b: Record<string, unknown>): Record<string, unknown> => {
+    if (!b || typeof b !== "object" || !b.payload || typeof b.payload !== "object") return b;
+    const p = perm.readEntityPayload(viewer, key.kind, { k1: key.k1, payload: b.payload as Record<string, unknown> });
+    return { ...b, payload: p || {} };
+  };
   if (method === "GET") {
     const row = await readEntity(sql, key);
     if (!row) return Response.json({ ok: false, error: "not-found", kind: key.kind, id: key.id }, { status: 404 });
-    return Response.json(entityBody(row));
+    const body = entityBody(row);
+    if (!perm.readEntityPayload(viewer, key.kind, { k1: key.k1, payload: body.payload as Record<string, unknown> })) {
+      return perm.forbiddenResponse(perm.refusal(key.kind, undefined, "You cannot see this."));
+    }
+    return Response.json(seenBody(body as unknown as Record<string, unknown>));
   }
   if (method !== "PATCH") return Response.json({ ok: false, error: "method" }, { status: 405 });
 
@@ -140,9 +161,39 @@ export async function handleEntityV2Http(request: Request): Promise<Response | n
   // BATCH-2: access roles and other people's logins are admin-only.
   const { entityWriteRefusal } = await import("./apms-write-guard.ts");
   const why = await entityWriteRefusal(key.kind, key.k1 || key.id, personId);
-  if (why) return Response.json({ ok: false, error: "forbidden", message: why }, { status: 403 });
-  const result = await patchEntityRow(sql, key, body, personId, liveEntityHooks());
-  return Response.json(result.body, { status: result.status });
+  if (why) return perm.forbiddenResponse(perm.refusal(key.kind, undefined, why));
+  // BATCH-3: the module grant for this kind; hidden fields keep their stored value.
+  const guarded = await guardEntityPatch(viewer, sql, key, body);
+  if (guarded.refused) return perm.forbiddenResponse(guarded.refused);
+  const result = await patchEntityRow(sql, key, guarded.body, personId, liveEntityHooks());
+  if (key.kind === "access-roles" || key.kind === "functions" || key.kind === "sub-functions") perm.invalidateOrgContext();
+  return Response.json(seenBody(result.body as Record<string, unknown>), { status: result.status });
+}
+
+/** BATCH-3: permission check for one generic row write; returns the body to store. */
+export async function guardEntityPatch(
+  viewer: import("./apms-permissions.ts").Viewer,
+  sql: HotSql,
+  key: ReturnType<typeof entityIdFromParts>,
+  body: unknown,
+): Promise<{ body: unknown; refused: import("./apms-permissions.ts").Refusal | null }> {
+  const perm = await import("./apms-permissions.ts");
+  if (viewer.superAdmin || viewer.admin) return { body, refused: null };
+  const rec = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const inner = rec.data && typeof rec.data === "object" ? (rec.data as Record<string, unknown>) : rec;
+  const payload = inner.payload && typeof inner.payload === "object" ? (inner.payload as Record<string, unknown>) : {};
+  const stored = await readEntity(sql, key);
+  const checked = perm.checkEntityWrite(
+    viewer,
+    key.kind,
+    String(key.k1 || key.id),
+    payload,
+    stored ? { payload: stored.payload, deleted: stored.deleted } : null,
+    inner.deleted === true,
+  );
+  if (checked.refused) return { body, refused: checked.refused };
+  if (checked.payload !== payload) inner.payload = checked.payload;
+  return { body, refused: null };
 }
 
 export async function handleChangesHttp(request: Request): Promise<Response> {
@@ -162,7 +213,12 @@ export async function handleChangesHttp(request: Request): Promise<Response> {
   const withPayload = url.searchParams.get("payload") === "1";
   const changes = await changesSince(sql, Number.isFinite(since) ? since : 0, Number.isFinite(limit) ? limit : 200, { withPayload });
   const seq = changes.length ? changes[changes.length - 1].seq : await latestSeq(sql);
-  return Response.json({ ok: true, since: Number.isFinite(since) ? since : 0, seq, changes });
+  // BATCH-3: rows the caller may not read are dropped, hidden fields removed.
+  // The cursor still moves past them (seq is the last row scanned).
+  const perm = await import("./apms-permissions.ts");
+  const viewer = await perm.loadViewer(personId);
+  const seen = changes.map((c) => perm.filterChange(viewer, c)).filter((c) => c !== null);
+  return Response.json({ ok: true, since: Number.isFinite(since) ? since : 0, seq, changes: seen });
 }
 
 /** Overlay authority rows over a snapshot (GET assemble / backups). */

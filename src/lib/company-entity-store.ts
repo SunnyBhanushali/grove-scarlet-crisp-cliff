@@ -11,6 +11,7 @@
  * (backups, restore, org slices) stay coherent. Books are no longer the
  * authority for these fields: book PATCH ignores them.
  */
+import { ensureHashed, verifyPassword } from "./apms-password.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 import type { Snapshot, BookId } from "./company-books.ts";
 import { collections, specForKindOrSettings, type CollectionSpec, type EntityRowShape } from "./apms-collections.ts";
@@ -527,6 +528,10 @@ export async function patchEntityRow(
       const storedPw = stored && !stored.deleted ? stored.payload.password : undefined;
       if ((typeof sent !== "string" || !sent) && typeof storedPw === "string" && storedPw) {
         payload = { ...payload, password: storedPw };
+      } else if (typeof sent === "string" && sent) {
+        // BATCH-3: stored as a scrypt hash; the current password re-sent is no change.
+        const same = typeof storedPw === "string" && storedPw && (sent === storedPw || verifyPassword(sent, storedPw));
+        payload = { ...payload, password: same ? storedPw : ensureHashed(sent) };
       }
     }
     const won =

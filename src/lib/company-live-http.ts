@@ -1,4 +1,5 @@
-import { hasValidSession, unauthorizedJson } from "./apms-request-auth.ts";
+import { hasValidSession, sessionPersonId, unauthorizedJson } from "./apms-request-auth.ts";
+import { filterHints, loadViewer, type Viewer } from "./apms-permissions.ts";
 import {
   LIVE_ENTITY_CAP,
   currentEmittedEntities,
@@ -22,9 +23,13 @@ export async function handleCompanyTickRequest(request: Request): Promise<Respon
     since = 0;
   }
   const at = currentLiveAt();
-  const entities = currentLiveEntities()
+  const pid = await sessionPersonId(request.headers);
+  const viewer = pid ? await loadViewer(pid) : null;
+  const all = currentLiveEntities()
     .filter((row) => !since || Number(row.at) > since)
     .slice(-LIVE_ENTITY_CAP);
+  // BATCH-3: hints for rows the caller cannot read are not sent.
+  const entities = viewer ? filterHints(viewer, all) : [];
   return new Response(
     JSON.stringify({
       at,
@@ -44,6 +49,8 @@ export async function handleCompanyTickRequest(request: Request): Promise<Respon
 export async function handleCompanyLiveRequest(request: Request): Promise<Response> {
   if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   startEntityListen();
+  const pid = await sessionPersonId(request.headers);
+  let viewer: Viewer | null = pid ? await loadViewer(pid) : null;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -53,7 +60,8 @@ export async function handleCompanyLiveRequest(request: Request): Promise<Respon
       const send = (at: number, ents?: { type: string; id: string; period?: string; at?: number }[]) => {
         if (closed) return;
         try {
-          const list = Array.isArray(ents) ? ents.slice(-LIVE_ENTITY_CAP) : currentLiveEntities();
+          const raw = Array.isArray(ents) ? ents.slice(-LIVE_ENTITY_CAP) : currentLiveEntities();
+          const list = viewer ? filterHints(viewer, raw) : [];
           lastSentAt = at;
           lastSentKey = list.map((row) => `${row.type}:${row.id}:${row.period || ""}`).join("|");
           controller.enqueue(encoder.encode(encodeSse(at, currentLiveGens(), list)));
@@ -76,6 +84,7 @@ export async function handleCompanyLiveRequest(request: Request): Promise<Respon
       }, 15_000);
       const poll = setInterval(() => {
         if (closed) return;
+        if (pid) void loadViewer(pid).then((v) => (viewer = v)).catch(() => undefined);
         void readLiveAt().then((at) => {
           if (closed || !at) return;
           const list = currentLiveEntities();

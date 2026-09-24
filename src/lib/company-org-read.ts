@@ -272,23 +272,33 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
 
   const { readOrgBook, commitOrgFields } = await import("./company-notebook");
   const kind = normalizeOrgKind(parsed.kind || url.searchParams.get("kind") || "overview");
+  // BATCH-3: server-side permissions.
+  const { sessionPersonId } = await import("./apms-request-auth.ts");
+  const perm = await import("./apms-permissions.ts");
+  const viewer = await perm.loadViewer(String(await sessionPersonId(request.headers)));
+  const seenSlice = (slice: Record<string, unknown>): Record<string, unknown> =>
+    perm.filterSnapshot(viewer, slice) as Record<string, unknown>;
 
   if (method === "GET" && (parsed.list || !parsed.id)) {
     if (kind === "trash") {
       const { getSql } = await import("./db");
       const sql = await getSql();
+      if (!perm.can(viewer, "settings-trash", "view")) {
+        return perm.forbiddenResponse(perm.refusal("trash", undefined, "You cannot see Trash."));
+      }
       const page = await listTrashPeople(sql);
       const book = await withEntityRows(await readOrgBook());
+      const seen = seenSlice({ trash: book.trash || [], people: page.people });
       return Response.json({
         ok: true,
         kind: "trash",
-        people: page.people,
-        trash: book.trash || [],
+        people: seen.people,
+        trash: seen.trash || [],
         total: page.total,
       });
     }
     const book = await withEntityRows(await readOrgBook());
-    return Response.json(orgSliceFromBook(book, kind));
+    return Response.json(seenSlice(orgSliceFromBook(book, kind) as Record<string, unknown>));
   }
 
   if (!parsed.id) return Response.json({ ok: false, error: "missing-id" }, { status: 400 });
@@ -306,14 +316,20 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
     await ensureEntitiesFromBooks(sql, () => readLiveSnapshot());
     const key = entityIdFromParts(entityKind, parsed.id);
     const field = NODE_FIELD[kind];
+    const seenPayload = (p: unknown) =>
+      perm.readEntityPayload(viewer, entityKind, { k1: parsed.id, payload: (p || {}) as Record<string, unknown> }) || {};
     if (method === "GET") {
       const row = await readEntity(sql, key);
       if (!row || row.deleted) return Response.json({ ok: false, error: "not-found", kind, id: parsed.id }, { status: 404 });
-      return Response.json({ ok: true, kind, id: parsed.id, field, payload: row.payload, rev: row.rev });
+      return Response.json({ ok: true, kind, id: parsed.id, field, payload: seenPayload(row.payload), rev: row.rev });
     }
     const body = await request.json().catch(() => null);
-    const result = await patchEntityRow(sql, key, body, "org-patch", liveEntityHooks());
-    return Response.json({ ...result.body, kind, field }, { status: result.status });
+    const { guardEntityPatch } = await import("./company-entities-v2");
+    const guarded = await guardEntityPatch(viewer, sql, key, body);
+    if (guarded.refused) return perm.forbiddenResponse(guarded.refused);
+    const result = await patchEntityRow(sql, key, guarded.body, viewer.id || "org-patch", liveEntityHooks());
+    const rb = result.body as Record<string, unknown>;
+    return Response.json({ ...rb, ...(rb.payload ? { payload: seenPayload(rb.payload) } : {}), kind, field }, { status: result.status });
   }
 
   if (method === "GET") {
@@ -322,6 +338,10 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
     return Response.json(got.body, { status: got.status });
   }
 
+  // Legacy book path (APMS_ENTITY_ROWS=off): module grant only.
+  if (!viewer.admin && !perm.can(viewer, kind === "roles" ? "org-roles" : kind === "functions" || kind === "subFunctions" ? "org-functions" : "org-units", "edit")) {
+    return perm.forbiddenResponse(perm.refusal(kind, undefined, "You cannot change this."));
+  }
   const input = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const inner = input && isPlain(input.data) ? (input.data as Record<string, unknown>) : input;
   if (!isPlain(inner)) return Response.json({ ok: false, error: "bad-patch" }, { status: 400 });

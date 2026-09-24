@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { getSql } from "./db";
 import { loadCompanySnapshot, saveCompanySnapshot } from "./company-notebook";
+import { ensureHashed } from "./apms-password.ts";
 import { findPerson, usernameKey, type LoginPerson } from "./apms-credentials";
 import { upsertIssuedLogins } from "./issued-logins";
 import { mailConfigured, sendMail } from "./mail";
@@ -104,7 +105,7 @@ async function writePassword(personId: string, username: string, password: strin
         if (p.id !== personId) return p;
         person = {
           ...p,
-          password,
+          password: ensureHashed(password),
           mustResetPassword: mustReset,
           username: p.username || username,
         };

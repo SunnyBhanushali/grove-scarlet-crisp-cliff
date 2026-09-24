@@ -70,7 +70,7 @@ export async function listPeoplePage(
   limit: number;
   offset: number;
 }> {
-  const limit = clampLimit(opts.limit);
+  const limit = opts.limit === -1 ? Number.MAX_SAFE_INTEGER : clampLimit(opts.limit);
   const offset = Math.max(0, Number(opts.offset) || 0);
   const q = String(opts.q || "").trim();
   const sbu = String(opts.sbu || "").trim();
@@ -99,7 +99,7 @@ export async function listRewardMonthPage(
   limit: number;
   offset: number;
 }> {
-  const limit = clampLimit(opts.limit);
+  const limit = opts.limit === -1 ? Number.MAX_SAFE_INTEGER : clampLimit(opts.limit);
   const offset = Math.max(0, Number(opts.offset) || 0);
   const month = String(period || "");
   const rows = await sql.query<{ person_id: string; payload: unknown; rev?: number }>(
@@ -133,7 +133,7 @@ export async function listMonthRecordsPage(
   limit: number;
   offset: number;
 }> {
-  const limit = clampLimit(opts.limit);
+  const limit = opts.limit === -1 ? Number.MAX_SAFE_INTEGER : clampLimit(opts.limit);
   const offset = Math.max(0, Number(opts.offset) || 0);
   const month = String(period || "");
   const rows = await sql.query<{ person_id: string; payload: unknown; rev?: number }>(
@@ -176,23 +176,29 @@ export async function handleScreenReadHttp(request: Request): Promise<Response |
   const sbu = url.searchParams.get("sbu") || "";
   const offset = url.searchParams.get("offset");
 
+  // BATCH-3: rows and fields are filtered by the caller's access role.
+  const { loadViewer, readPerson, canReadRecord } = await import("./apms-permissions.ts");
+  const viewer = await loadViewer(personId);
+
   if (parsed.kind === "people") {
     const page = await listPeoplePage(sql, { limit: Number(limit) || undefined, q, sbu, offset: Number(offset) || 0 });
     const people = Array.isArray((page as { people?: unknown[] }).people)
-      ? (page as { people: unknown[] }).people.map(slimPersonForWire)
+      ? (page as { people: Array<Record<string, unknown>> }).people.map((p) => readPerson(viewer, slimPersonForWire(p) as Record<string, unknown>))
       : (page as { people?: unknown }).people;
     return Response.json({ ok: true, ...page, people });
   }
-  if (parsed.kind === "reward-records") {
-    const page = await listRewardMonthPage(sql, parsed.period || "", {
-      limit: Number(limit) || undefined,
-      offset: Number(offset) || 0,
-    });
-    return Response.json({ ok: true, ...page });
-  }
-  const page = await listMonthRecordsPage(sql, parsed.period || "", {
-    limit: Number(limit) || undefined,
-    offset: Number(offset) || 0,
+  const table = parsed.kind === "reward-records" ? "reward_records" : "month_records";
+  const lister = parsed.kind === "reward-records" ? listRewardMonthPage : listMonthRecordsPage;
+  const all = await lister(sql, parsed.period || "", { limit: -1, offset: 0 });
+  const visible = all.records.filter((r) => canReadRecord(viewer, table, r.personId));
+  const lim = clampLimit(Number(limit) || undefined);
+  const off = Math.max(0, Number(offset) || 0);
+  return Response.json({
+    ok: true,
+    period: all.period,
+    records: visible.slice(off, off + lim),
+    total: visible.length,
+    limit: lim,
+    offset: off,
   });
-  return Response.json({ ok: true, ...page });
 }

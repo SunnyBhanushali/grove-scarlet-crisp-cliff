@@ -13,15 +13,26 @@ import {
 } from "../../src/lib/company-notebook";
 import {
   SUNNY,
+  findPerson,
   sessionUser,
-  verifyLogin,
+  usernameKey,
+  verifyLoginDetailed,
   type LoginMap,
   type LoginPerson,
 } from "../../src/lib/apms-credentials";
 import { loadIssuedLogins, mergeLogins, upsertIssuedLogins } from "../../src/lib/issued-logins";
 import { issueSessionToken, revokeSessionToken } from "../../src/lib/apms-sessions";
 import { readSessionToken, sessionFromHeaders, sessionPersonId, unauthorizedJson } from "../../src/lib/apms-request-auth";
-import { authorizeLoginWrite } from "../../src/lib/apms-admin-auth";
+import { authorizeLoginWrite, requireAdmin } from "../../src/lib/apms-admin-auth";
+import {
+  clientIp,
+  listLockedUsernames,
+  lockMessage,
+  unlockUsername,
+  recordSigninFailure,
+  recordSigninSuccess,
+  signinLock,
+} from "../../src/lib/apms-signin-guard";
 import { applyPasswordReset, requestPasswordReset } from "../../src/lib/password-reset";
 
 const SESSION_COOKIE = "better-auth.session_token";
@@ -114,6 +125,14 @@ function requestIsHttps(event: Event): boolean {
   return event.url.protocol === "https:";
 }
 
+function socketIp(event: Event): string | null {
+  const req = event.req as unknown as {
+    ip?: string;
+    runtime?: { node?: { req?: { socket?: { remoteAddress?: string } } } };
+  };
+  return req.ip || req.runtime?.node?.req?.socket?.remoteAddress || null;
+}
+
 function rowsFrom(body: Record<string, unknown>) {
   const inner = body.data && typeof body.data === "object" ? (body.data as Record<string, unknown>) : body;
   const rows = inner.rows;
@@ -163,7 +182,7 @@ export default async function apmsAuthMiddleware(
           allowOwn: path === "/api/issued-logins",
         });
         if (refused) return refused;
-        const added = await upsertIssuedLogins(rows);
+        const added = await upsertIssuedLogins(rows, { requester: await sessionFromHeaders(event.req.headers) });
         return json(200, { ok: true, added, sent: 0, failed: [] });
       } catch (err) {
         console.error("[issued-logins]", err);
@@ -174,6 +193,22 @@ export default async function apmsAuthMiddleware(
           failed: [{ reason: err instanceof Error ? err.message : "failed" }],
         });
       }
+    }
+    return json(405, { ok: false });
+  }
+
+  if (path === "/api/login-locks") {
+    // BATCH-3: admin sees / clears sign-in lock-outs (Settings → Assign people).
+    const gate = await requireAdmin(event.req.headers);
+    if (gate.response) return gate.response;
+    if (method === "GET") return json(200, { ok: true, locks: await listLockedUsernames() });
+    if (method === "POST") {
+      const body = await readJson(event.req);
+      const username = usernameKey(String(body.username || ""));
+      if (!username) return json(400, { ok: false, error: "username required" });
+      const unlocked = await unlockUsername(username);
+      console.log(`[apms-signin] ${gate.person.username || gate.person.id} unlocked ${username} (${unlocked ? "was locked" : "not locked"})`);
+      return json(200, { ok: true, username, unlocked });
     }
     return json(405, { ok: false });
   }
@@ -200,10 +235,30 @@ export default async function apmsAuthMiddleware(
     const user = String(body.username || body.email || "");
     const pass = String(body.password || "");
     const { people, logins } = await readCompany();
-    const person = verifyLogin(people, logins, user, pass);
+    // BATCH-3: lock-out per username (5 / 15 min) and per IP (30 / 15 min), in the DB.
+    const known = findPerson(people, user);
+    const lockKey = usernameKey(known?.username || known?.email || user);
+    const ip = clientIp(event.req.headers, socketIp(event));
+    const locked = await signinLock(lockKey, ip).catch(() => null);
+    if (locked) {
+      return json(429, { code: "LOCKED", message: lockMessage(locked), lockedMinutes: locked.minutes, scope: locked.scope });
+    }
+    const verdict = verifyLoginDetailed(people, logins, user, pass);
+    const person = verdict.person;
     if (!person) {
+      const lock = await recordSigninFailure(lockKey, ip).catch(() => null);
+      if (lock) {
+        return json(429, { code: "LOCKED", message: lockMessage(lock), lockedMinutes: lock.minutes, scope: lock.scope });
+      }
+      if (verdict.reason === "default-pin-off") {
+        return json(401, {
+          code: "DEFAULT_PIN_OFF",
+          message: "The starter password 0000 is switched off. Use the password you were given, or ask an admin for a new one.",
+        });
+      }
       return json(401, { message: "Invalid username or password" });
     }
+    await recordSigninSuccess(lockKey).catch(() => undefined);
     const payload = sessionPayload(person, await issueSessionToken(person.id));
     return json(200, payload, {
       "set-cookie": sessionCookie(payload.token, requestIsHttps(event)),

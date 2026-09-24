@@ -14,10 +14,13 @@ import { createHash, randomBytes } from "node:crypto";
 
 export const SESSION_TOKEN_PREFIX = "apms-s.";
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
-const CACHE_MS = 15_000;
+// BATCH-3: short, and shared by both server module copies (globalThis), so a
+// session ended by a password change stops working within ~2 s everywhere.
+const CACHE_MS = 2_000;
 
 type Cached = { personId: string; until: number; expiresAt: number };
-const cache = new Map<string, Cached>();
+const g = globalThis as typeof globalThis & { __apmsSessionCache__?: Map<string, Cached> };
+const cache: Map<string, Cached> = (g.__apmsSessionCache__ ??= new Map<string, Cached>());
 let ensured: Promise<void> | null = null;
 
 type QuerySql = { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> };
@@ -37,7 +40,11 @@ export function useMemorySessionsForTests(): void {
     async query<T>(text: string, params: unknown[] = []): Promise<T[]> {
       const t = text.trim().toLowerCase();
       if (t.startsWith("insert")) rows.set(String(params[0]), { person_id: String(params[1]), expires_at: String(params[2]) });
-      else if (t.startsWith("delete")) rows.delete(String(params[0]));
+      else if (t.startsWith("delete") && t.includes("person_id")) {
+        const out: Array<{ token_hash: string }> = [];
+        for (const [h, r] of rows) if (r.person_id === String(params[0]) && h !== String(params[1])) (rows.delete(h), out.push({ token_hash: h }));
+        return out as T[];
+      } else if (t.startsWith("delete")) rows.delete(String(params[0]));
       else if (t.startsWith("select")) {
         const r = rows.get(String(params[0]));
         return (r && new Date(r.expires_at).getTime() > Date.now() ? [r] : []) as T[];
@@ -135,6 +142,29 @@ export async function revokeSessionToken(token: string | null | undefined): Prom
     await sql.query(`delete from apms_sessions where token_hash = $1`, [h]);
   } catch (err) {
     console.error("[apms-sessions] revoke", err);
+  }
+}
+
+/**
+ * BATCH-3: end every session of a person (admin password reset, own password
+ * change), except `keepToken` (the browser that made the change). Returns the
+ * number of sessions ended.
+ */
+export async function revokePersonSessions(personId: string, keepToken?: string | null): Promise<number> {
+  if (!personId) return 0;
+  const keep = looksIssued(keepToken) ? hashToken(keepToken) : "";
+  for (const [h, c] of cache) if (c.personId === personId && h !== keep) cache.delete(h);
+  try {
+    await ensureTable();
+    const sql = await db();
+    const rows = await sql.query<{ token_hash: string }>(
+      `delete from apms_sessions where person_id = $1 and token_hash <> $2 returning token_hash`,
+      [personId, keep],
+    );
+    return rows.length;
+  } catch (err) {
+    console.error("[apms-sessions] revoke person", err);
+    return 0;
   }
 }
 

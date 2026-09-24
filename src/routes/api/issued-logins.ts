@@ -22,7 +22,8 @@ export const Route = createFileRoute("/api/issued-logins")({
           // Admin: any rows. Anyone else: only their own row (own-password change).
           const refused = await authorizeLoginWrite(request.headers, rows, { allowOwn: true });
           if (refused) return refused;
-          const added = await upsertIssuedLogins(rows);
+          const { sessionFromHeaders } = await import("@/lib/apms-request-auth");
+          const added = await upsertIssuedLogins(rows, { requester: await sessionFromHeaders(request.headers) });
           return Response.json({ ok: true, added, sent: 0, failed: [] });
         } catch (err) {
           console.error("[issued-logins]", err);

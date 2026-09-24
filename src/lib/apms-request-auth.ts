@@ -47,8 +47,9 @@ export async function hasValidSession(headers: Headers): Promise<boolean> {
   return (await sessionPersonId(headers)) !== null;
 }
 
-export function forbiddenJson(message = "Only an admin can do that.") {
-  return new Response(JSON.stringify({ ok: false, error: message }), {
+export function forbiddenJson(message = "Only an admin can do that.", kind?: string, field?: string) {
+  // BATCH-3: every refusal has the same shape: { error: "forbidden", kind, field, message }.
+  return new Response(JSON.stringify({ ok: false, error: "forbidden", ...(kind ? { kind } : {}), ...(field ? { field } : {}), message }), {
     status: 403,
     headers: {
       "content-type": "application/json; charset=utf-8",

@@ -68,11 +68,13 @@ export const Route = createFileRoute("/api/provision-logins")({
             return Response.json({ ok: true, added: bootstrap ? 1 : 0, failed: [], sent: 0 });
           }
           try {
-            await upsertIssuedLogins(rows);
+            const { sessionFromHeaders } = await import("@/lib/apms-request-auth");
+            await upsertIssuedLogins(rows, { requester: await sessionFromHeaders(request.headers) });
           } catch (err) {
             console.error("[provision-logins] issued", err);
           }
-          const result = await provisionLoginRows(rows);
+          const { isPasswordHash } = await import("@/lib/apms-password");
+          const result = await provisionLoginRows(rows.filter((r) => !isPasswordHash(r.password)));
           return Response.json({ ok: true, sent: 0, ...result });
         } catch (err) {
           console.error("[provision-logins]", err);

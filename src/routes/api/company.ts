@@ -67,7 +67,7 @@ export const Route = createFileRoute("/api/company")({
             const wire = await getCompanyWire();
             const personId = await personIdForWire(request, wire);
             if (!personId) return unauthorizedJson();
-            const body = await loadRequestedBooks(ids);
+            const body = await loadRequestedBooks(ids, personId);
             return Response.json({ ok: true, personId, ...body });
           }
           const response = await handleCompanyGetRequest(request);
@@ -102,7 +102,10 @@ export const Route = createFileRoute("/api/company")({
             const empty = await companyIsEmpty();
             return Response.json({ ok: false, empty, error: "missing snapshot" });
           }
-          return Response.json(await replaceCompanySnapshot(snapshot));
+          const done = await replaceCompanySnapshot(snapshot);
+          // BATCH-3: no password or hash goes back to the browser.
+          const { slimForWire } = await import("@/lib/company-wire-slim");
+          return Response.json({ ...done, snapshotJson: JSON.stringify(slimForWire(JSON.parse(done.snapshotJson))) });
         } catch (err) {
           if (err instanceof RestoreRejectedError) {
             return Response.json({ ok: false, error: err.message }, { status: 400 });
@@ -115,8 +118,45 @@ export const Route = createFileRoute("/api/company")({
         try {
           if (!(await hasValidSession(request.headers))) return unauthorizedJson();
           const body = await request.json().catch(() => null);
+          // BATCH-3: tombstones (deletions carried by the book) are kept only
+          // where the caller may delete; a 409 reply's books are filtered and
+          // carry no password material.
+          const { sessionPersonId } = await import("@/lib/apms-request-auth");
+          const perm = await import("@/lib/apms-permissions");
+          const viewer = await perm.loadViewer(String(await sessionPersonId(request.headers)));
+          if (!viewer.admin && body && typeof body === "object") {
+            const { readOrgBook } = await import("@/lib/company-notebook");
+            const org = await readOrgBook();
+            const storedTombs = (org.tombstones || {}) as Record<string, Record<string, unknown>>;
+            const rec = body as Record<string, unknown>;
+            const inner = (rec.data && typeof rec.data === "object" ? rec.data : rec) as Record<string, unknown>;
+            const dropped: string[] = [];
+            if (inner.tombstones && typeof inner.tombstones === "object") {
+              const f = perm.filterTombstones(viewer, inner.tombstones as Record<string, Record<string, unknown>>, storedTombs);
+              inner.tombstones = f.tombs;
+              dropped.push(...f.dropped);
+            }
+            const orgBook = (inner.books as Record<string, Record<string, unknown>> | undefined)?.org;
+            if (orgBook && orgBook.tombstones && typeof orgBook.tombstones === "object") {
+              const f = perm.filterTombstones(viewer, orgBook.tombstones as Record<string, Record<string, unknown>>, storedTombs);
+              orgBook.tombstones = f.tombs;
+              dropped.push(...f.dropped);
+            }
+            if (dropped.length) {
+              console.warn(`[api/company PATCH] ${viewer.id}: dropped ${dropped.length} tombstone(s) the caller may not apply: ${dropped.slice(0, 5).join(", ")}`);
+            }
+          }
           const result = await patchCompanyBooks(body);
-          return Response.json(result.body, { status: result.status });
+          const ack = result.body as unknown as Record<string, unknown>;
+          if (ack && ack.books && typeof ack.books === "object") {
+            const { slimForWire } = await import("@/lib/company-wire-slim");
+            const books: Record<string, unknown> = {};
+            for (const [id, b] of Object.entries(ack.books as Record<string, Record<string, unknown>>)) {
+              books[id] = perm.filterSnapshot(viewer, slimForWire(b as never) as Record<string, unknown>);
+            }
+            ack.books = books;
+          }
+          return Response.json(ack, { status: result.status });
         } catch (err) {
           const message = err instanceof Error ? err.stack || err.message : String(err);
           console.error("[api/company PATCH] patch-failed", message);

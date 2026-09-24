@@ -1,3 +1,4 @@
+import { ensureHashed, verifyPassword } from "./apms-password.ts";
 import { mergeKeepMonthMaps, mergeKeepPeople, normalizeBookGens, type BookId, type Snapshot } from "./company-books.ts";
 import { slimPersonForWire } from "./company-wire-slim.ts";
 import {
@@ -117,10 +118,26 @@ export function preservePersonSecrets(
   for (const field of ["password", "passwordHash"] as const) {
     const sent = out[field];
     const has = typeof sent === "string" ? sent.length > 0 : sent !== undefined && sent !== null;
-    if (!has && src[field] !== undefined && src[field] !== null && src[field] !== "") out[field] = src[field];
+    const kept = src[field] !== undefined && src[field] !== null && src[field] !== "";
+    if (!has && kept) out[field] = src[field];
     else if (!has) delete out[field];
+    // BATCH-3: stored as a scrypt hash; re-sending the current password is not a change.
+    else if (kept && (sent === src[field] || verifyPassword(String(sent), src[field]))) out[field] = src[field];
+    else out[field] = ensureHashed(sent);
   }
   return out;
+}
+
+/** BATCH-3: true when this people write sets a password different from the stored one. */
+export function personPasswordChanges(
+  incoming: Record<string, unknown>,
+  stored: Record<string, unknown> | null | undefined,
+): boolean {
+  const sent = incoming.password;
+  if (typeof sent !== "string" || !sent) return false;
+  const have = (stored || {}).password;
+  if (!have) return true;
+  return !(sent === have || verifyPassword(sent, have));
 }
 
 function rowBody(key: EntityKey, row: EntityRow, extra: Record<string, unknown> = {}) {
@@ -610,20 +627,59 @@ export async function handleEntityHttp(request: Request): Promise<Response> {
   const { liveEntityBooks } = await import("./company-entities-live");
   const sql = await getSql();
   const books = liveEntityBooks();
+  // BATCH-3: server-side permissions (apms-permissions.ts).
+  const perm = await import("./apms-permissions.ts");
+  const viewer = await perm.loadViewer(personId);
+  const ids = key.table === "people" || key.table === "target_cells" ? { id: key.id } : { personId: key.personId };
+  const kindName = key.table.replace(/_/g, "-");
+  const filtered = (body: Record<string, unknown>): Record<string, unknown> => {
+    if (!body || typeof body !== "object" || !body.payload || typeof body.payload !== "object") return body;
+    const seen = perm.readHotRow(viewer, key.table, ids, body.payload as Record<string, unknown>);
+    return seen ? { ...body, payload: seen } : { ...body, payload: {} };
+  };
   if (method === "GET") {
     const result = await getEntity(sql, key, books);
-    return Response.json(result.body, { status: result.status });
+    if (result.status === 200 && result.body.payload && typeof result.body.payload === "object") {
+      if (!perm.readHotRow(viewer, key.table, ids, result.body.payload as Record<string, unknown>)) {
+        return perm.forbiddenResponse(perm.refusal(kindName, undefined, "You cannot see this."));
+      }
+    }
+    return Response.json(filtered(result.body as Record<string, unknown>), { status: result.status });
   }
   const input = await request.json().catch(() => null);
+  const { patchPayload } = await import("./apms-write-guard.ts");
+  const sent = patchPayload(input);
+  const inner = input && typeof input === "object" ? ((input as Record<string, unknown>).data && typeof (input as Record<string, unknown>).data === "object" ? ((input as Record<string, unknown>).data as Record<string, unknown>) : (input as Record<string, unknown>)) : {};
+  const deleted = inner.deleted === true;
+  const storedRow = await readRow(sql as unknown as HotSql, key);
+  const op = perm.opOf(storedRow, deleted);
+  const prev = storedRow && !storedRow.deleted ? storedRow.payload : null;
   if (key.table === "people") {
     // BATCH-2: access-role changes and other people's passwords are admin-only.
-    const { patchPayload, peopleWriteRefusal, requesterIsAdmin } = await import("./apms-write-guard.ts");
-    const stored = await sql.query<{ payload: Record<string, unknown> }>(`select payload from people where id = $1`, [key.id]);
-    const why = peopleWriteRefusal(personId, key.id, patchPayload(input), stored[0]?.payload || null);
+    const { peopleWriteRefusal, requesterIsAdmin } = await import("./apms-write-guard.ts");
+    const why = peopleWriteRefusal(personId, key.id, sent, prev);
     if (why && !(await requesterIsAdmin(personId))) {
-      return Response.json({ ok: false, error: "forbidden", message: why }, { status: 403 });
+      return perm.forbiddenResponse(perm.refusal("people", /password/.test(why) ? "password" : "access", why));
     }
+    const checked = perm.checkPersonWrite(viewer, key.id, sent, prev, op);
+    if (checked.refused) return perm.forbiddenResponse(checked.refused);
+    if (checked.payload !== sent && inner.payload && typeof inner.payload === "object") inner.payload = checked.payload;
+  } else if (key.table === "month_records" || key.table === "reward_records") {
+    const refused = perm.checkRecordWrite(viewer, key.table, key.personId, sent, prev, op);
+    if (refused) return perm.forbiddenResponse(refused);
+  } else if (key.table === "target_cells") {
+    const refused = perm.checkTargetCellWrite(viewer, op);
+    if (refused) return perm.forbiddenResponse(refused);
   }
+  let pwChange = false;
+  if (key.table === "people") pwChange = personPasswordChanges(patchPayload(input), prev);
   const result = await patchEntity(sql, key, input, books, personId);
-  return Response.json(result.body, { status: result.status });
+  if (key.table === "people") perm.invalidateOrgContext();
+  if (pwChange && result.status === 200) {
+    // BATCH-3: a new password ends that person's other sessions.
+    const { sessionFromHeaders } = await import("./apms-request-auth.ts");
+    const { endSessionsAfterPasswordChange } = await import("./issued-logins.ts");
+    if (key.table === "people") await endSessionsAfterPasswordChange([key.id], await sessionFromHeaders(request.headers));
+  }
+  return Response.json(filtered(result.body as Record<string, unknown>), { status: result.status });
 }

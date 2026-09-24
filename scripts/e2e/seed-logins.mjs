@@ -5,6 +5,14 @@
  *   DATABASE_URL=… node scripts/e2e/seed-logins.mjs floyd.dsil=pw1 ronlind.mene=pw2 …
  */
 import pg from "pg";
+import { randomBytes, scryptSync } from "node:crypto";
+
+/** Same format as src/lib/apms-password.ts (BATCH-3: passwords are stored hashed). */
+function hashPassword(pw) {
+  const salt = randomBytes(16);
+  const key = scryptSync(String(pw), salt, 32, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  return `scrypt$16384$8$1$${salt.toString("base64url")}$${key.toString("base64url")}`;
+}
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 await pool.query(`create table if not exists issued_logins (
@@ -17,7 +25,7 @@ for (const arg of process.argv.slice(2)) {
   await pool.query(
     `insert into issued_logins (username, person_id, password) values ($1, $2, $3)
      on conflict (username) do update set person_id = excluded.person_id, password = excluded.password, updated_at = now()`,
-    [username, r.rows[0].id, password],
+    [username, r.rows[0].id, hashPassword(password)],
   );
   console.log(`login ${username} → ${r.rows[0].id}`);
 }

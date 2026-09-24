@@ -12,6 +12,7 @@ import {
   startBackupScheduler,
 } from "./company-backups";
 import { extractSnapshot } from "./company-notebook";
+import { slimForWire } from "./company-wire-slim";
 import { hasValidSession, isLoopbackRequest, unauthorizedJson } from "./apms-request-auth";
 
 startBackupScheduler();
@@ -72,8 +73,10 @@ export async function handleCompanyBackupsRequest(request: Request): Promise<Res
       if (id) {
         const row = await getBackup(id);
         if (!row) return json({ ok: false, error: "That copy is not on the server any more." }, 404);
-        const snapshot = extractSnapshot(row.snapshotJson);
-        if (!snapshot) return json({ ok: false, error: "That copy could not be read." }, 500);
+        const full = extractSnapshot(row.snapshotJson);
+        if (!full) return json({ ok: false, error: "That copy could not be read." }, 500);
+        // BATCH-3: a downloaded copy carries no password or hash (restore keeps the stored ones).
+        const snapshot = slimForWire(full);
         return json({
           ok: true,
           item: row,
@@ -117,7 +120,7 @@ export async function handleCompanyBackupsRequest(request: Request): Promise<Res
         ok: true,
         item: result.item,
         undo: result.undo,
-        snapshot: result.snapshot,
+        snapshot: slimForWire(result.snapshot),
       });
     }
     return json({ ok: false, error: "Unknown action" }, 400);

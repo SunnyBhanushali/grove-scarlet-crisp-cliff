@@ -1,6 +1,7 @@
 import { getSql } from "./db";
 import { notifyCompanyLive, currentLiveAt, currentLiveGens } from "./company-live";
 import seed from "./company-seed.json";
+import { hashSnapshotSecrets } from "./apms-password.ts";
 import {
   assembleSnapshot,
   BOOK_IDS,
@@ -60,55 +61,24 @@ type BookRow = {
 
 type PersistMode = "replace" | "skip-stale" | "fill-missing";
 
-const UAT_USER = /^uat\./i;
-const UAT_ID = /^p-uat-/i;
-
-function isUatPerson(person: unknown): boolean {
-  if (!person || typeof person !== "object") return false;
-  const rec = person as Record<string, unknown>;
-  const id = String(rec.id || "");
-  const username = String(rec.username || "");
-  const email = String(rec.email || "");
-  return UAT_ID.test(id) || UAT_USER.test(username) || UAT_USER.test(email);
-}
-
-/** Keep uat.* / p-uat-* people and logins when an org save would drop them. */
+/**
+ * BATCH-3: this used to put provisioned `uat.*` / `p-uat-*` test people and
+ * logins back into every org save, so the test admins could never be removed.
+ * Test fixtures are no longer kept alive: the incoming org is saved as sent.
+ * (Live clean-up of existing uat.* rows is the deploy bot's job.)
+ */
 export function mergePreserveUatFixtures(
   incoming: Snapshot,
-  stored: Snapshot | null | undefined,
+  _stored: Snapshot | null | undefined,
 ): Snapshot {
-  if (!stored) return incoming;
-  const storedPeople = Array.isArray(stored.people) ? stored.people : [];
-  const incomingPeople = Array.isArray(incoming.people) ? [...incoming.people] : [];
-  const have = new Set(
-    incomingPeople
-      .map((row) => (row && typeof row === "object" ? String((row as { id?: unknown }).id || "") : ""))
-      .filter(Boolean),
-  );
-  for (const person of storedPeople) {
-    if (!isUatPerson(person)) continue;
-    const id = person && typeof person === "object" ? String((person as { id?: unknown }).id || "") : "";
-    if (!id || have.has(id)) continue;
-    incomingPeople.push(person);
-    have.add(id);
-  }
-  const storedLogins =
-    stored.logins && typeof stored.logins === "object" && !Array.isArray(stored.logins)
-      ? (stored.logins as Record<string, unknown>)
-      : {};
-  const incomingLogins =
-    incoming.logins && typeof incoming.logins === "object" && !Array.isArray(incoming.logins)
-      ? { ...(incoming.logins as Record<string, unknown>) }
-      : {};
-  for (const [key, value] of Object.entries(storedLogins)) {
-    if (!UAT_USER.test(key) && !UAT_ID.test(key)) continue;
-    if (incomingLogins[key] == null) incomingLogins[key] = value;
-  }
-  return { ...incoming, people: incomingPeople, logins: incomingLogins };
+  return incoming;
 }
 
 function seedSnapshot(): Snapshot {
-  return JSON.parse(JSON.stringify(seed)) as Snapshot;
+  const snap = JSON.parse(JSON.stringify(seed)) as Snapshot;
+  // BATCH-3: the seed's logins carry plain text; never store it that way.
+  hashSnapshotSecrets(snap);
+  return snap;
 }
 
 function parseSnapshot(json: string | null): Snapshot | null {
@@ -656,7 +626,10 @@ async function replaceCompanySnapshotUnlocked(
   if (!extracted) {
     throw new Error("That file is not an Aliens APMS snapshot.");
   }
-  const incoming = normalizeTargetsGraph(stripSnapshotUiSession(extracted));
+  const { keepStoredSecretsOnRestore } = await import("./apms-restore-secrets.ts");
+  const incoming = normalizeTargetsGraph(
+    stripSnapshotUiSession((await keepStoredSecretsOnRestore(await getSql(), extracted)) as Snapshot),
+  );
   const guard = restoreTargetsGuard(incoming);
   if (!guard.ok) throw new RestoreRejectedError(guard.error);
   const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
@@ -800,13 +773,19 @@ async function patchCompanyBooksUnlocked(
   return { status: ack.ok ? 200 : 409, body: ack };
 }
 
-export async function loadRequestedBooks(ids: BookId[]): Promise<{
+export async function loadRequestedBooks(ids: BookId[], personId?: string): Promise<{
   books: Partial<Record<BookId, Record<string, unknown>>>;
   bookGens: Record<BookId, number>;
   notebookUpdatedAt: number;
 }> {
   const wire = await getCompanyWire();
-  const slim = parseSnapshot(wire.snapshotJson) || {};
+  let slim = parseSnapshot(wire.snapshotJson) || {};
+  if (personId) {
+    // BATCH-3: `?books=` reads are filtered by the caller's access role like the wire.
+    const { wireForViewer } = await import("./company-wire-http");
+    const scoped = await wireForViewer(wire, personId);
+    if (!scoped.full) slim = scoped.view.snapshot as Snapshot;
+  }
   const books: Partial<Record<BookId, Record<string, unknown>>> = {};
   for (const id of ids) books[id] = bookPayload(slim, id);
   return {

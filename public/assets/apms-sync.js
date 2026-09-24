@@ -3873,9 +3873,59 @@
     };
   }
 
+  /**
+   * BATCH-3: session ended elsewhere (admin password reset, own password
+   * change in another browser, admin unlock/revoke). The next app API call
+   * answers 401; confirm with get-session and, if this browser is signed out,
+   * leave the app for the sign-in page (within seconds, not "keep working").
+   */
+  var sessionEnded = false;
+  var sessionCheck = null;
+  function isAppApiPath(path) {
+    return /^\/(api|_serverFn)\//.test(String(path || "")) && !/^\/api\/(auth|password-reset)(\/|\?|$)/.test(String(path || ""));
+  }
+  function checkSessionEnded(original) {
+    if (sessionEnded || sessionCheck || !everLoaded) return;
+    sessionCheck = (async function () {
+      try {
+        var headers = {};
+        try {
+          var bearer = global.sessionStorage && global.sessionStorage.getItem("grok-auth.bearer-token");
+          if (bearer) headers.Authorization = "Bearer " + bearer;
+        } catch (e0) {}
+        var r = await original("/api/auth/get-session", { credentials: "include", headers: headers });
+        var j = r && r.ok ? await r.json().catch(function () { return null; }) : null;
+        if (j && j.session) return;
+        sessionEnded = true;
+        try {
+          global.sessionStorage.removeItem("grok-auth.bearer-token");
+          global.sessionStorage.setItem("apms-signed-out-reason", "session-ended");
+        } catch (e1) {}
+        try {
+          await original("/api/auth/sign-out", { method: "POST", credentials: "include" });
+        } catch (e2) {}
+        if (global.location && typeof global.location.assign === "function") global.location.assign("/");
+      } catch (err) {
+        /* network: try again on the next 401 */
+      } finally {
+        sessionCheck = null;
+      }
+    })();
+  }
+  function watchAuth(original) {
+    return async function watched(input) {
+      var res = await original.apply(null, arguments);
+      try {
+        if (res && res.status === 401 && isAppApiPath(pathOf(input))) checkSessionEnded(original);
+      } catch (err) {}
+      return res;
+    };
+  }
+
   function install(fetchImpl) {
-    var original = fetchImpl || (typeof global.fetch === "function" ? global.fetch.bind(global) : null);
-    if (!original) return api;
+    var original0 = fetchImpl || (typeof global.fetch === "function" ? global.fetch.bind(global) : null);
+    if (!original0) return api;
+    var original = watchAuth(original0);
     rawFetch = original;
     if (typeof global.fetch === "function") {
       global.fetch = wrapFetch(original);
