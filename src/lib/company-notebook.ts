@@ -16,6 +16,7 @@ import {
   normalizeBookGens,
   peopleCount,
   splitSnapshot,
+  bookPatchIsNoop,
   wouldShrinkLive,
   type BookId,
   type Snapshot,
@@ -942,6 +943,16 @@ async function patchCompanyBooksUnlocked(
   let assembled = stored;
   if (result.applied.length) {
     const merged = stripSnapshotUiSession(mergePreserveUatFixtures(result.snapshot, stored));
+    if (bookPatchIsNoop(stored, merged, result.applied)) {
+      // PERF (p0aw5): the SPA sends its whole org book after a people / org
+      // edit whose rows are already committed; the book fields it carries are
+      // then what is stored. Nothing to write: no new generation (which would
+      // 409 every other editor's next PATCH), no dual-write, no live notify,
+      // no wire reassemble. Acked as applied at the stored generation.
+      const same = { ...result, snapshot: stored };
+      const ack = ackFromPatch(stored, same);
+      return { status: ack.ok ? 200 : 409, body: ack };
+    }
     assembled = await persistBooks(merged, "replace", result.applied);
     await dualWriteAfterCommit(parsed, result);
     void notifyCompanyLive(

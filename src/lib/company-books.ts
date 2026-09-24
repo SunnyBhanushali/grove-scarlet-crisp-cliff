@@ -993,4 +993,12 @@ export function applyBookPatches(
   return { snapshot: out, applied, conflict, skipped };
 }
 
-
+/** PERF (p0aw5): every applied book (and the tombstones) comes out exactly as stored. */
+export function bookPatchIsNoop(stored: Snapshot, merged: Snapshot, applied: readonly BookId[]): boolean {
+  if (!applied.length) return false;
+  if (stableStringify(stored.tombstones ?? null) !== stableStringify(merged.tombstones ?? null)) return false;
+  for (const id of applied) {
+    if (stableStringify(bookPayload(stored, id)) !== stableStringify(bookPayload(merged, id))) return false;
+  }
+  return true;
+}

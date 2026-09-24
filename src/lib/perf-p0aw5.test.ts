@@ -9,7 +9,8 @@
  *   - generic-kind re-reads land in commit order;
  *   - encoding happens once per version, only when read;
  *   - cached screen reads: same generation → memory / 304, a write → rebuilt;
- *   - row commits keep the book generations.
+ *   - row commits keep the book generations;
+ *   - a book PATCH that changes nothing writes nothing.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -168,4 +169,26 @@ test("row commits keep the book generations (the wire never runs ahead of the st
   // reports the stored gen, so a bumped wire gen made it re-read forever.
   assert.deepEqual(snap(w).bookGens, { org: 1, plans: 1, months: 1, targets: 1 });
   assert.deepEqual(w.bookGens, { org: 1, plans: 1, months: 1, targets: 1 });
+});
+
+test("a book PATCH that changes nothing is a no-op; a real change or a delete is not", async () => {
+  const { applyBookPatches } = await import("./company-books.ts");
+  const { bookPatchIsNoop } = await import("./company-books.ts");
+  const stored = {
+    bookGens: { org: 4, plans: 1, months: 1, targets: 1 },
+    people: [{ id: "p1", name: "A" }],
+    notices: [{ id: "n1", text: "hi" }, { id: "n2", text: "yo" }],
+    companyFactor: 1,
+    tombstones: {},
+  } as Record<string, unknown>;
+  const book = (over: Record<string, unknown>) => ({ org: { notices: stored.notices, companyFactor: stored.companyFactor, ...over } });
+  const same = applyBookPatches(stored, book({}), { org: 4 });
+  assert.deepEqual(same.applied, ["org"]);
+  assert.equal(bookPatchIsNoop(stored, same.snapshot, same.applied), true);
+  const edit = applyBookPatches(stored, book({ companyFactor: 1.2 }), { org: 4 });
+  assert.equal(bookPatchIsNoop(stored, edit.snapshot, edit.applied), false);
+  const del = applyBookPatches(stored, book({ notices: [{ id: "n1", text: "hi" }] }), { org: 4 });
+  assert.equal(bookPatchIsNoop(stored, del.snapshot, del.applied), false);
+  const stale = applyBookPatches(stored, book({}), { org: 3 });
+  assert.equal(bookPatchIsNoop(stored, stale.snapshot, stale.applied), false, "a 409 is not a no-op");
 });
