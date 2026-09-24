@@ -1243,6 +1243,18 @@
   function tickDue() {
     return Date.now() - lastRealTickAt >= tickWindow() - 50;
   }
+  /** The cached tick answer never lags what this tab already heard live (at / gens / seq). */
+  function refreshCachedTick(tick, at, seq) {
+    if (!lastTickBody || !at) return;
+    try {
+      var cached = JSON.parse(lastTickBody);
+      if (at <= (Number(cached.at) || 0)) return;
+      cached.at = at;
+      if (tick.bookGens) cached.bookGens = tick.bookGens;
+      if (seq) cached.seq = Math.max(Number(cached.seq) || 0, seq);
+      lastTickBody = JSON.stringify(cached);
+    } catch (err) {}
+  }
   function rememberTick(body) {
     try {
       if (body && typeof body === "object" && body.at != null) lastTickBody = JSON.stringify(body);
@@ -1426,7 +1438,10 @@
         } else if (next === local) {
           applied = true;
         }
-        if (applied) runAcks(feedAcks);
+        if (applied) {
+          runAcks(feedAcks);
+          refusedRetries = 0;
+        }
         else {
           // UI refused (unsaved edits in flight). Rewind the cursor: replay on the next tick
           // (even if that tick's `at` has not moved again).
@@ -1434,6 +1449,8 @@
           if (feedLog.length) feedLog[feedLog.length - 1].refused = true;
           liveSeq = since;
           lastChangesAt = 0;
+          // p0as83: ticks are 5 s apart now; retry soon instead of waiting for one.
+          scheduleRefusedRetry();
           return body;
         }
         if (body.changes.length >= 500) return "more";
@@ -1448,6 +1465,24 @@
    * cursor means we missed one: poll instead.
    */
   var pushWaitTimer = null;
+  var refusedRetryTimer = null;
+  var refusedRetries = 0;
+  /**
+   * A feed page the screen refused (a save of its own in flight) is replayed
+   * shortly: 0.8 s, then 1.6 s, then every 3 s while it keeps refusing.
+   */
+  function scheduleRefusedRetry() {
+    if (refusedRetryTimer) return;
+    var wait = refusedRetries === 0 ? 800 : refusedRetries === 1 ? 1600 : 3000;
+    refusedRetries += 1;
+    refusedRetryTimer = setTimeout(function () {
+      refusedRetryTimer = null;
+      if (feedHeld) return;
+      pollChanges();
+    }, wait);
+  }
+  /** Tests (e2e "stale screen" checks): ignore pushed feed pages while held; polls are held by the test's network block. */
+  var feedHeld = false;
   var lastPushAt = 0;
   var PUSH_LIVE_MS = 60000;
   function feedPushLive() {
@@ -1567,8 +1602,11 @@
     // cursor (and past what an in-flight poll was already sent for).
     var tseq = Number(tick.seq) || 0;
     if (tseq > announcedSeq) announcedSeq = tseq;
+    refreshCachedTick(tick, at, tseq);
     var needPoll = !!(C && at > lastChangesAt);
-    if (C && tick.push && Array.isArray(tick.changes)) {
+    if (C && tick.push && Array.isArray(tick.changes) && feedHeld) {
+      needPoll = true;
+    } else if (C && tick.push && Array.isArray(tick.changes)) {
       // The rows themselves came down the live stream.
       if (applyPushedFeed(tick)) needPoll = false;
       else needPoll = true;
@@ -4123,6 +4161,12 @@
     announcedSeq = 0;
     pollIssuedSeq = 0;
     lastPushAt = 0;
+    feedHeld = false;
+    refusedRetries = 0;
+    if (refusedRetryTimer) {
+      clearTimeout(refusedRetryTimer);
+      refusedRetryTimer = null;
+    }
     lastRealTickAt = 0;
     lastTickBody = null;
     screenEtags = {};
@@ -4207,6 +4251,11 @@
     /** Read-only diagnostics: the last change-feed polls (time, cursor, rows, refused). */
     feedLog: function () {
       return feedLog.slice();
+    },
+    /** Tests: hold (true) / release (false) this page's live feed, pushed pages included. */
+    setFeedHoldForTests: function (on) {
+      feedHeld = !!on;
+      if (!feedHeld && announcedSeq > liveSeq) pollChanges();
     },
     liveBlocked: function () {
       try {

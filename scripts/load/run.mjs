@@ -47,6 +47,8 @@ const TMP = process.env.LOAD_TMP || "/tmp/apms-load";
 const SERVER_CPUS = args["server-cpus"] ?? "0";
 const PG_CPUS = args["pg-cpus"] ?? "1";
 const RUNNER_CPUS = args["runner-cpus"] ?? "2,3";
+// The timed browsers can get a core of their own (page opens are browser CPU as much as server time).
+const BROWSER_CPUS = args["browser-cpus"] ?? RUNNER_CPUS;
 const PASSWORD = "Load-test-1";
 const OUTPUT_DIR = args.output || ".output";
 const SERVER_ENV = args["server-env"] ? String(args["server-env"]).split(",") : [];
@@ -216,10 +218,14 @@ async function assetList() {
 async function browserProbe(stopAt, results) {
   if (!BROWSERS) return;
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium" });
+  const exe = process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium";
+  // Every Chromium process (renderers included) on the browsers' cores.
+  const wrapper = join(TMP, "chromium-pinned.sh");
+  writeFileSync(wrapper, `#!/bin/sh\nexec taskset -c ${BROWSER_CPUS} ${exe} "$@"\n`, { mode: 0o755 });
+  const browser = await chromium.launch({ executablePath: BROWSER_CPUS === "none" ? exe : wrapper });
   try {
     const bpid = browser.process?.()?.pid;
-    if (bpid) pin(bpid, RUNNER_CPUS);
+    if (bpid) pin(bpid, BROWSER_CPUS);
   } catch {
     /* ignore */
   }
@@ -538,7 +544,7 @@ async function main() {
     users: USERS,
     client,
     steadySeconds: STEADY_S,
-    cores: { server: SERVER_CPUS, postgres: PG_CPUS, runner: RUNNER_CPUS },
+    cores: { server: SERVER_CPUS, postgres: PG_CPUS, runner: RUNNER_CPUS, browsers: BROWSER_CPUS },
     at: new Date().toISOString(),
     targets: {
       pageOpenMs: summarize(reloads.map((p) => p.ms)),

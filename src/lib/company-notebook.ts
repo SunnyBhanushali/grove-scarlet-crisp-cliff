@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { getSql } from "./db";
 import { notifyCompanyLive, currentLiveAt, currentLiveGens } from "./company-live";
 import seed from "./company-seed.json";
@@ -330,7 +331,47 @@ type BookSliceResult = { ok: boolean; snapshot: Snapshot };
  */
 export const MIRROR_GATHER_MS = Number(process.env.APMS_MIRROR_GATHER_MS ?? 5000) || 0;
 
-const bookSliceQueues = new Map<BookId, { items: Array<{ opts: BookSliceOpts; resolve: (r: BookSliceResult) => void }>; running: boolean }>();
+type MirrorQueue = { running: boolean; wake?: () => void; drained?: Promise<void>; items: unknown[] };
+const inBookChain = new AsyncLocalStorage<boolean>();
+
+/** The gather wait; a flush (a book reader) cuts it short. */
+function gatherWait(q: MirrorQueue): Promise<void> {
+  if (!MIRROR_GATHER_MS) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const t = setTimeout(done, MIRROR_GATHER_MS);
+    function done() {
+      clearTimeout(t);
+      q.wake = undefined;
+      resolve();
+    }
+    q.wake = done;
+  });
+}
+
+/**
+ * PERF / consistency: every reader of the books flushes the mirrors waiting in
+ * their gather window first, so a book is never read behind the rows (the
+ * SPA's book PATCH merges into, and answers with, the stored book). Writes
+ * with no reader in between still become one book write. No-op inside a book
+ * chain (the drain itself needs the chain).
+ */
+export async function flushBookMirrors(only?: readonly BookId[]): Promise<void> {
+  if (inBookChain.getStore()) return;
+  const want = (book: BookId) => !only || only.includes(book);
+  for (let round = 0; round < 5; round++) {
+    const pending: Array<Promise<void> | undefined> = [];
+    const queues = [...bookSliceQueues.entries(), ...entityRowQueues.entries()].filter(([book]) => want(book)).map(([, q]) => q);
+    for (const q of queues as MirrorQueue[]) {
+      if (!q.items.length && !q.running) continue;
+      q.wake?.();
+      pending.push(q.drained);
+    }
+    if (!pending.length) return;
+    await Promise.all(pending.map((p) => p?.catch(() => undefined)));
+  }
+}
+
+const bookSliceQueues = new Map<BookId, { items: Array<{ opts: BookSliceOpts; resolve: (r: BookSliceResult) => void }>; running: boolean; wake?: () => void; drained?: Promise<void> }>();
 
 export async function applyEntityBookSlice(opts: BookSliceOpts): Promise<BookSliceResult> {
   return new Promise<BookSliceResult>((resolve) => {
@@ -348,10 +389,12 @@ async function drainBookSlices(book: BookId): Promise<void> {
   const q = bookSliceQueues.get(book);
   if (!q || q.running) return;
   q.running = true;
+  let finish: () => void = () => {};
+  q.drained = new Promise<void>((r) => (finish = r));
   try {
     while (q.items.length) {
       // PERF: gather the rows of the next MIRROR_GATHER_MS into one book write.
-      await new Promise((r) => setTimeout(r, MIRROR_GATHER_MS));
+      await gatherWait(q);
       const batch = q.items.splice(0);
       const list = batch.map((b) => b.opts);
       let result: BookSliceResult;
@@ -370,6 +413,7 @@ async function drainBookSlices(book: BookId): Promise<void> {
     }
   } finally {
     q.running = false;
+    finish();
   }
 }
 
@@ -427,7 +471,7 @@ type EntityBookSpec = { field: string; book: BookId; shape: string; kind: string
  * single book write (a duplicated month writes one membership per target;
  * one whole-book rewrite each made that take seconds).
  */
-const entityRowQueues = new Map<BookId, { items: Array<{ spec: EntityBookSpec; row: EntityBookRow; resolve: (g: Record<string, number>) => void; reject: (e: unknown) => void }>; running: boolean }>();
+const entityRowQueues = new Map<BookId, { items: Array<{ spec: EntityBookSpec; row: EntityBookRow; resolve: (g: Record<string, number>) => void; reject: (e: unknown) => void }>; running: boolean; wake?: () => void; drained?: Promise<void> }>();
 
 export async function commitEntityRowToBook(spec: EntityBookSpec, row: EntityBookRow): Promise<Record<string, number>> {
   return new Promise<Record<string, number>>((resolve, reject) => {
@@ -445,10 +489,12 @@ async function drainEntityRows(book: BookId): Promise<void> {
   const q = entityRowQueues.get(book);
   if (!q || q.running) return;
   q.running = true;
+  let finish: () => void = () => {};
+  q.drained = new Promise<void>((r) => (finish = r));
   try {
     while (q.items.length) {
       // PERF: gather the rows of the next MIRROR_GATHER_MS into one book write.
-      await new Promise((r) => setTimeout(r, MIRROR_GATHER_MS));
+      await gatherWait(q);
       const batch = q.items.splice(0);
       try {
         const gens = await enqueueBooks([book], () => applyEntityRows(book, batch));
@@ -459,6 +505,7 @@ async function drainEntityRows(book: BookId): Promise<void> {
     }
   } finally {
     q.running = false;
+    finish();
   }
 }
 
@@ -483,6 +530,7 @@ async function applyEntityRows(book: BookId, batch: Array<{ spec: EntityBookSpec
 
 /** Org book only — no assembleForGet / no people overlay. */
 export async function readOrgBook(): Promise<Snapshot> {
+  await flushBookMirrors(["org", "plans"]);
   // PERF: parse the org book only (every Org screen read parsed all four, ~6 MB).
   const rows = (await loadBookRows()).filter((r) => r.book === "org");
   const books = rowsToBooks(rows);
@@ -491,6 +539,7 @@ export async function readOrgBook(): Promise<Snapshot> {
 
 /** Replace named org collections. Does not touch people/records hot overlay. */
 export async function commitOrgFields(fields: Record<string, unknown>): Promise<Snapshot> {
+  await flushBookMirrors(["org", "plans"]);
   const run = async () => {
     const existing = assembleSnapshot(rowsToBooks(await loadBookRows()));
     const next: Snapshot = { ...existing, ...fields };
@@ -591,7 +640,8 @@ function allBookChains(): Promise<unknown[]> {
 
 function enqueueBooks<T>(ids: readonly BookId[], fn: () => Promise<T>): Promise<T> {
   const unique = [...new Set(ids.length ? ids : BOOK_IDS)];
-  const run = Promise.all(unique.map((id) => bookChains[id])).then(fn);
+  // Inside a book chain a mirror flush must not wait (the drain needs the chain).
+  const run = Promise.all(unique.map((id) => bookChains[id])).then(() => inBookChain.run(true, fn));
   const tracked = run.then(
     () => undefined,
     () => undefined,
@@ -602,6 +652,7 @@ function enqueueBooks<T>(ids: readonly BookId[], fn: () => Promise<T>): Promise<
 }
 
 export async function readLiveSnapshot(): Promise<Snapshot | null> {
+  await flushBookMirrors();
   const rows = await loadBookRows();
   const books = rowsToBooks(rows);
   const haveAny = BOOK_IDS.some((id) => books[id]);
@@ -626,6 +677,7 @@ export async function readAuthoritativeSnapshot(): Promise<Snapshot | null> {
 }
 
 export async function loadCompanySnapshot(): Promise<CompanyLoad> {
+  await flushBookMirrors();
   let rows = await loadBookRows();
   let books = rowsToBooks(rows);
   let haveAny = BOOK_IDS.some((id) => books[id]);
@@ -676,6 +728,7 @@ export async function loadCompanySnapshot(): Promise<CompanyLoad> {
 export async function saveCompanySnapshot(
   json: string,
 ): Promise<{ ok: true; bookGens?: unknown; notebookUpdatedAt?: number }> {
+  await flushBookMirrors();
   return enqueueBooks(BOOK_IDS, () => saveCompanySnapshotUnlocked(json));
 }
 
@@ -732,6 +785,7 @@ async function saveCompanySnapshotUnlocked(
 }
 
 export async function replaceCompanySnapshot(json: string): Promise<{ ok: true; snapshotJson: string }> {
+  await flushBookMirrors();
   return enqueueBooks(BOOK_IDS, () => replaceCompanySnapshotUnlocked(json));
 }
 
@@ -802,6 +856,8 @@ export function isAdminRestorePost(body: unknown): boolean {
 export async function patchCompanyBooks(input: unknown): Promise<{ status: number; body: CompanyPatchAck }> {
   const parsed = parseCompanyPatch(input);
   const ids = parsed ? BOOK_IDS.filter((id) => parsed.books?.[id]) : [...BOOK_IDS];
+  // Roles live split over org + plans (roleKrocs): an org PATCH reads both.
+  await flushBookMirrors(ids.length ? [...new Set([...ids, ...(ids.includes("org") ? (["plans"] as BookId[]) : [])])] : undefined);
   return enqueueBooks(ids.length ? ids : BOOK_IDS, () => patchCompanyBooksUnlocked(input));
 }
 

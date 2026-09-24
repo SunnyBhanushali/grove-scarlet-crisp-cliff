@@ -108,6 +108,9 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
       const h = (r) => r.abort();
       p.__feedHold = h;
       await p.route(FEED, h);
+      // PERF p0as83: the live stream also carries the feed rows themselves; an
+      // already-open stream is not stopped by blocking new requests.
+      await p.evaluate(() => window.__apmsSync && window.__apmsSync.setFeedHoldForTests && window.__apmsSync.setFeedHoldForTests(true)).catch(() => {});
       // Screens also re-read their own row every few seconds (e.g. the open
       // person-month); hold that too so the screen really stays stale.
       if (extra) {
@@ -118,6 +121,7 @@ export async function makeCtx({ A, B, C, base, databaseUrl }) {
     },
     async releaseFeed(p) {
       if (p.__feedHold) await p.unroute(FEED, p.__feedHold);
+      await p.evaluate(() => window.__apmsSync && window.__apmsSync.setFeedHoldForTests && window.__apmsSync.setFeedHoldForTests(false)).catch(() => {});
       if (p.__readHold) await p.unroute(p.__readHold.re, p.__readHold.g);
       p.__feedHold = null;
       p.__readHold = null;
