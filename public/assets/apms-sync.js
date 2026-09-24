@@ -2,7 +2,7 @@
  * Aliens APMS per-book sync (Google Docs / Zoho grade).
  * PATCH only dirty books with baseGen. 409 rebases that book. Live pulls
  * only clean books whose generation moved. UI nav never rides the wire.
- * Stamp: p0as83 — PERF: no hint GET for rows the pushed feed carries; feed pages pushed on the live stream are applied like a poll (poll only on a gap); feed poll only when tick/SSE `seq` is past the cursor; one real tick per 5 s (30 s hidden) shared by the SPA and sync timers; list screens re-read every 20 s with If-None-Match (304). p0as79 — HOT-FEED people/month/reward/cells on /api/changes; id-list removals stick. p0as78 ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
+ * Stamp: p0as83 — PERF: feed applies wait while a drag is under way; no hint GET for rows the pushed feed carries; feed pages pushed on the live stream are applied like a poll (poll only on a gap); feed poll only when tick/SSE `seq` is past the cursor; one real tick per 5 s (30 s hidden) shared by the SPA and sync timers; list screens re-read every 20 s with If-None-Match (304). p0as79 — HOT-FEED people/month/reward/cells on /api/changes; id-list removals stick. p0as78 ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
  */
 (function (global) {
   "use strict";
@@ -1429,7 +1429,11 @@
         var applied = false;
         // BATCH-2: a sibling reorder (sortKey) from the feed moves the row on screen too.
         if (next && next !== local && C && typeof C.orderSiblings === "function") next = C.orderSiblings(next);
-        if (next && next !== local && hooks && typeof hooks.apply === "function") {
+        if (next && next !== local && dragInProgress()) {
+          // p0as83: a drag (or its drop) is under way on this screen: re-rendering
+          // the list now moves rows under the pointer. Replayed right after it.
+          applied = false;
+        } else if (next && next !== local && hooks && typeof hooks.apply === "function") {
           try {
             applied = hooks.apply(Object.assign({}, next, { bookGens: Object.assign({}, lastGens, remoteGens) }), "live-entity") !== false;
           } catch (err) {
@@ -1464,6 +1468,14 @@
    * cursor (rows we already have are skipped); a page that starts past our
    * cursor means we missed one: poll instead.
    */
+  /** A tree / plan drag in progress (apms-dnd classes): lifted row, ghost, drop settling. */
+  function dragInProgress() {
+    try {
+      return typeof document !== "undefined" && !!document.querySelector(".apms-dnd-ghost, .apms-rt--dragging, .apms-rt--dragging-kra, .is-lifted, .is-settling");
+    } catch (err) {
+      return false;
+    }
+  }
   var pushWaitTimer = null;
   var refusedRetryTimer = null;
   var refusedRetries = 0;
