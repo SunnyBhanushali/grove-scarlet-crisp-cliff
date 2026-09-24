@@ -1,11 +1,4 @@
-import { matchPerson } from "./auth-login-match";
-import { auth } from "./auth/server";
-import {
-  hasSessionToken,
-  personIdFromLegacyToken,
-  readSessionToken,
-  unauthorizedJson,
-} from "./apms-request-auth";
+import { hasValidSession, sessionPersonId, unauthorizedJson } from "./apms-request-auth";
 import { getCompanyWire, type CompanyWire } from "./company-notebook";
 
 function acceptGzip(headers: Headers): boolean {
@@ -27,22 +20,10 @@ function clientAt(request: Request): number {
 
 export async function personIdForWire(
   request: Request,
-  wire: CompanyWire,
+  _wire?: CompanyWire,
 ): Promise<string | null> {
-  const legacy = personIdFromLegacyToken(readSessionToken(request.headers));
-  if (legacy) return legacy;
-  try {
-    const session = await auth.api.getSession({ headers: request.headers });
-    const email = session?.user?.email || "";
-    if (!email) return null;
-    const person = matchPerson(wire.people, {
-      email,
-      username: email.split("@")[0],
-    });
-    return person && typeof person.id === "string" ? person.id : null;
-  } catch {
-    return null;
-  }
+  // BATCH-2: only a server-issued session token names the person.
+  return sessionPersonId(request.headers);
 }
 
 /** Idle If-None-Match match: tiny JSON, no snapshotJson, no entity replay. */
@@ -65,7 +46,7 @@ export function clientMatchesWire(clientAt: number, wireAt: number): boolean {
 }
 
 export async function handleCompanyGetRequest(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   const wire = await getCompanyWire();
   const personId = await personIdForWire(request, wire);
   if (!personId) return unauthorizedJson();

@@ -128,36 +128,36 @@ async function writePassword(personId: string, username: string, password: strin
   return person;
 }
 
+/**
+ * Forgot password (anonymous). BATCH-2: the account is changed only once the
+ * temporary password has actually been emailed to the person's own mailbox.
+ * Before, any anonymous caller could overwrite anyone's password (lock-out),
+ * and off the live host the temp password came back in the response
+ * (take-over). The temp / link are shown on screen only when the server is
+ * started with APMS_RESET_PREVIEW=1 (local testing).
+ */
 export async function requestPasswordReset(login: string, origin: string) {
   await ensureTable();
   const loaded = await loadCompanySnapshot();
   const person = findPerson(peopleFrom(loaded.snapshotJson), login);
   const live = isLiveOrigin();
+  const preview = process.env.APMS_RESET_PREVIEW === "1";
   if (!person) return passwordResetClientPayload({ found: false, hasPublicEmail: false, mailed: false, live });
 
-  const username = usernameKey(person.username || login);
-  const temp = generateTempPassword();
-  await writePassword(person.id, username, temp, true);
-
-  const token = randomBytes(24).toString("hex");
-  const sql = await getSql();
-  await sql.query(`delete from password_resets where person_id = $1`, [person.id]);
-  await sql.query(
-    `insert into password_resets (token, person_id, username, expires_at)
-     values ($1, $2, $3, now() + interval '1 hour')`,
-    [token, person.id, username],
-  );
-
   const publicEmail = hasPublicMailbox(String(person.email || ""));
-  if (!publicEmail) {
+  if (!publicEmail && !preview) {
     return passwordResetClientPayload({ found: true, hasPublicEmail: false, mailed: false, live });
   }
 
+  const username = usernameKey(person.username || login);
+  const temp = generateTempPassword();
+  const token = randomBytes(24).toString("hex");
   const base = publicOrigin(origin);
   const signIn = `${base}/login`;
-  const mail = resetEmail(person, temp, signIn);
+
   let mailed = false;
-  if (mailConfigured()) {
+  if (publicEmail && mailConfigured()) {
+    const mail = resetEmail(person, temp, signIn);
     try {
       const sent = await sendMail({
         to: String(person.email || ""),
@@ -171,12 +171,25 @@ export async function requestPasswordReset(login: string, origin: string) {
       console.error("[password-reset] mail", err);
     }
   }
+  if (!mailed && !preview) {
+    // Nothing reached the person: leave their password alone.
+    return passwordResetClientPayload({ found: true, hasPublicEmail: publicEmail, mailed: false, live: true });
+  }
+
+  await writePassword(person.id, username, temp, true);
+  const sql = await getSql();
+  await sql.query(`delete from password_resets where person_id = $1`, [person.id]);
+  await sql.query(
+    `insert into password_resets (token, person_id, username, expires_at)
+     values ($1, $2, $3, now() + interval '1 hour')`,
+    [token, person.id, username],
+  );
 
   return passwordResetClientPayload({
     found: true,
     hasPublicEmail: true,
     mailed,
-    live,
+    live: live && !preview,
     temp,
     previewLink: `${base}/login?reset=${token}`,
   });

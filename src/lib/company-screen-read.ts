@@ -3,7 +3,7 @@
  * GET /api/people?limit=80 and GET /api/reward-records/:period?limit=80
  * — not the company file.
  */
-import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
+import { unauthorizedJson, hasValidSession } from "./apms-request-auth.ts";
 import { slimPersonForWire } from "./company-wire-slim.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 
@@ -161,7 +161,7 @@ export async function handleScreenReadHttp(request: Request): Promise<Response |
   const url = new URL(request.url);
   const parsed = parseScreenReadPath(url.pathname);
   if (!parsed) return null;
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
 
   const { getCompanyWireForAuth } = await import("./company-wire-cache");
   const { personIdForWire } = await import("./company-wire-http");

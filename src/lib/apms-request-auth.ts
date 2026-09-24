@@ -1,8 +1,14 @@
-/** Shared session check for company snapshot + backup HTTP (one auth path). */
+/**
+ * Shared session check for every APMS HTTP route (one auth path).
+ *
+ * BATCH-2: only tokens the server issued at sign-in are accepted
+ * (`apms-sessions.ts`). The old static `apms-preview-sunny` and the
+ * guessable `apms-login.<personId>` tokens, and "any bearer longer than 8
+ * characters", are gone.
+ */
+import { personIdForSessionToken } from "./apms-sessions.ts";
 
 const SESSION_COOKIE = "better-auth.session_token";
-export const TOKEN_SUNNY = "apms-preview-sunny";
-export const TOKEN_PREFIX = "apms-login.";
 
 export function readSessionToken(headers: Headers): string | null {
   const cookie = headers.get("cookie") || "";
@@ -10,20 +16,45 @@ export function readSessionToken(headers: Headers): string | null {
   const fromAuth = auth.match(/Bearer\s+(.+)/i)?.[1]?.trim();
   if (fromAuth) return fromAuth;
   const m = cookie.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`));
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
 }
 
-export function personIdFromLegacyToken(token: string | null): string | null {
-  if (!token) return null;
-  if (token === TOKEN_SUNNY) return "p-admin";
-  if (token.startsWith(TOKEN_PREFIX)) return token.slice(TOKEN_PREFIX.length) || null;
-  return null;
+/** The server-issued session on this request (bearer first, then cookie), or null. */
+export async function sessionFromHeaders(headers: Headers): Promise<{ personId: string; token: string } | null> {
+  const bearer = readSessionToken(headers);
+  const byBearer = await personIdForSessionToken(bearer);
+  if (byBearer && bearer) return { personId: byBearer, token: bearer };
+  // A stale bearer kept by the client must not hide a valid cookie session.
+  const cookieOnly = new Headers(headers);
+  cookieOnly.delete("authorization");
+  const cookie = readSessionToken(cookieOnly);
+  if (!cookie || cookie === bearer) return null;
+  const byCookie = await personIdForSessionToken(cookie);
+  return byCookie ? { personId: byCookie, token: cookie } : null;
 }
 
-export function hasSessionToken(headers: Headers): boolean {
-  const token = readSessionToken(headers);
-  if (!token) return false;
-  return Boolean(personIdFromLegacyToken(token) || token.length > 8);
+/** The signed-in person for this request, or null (unknown / forged / expired token). */
+export async function sessionPersonId(headers: Headers): Promise<string | null> {
+  return (await sessionFromHeaders(headers))?.personId ?? null;
+}
+
+export async function hasValidSession(headers: Headers): Promise<boolean> {
+  return (await sessionPersonId(headers)) !== null;
+}
+
+export function forbiddenJson(message = "Only an admin can do that.") {
+  return new Response(JSON.stringify({ ok: false, error: message }), {
+    status: 403,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
 }
 
 export function unauthorizedJson(message = "Sign in required.") {

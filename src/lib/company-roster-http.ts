@@ -1,4 +1,4 @@
-import { hasSessionToken, unauthorizedJson } from "./apms-request-auth.ts";
+import { hasValidSession, unauthorizedJson } from "./apms-request-auth.ts";
 import {
   copyRosterFrom,
   getRoster,
@@ -94,7 +94,7 @@ function catalogsFromSnapshot(snapshotJson: string, people: Array<Record<string,
 }
 
 export async function handleRosterHttp(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   const parsed = parseRosterPath(new URL(request.url).pathname);
   if (!parsed || !isRosterPeriod(parsed.period) || (parsed.fromPeriod && !isRosterPeriod(parsed.fromPeriod))) {
     return json(404, { ok: false, error: "not-found" });

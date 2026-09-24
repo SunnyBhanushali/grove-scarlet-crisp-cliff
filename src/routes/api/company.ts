@@ -11,7 +11,7 @@ import {
   handleCompanyGetRequest,
   personIdForWire,
 } from "@/lib/company-wire-http";
-import { hasSessionToken, unauthorizedJson } from "@/lib/apms-request-auth";
+import { hasValidSession, unauthorizedJson } from "@/lib/apms-request-auth";
 import { BOOK_IDS, type BookId } from "@/lib/company-books";
 import { RestoreRejectedError } from "@/lib/company-restore-targets";
 
@@ -63,7 +63,7 @@ export const Route = createFileRoute("/api/company")({
         try {
           const ids = requestedBookIds(request);
           if (ids.length) {
-            if (!hasSessionToken(request.headers)) return unauthorizedJson();
+            if (!(await hasValidSession(request.headers))) return unauthorizedJson();
             const wire = await getCompanyWire();
             const personId = await personIdForWire(request, wire);
             if (!personId) return unauthorizedJson();
@@ -79,11 +79,17 @@ export const Route = createFileRoute("/api/company")({
       },
       POST: async ({ request }) => {
         try {
-          if (!hasSessionToken(request.headers)) return unauthorizedJson();
+          if (!(await hasValidSession(request.headers))) return unauthorizedJson();
           const wire = await getCompanyWire();
           const personId = await personIdForWire(request, wire);
           if (!personId) return unauthorizedJson();
           const body = await request.json().catch(() => null);
+          if (isAdminRestorePost(body)) {
+            // BATCH-2: a full restore replaces the company — admins only.
+            const { requireAdmin } = await import("@/lib/apms-admin-auth");
+            const gate = await requireAdmin(request.headers);
+            if (gate.response) return gate.response;
+          }
           if (!isAdminRestorePost(body)) {
             console.error("[api/company POST] refused full snapshot (410) — use PATCH /api/company");
             return Response.json(
@@ -107,7 +113,7 @@ export const Route = createFileRoute("/api/company")({
       },
       PATCH: async ({ request }) => {
         try {
-          if (!hasSessionToken(request.headers)) return unauthorizedJson();
+          if (!(await hasValidSession(request.headers))) return unauthorizedJson();
           const body = await request.json().catch(() => null);
           const result = await patchCompanyBooks(body);
           return Response.json(result.body, { status: result.status });

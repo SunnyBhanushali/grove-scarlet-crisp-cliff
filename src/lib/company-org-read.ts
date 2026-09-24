@@ -2,7 +2,7 @@
  * MOD-ORG (p0as74): Org / person / trash screens fetch a slice, not the company file.
  * GET /api/org?kind=  GET/PATCH /api/org/:kind/:id
  */
-import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
+import { unauthorizedJson, hasValidSession } from "./apms-request-auth.ts";
 import { slimPersonForWire } from "./company-wire-slim.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 import type { Snapshot } from "./company-books.ts";
@@ -268,7 +268,7 @@ export async function handleOrgHttp(request: Request): Promise<Response | null> 
   if (method !== "GET" && method !== "PATCH") {
     return Response.json({ ok: false, error: "method" }, { status: 405 });
   }
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
 
   const { readOrgBook, commitOrgFields } = await import("./company-notebook");
   const kind = normalizeOrgKind(parsed.kind || url.searchParams.get("kind") || "overview");

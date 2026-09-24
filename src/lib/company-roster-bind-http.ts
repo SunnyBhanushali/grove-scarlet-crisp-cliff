@@ -1,4 +1,4 @@
-import { hasSessionToken, unauthorizedJson } from "./apms-request-auth.ts";
+import { hasValidSession, unauthorizedJson } from "./apms-request-auth.ts";
 import { isAdminAccess } from "./company-roster.ts";
 import {
   getRosterBind,
@@ -26,7 +26,7 @@ function accessOf(
 }
 
 export async function handleRosterBindHttp(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   const parsed = parseRosterBindPath(new URL(request.url).pathname);
   if (!parsed || !isRosterBindKind(parsed.kind) || !parsed.subjectId) {
     return json(404, { ok: false, error: "not-found" });

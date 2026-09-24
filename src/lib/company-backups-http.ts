@@ -12,7 +12,7 @@ import {
   startBackupScheduler,
 } from "./company-backups";
 import { extractSnapshot } from "./company-notebook";
-import { hasSessionToken, isLoopbackRequest, unauthorizedJson } from "./apms-request-auth";
+import { hasValidSession, isLoopbackRequest, unauthorizedJson } from "./apms-request-auth";
 
 startBackupScheduler();
 
@@ -53,8 +53,14 @@ export async function handleCompanyBackupsRequest(request: Request): Promise<Res
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
   const cron = isCronQuery(url);
-  if (!(hasSessionToken(request.headers) || (cron && isLoopbackRequest(request)))) {
+  if (!((await hasValidSession(request.headers)) || (cron && isLoopbackRequest(request)))) {
     return unauthorizedJson();
+  }
+  if (!(cron && isLoopbackRequest(request))) {
+    // BATCH-2: backups are whole-company copies (download / save / restore) — admins only.
+    const { requireAdmin } = await import("./apms-admin-auth");
+    const gate = await requireAdmin(request.headers);
+    if (gate.response) return gate.response;
   }
   try {
     if (method === "GET" || method === "HEAD") {

@@ -8,7 +8,8 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 
 - Remix / `extensions.js` **OFF**. Never re-inject `grok-app-builder`.
 - Nitro preset **`node-server`** for Contabo. Ignore `NITRO_PRESET=vercel` (Grok injects it). Real ship is `.output/server/index.mjs`.
-- Anon `/api/company` **and entity routes** → **401**. Dual auth: better-auth session **or** `apms-login.*` / `apms-preview-sunny`.
+- Anon `/api/company` **and entity routes** → **401**. **BATCH-2:** the only accepted session is a token the server issued at sign-in (`apms-s.<random>`, SHA-256 in `apms_sessions`, `src/lib/apms-sessions.ts`), by bearer or the HttpOnly `better-auth.session_token` cookie. `apms-login.<personId>`, `apms-preview-sunny` and "any bearer > 8 chars" are **401** on every `/api/*` and `/_serverFn/*` route (one gate in `server/middleware/01-apms-auth.ts` plus each handler). Public: `/api/auth/*`, `/api/password-reset*`, the `companyIsEmpty` server fn, loopback backup cron.
+- **BATCH-2 admin-only (403 for a signed-in non-admin):** `POST /api/issued-logins` (except the caller's own row — own-password change) and `/api/provision-logins`; restore (`/api/company-restore`, `POST /api/company` restore, legacy `/_serverFn` save/backup); `/api/company-backups`; `access-roles` rows; other people's `logins` rows; changing anyone's access role or another person's password through `/api/people/:id`. Admin = access role base `admin` / `super_admin`.
 - `POST /api/company` → **410** unless `restore` / `allowEmpty` / `adminRestore`.
 - UI nav keys **never** in DB. People list search/SBU filters live in `sessionStorage` (`apms-ui-people-list-v1`), not books.
 - Screen location (`view`, selected person/month/role, nav history) lives in `sessionStorage` (`apms-ui-session-v1`), not books, not persist `kp()`. Browser refresh must restore that screen. Persist hydrate must not replace it with `view:"home"`.

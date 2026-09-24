@@ -1,4 +1,4 @@
-import { hasSessionToken, unauthorizedJson } from "./apms-request-auth.ts";
+import { hasValidSession, unauthorizedJson } from "./apms-request-auth.ts";
 import {
   LIVE_ENTITY_CAP,
   currentEmittedEntities,
@@ -13,7 +13,7 @@ import {
 } from "./company-live.ts";
 
 export async function handleCompanyTickRequest(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   await readLiveAt();
   let since = 0;
   try {
@@ -42,7 +42,7 @@ export async function handleCompanyTickRequest(request: Request): Promise<Respon
 }
 
 export async function handleCompanyLiveRequest(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   startEntityListen();
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

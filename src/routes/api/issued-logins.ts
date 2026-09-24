@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { upsertIssuedLogins, type IssuedRow } from "@/lib/issued-logins";
+import { authorizeLoginWrite } from "@/lib/apms-admin-auth";
 
 function rowsFrom(body: unknown): IssuedRow[] {
   if (!body || typeof body !== "object") return [];
@@ -17,7 +18,11 @@ export const Route = createFileRoute("/api/issued-logins")({
       POST: async ({ request }) => {
         try {
           const body = await request.json().catch(() => null);
-          const added = await upsertIssuedLogins(rowsFrom(body));
+          const rows = rowsFrom(body);
+          // Admin: any rows. Anyone else: only their own row (own-password change).
+          const refused = await authorizeLoginWrite(request.headers, rows, { allowOwn: true });
+          if (refused) return refused;
+          const added = await upsertIssuedLogins(rows);
           return Response.json({ ok: true, added, sent: 0, failed: [] });
         } catch (err) {
           console.error("[issued-logins]", err);

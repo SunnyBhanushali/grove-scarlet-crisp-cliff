@@ -9,7 +9,7 @@ import {
   rememberWriteId,
   type HotSql,
 } from "./company-hot-tables.ts";
-import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
+import { unauthorizedJson, hasValidSession } from "./apms-request-auth.ts";
 import { publishEntityWrite, hintFromEntityTable, liveTypeFromTable } from "./company-live.ts";
 import { appendHotTableChange } from "./company-entity-store.ts";
 
@@ -585,7 +585,7 @@ export function memoryEntityBooks(initial: Snapshot): EntityBooks {
 }
 
 export async function handleEntityHttp(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   const key = parseEntityPath(new URL(request.url).pathname);
   if (!key) {
     return Response.json({ ok: false, error: "not-found" }, { status: 404 });
@@ -605,9 +605,20 @@ export async function handleEntityHttp(request: Request): Promise<Response> {
   const { liveEntityBooks } = await import("./company-entities-live");
   const sql = await getSql();
   const books = liveEntityBooks();
-  const result =
-    method === "GET"
-      ? await getEntity(sql, key, books)
-      : await patchEntity(sql, key, await request.json().catch(() => null), books, personId);
+  if (method === "GET") {
+    const result = await getEntity(sql, key, books);
+    return Response.json(result.body, { status: result.status });
+  }
+  const input = await request.json().catch(() => null);
+  if (key.table === "people") {
+    // BATCH-2: access-role changes and other people's passwords are admin-only.
+    const { patchPayload, peopleWriteRefusal, requesterIsAdmin } = await import("./apms-write-guard.ts");
+    const stored = await sql.query<{ payload: Record<string, unknown> }>(`select payload from people where id = $1`, [key.id]);
+    const why = peopleWriteRefusal(personId, key.id, patchPayload(input), stored[0]?.payload || null);
+    if (why && !(await requesterIsAdmin(personId))) {
+      return Response.json({ ok: false, error: "forbidden", message: why }, { status: 403 });
+    }
+  }
+  const result = await patchEntity(sql, key, input, books, personId);
   return Response.json(result.body, { status: result.status });
 }

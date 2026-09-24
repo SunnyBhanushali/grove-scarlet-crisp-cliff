@@ -8,7 +8,7 @@
  *
  * Auth: same dual auth as the other entity routes (session token + resolved person).
  */
-import { unauthorizedJson, hasSessionToken } from "./apms-request-auth.ts";
+import { unauthorizedJson, hasValidSession } from "./apms-request-auth.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 import type { Snapshot } from "./company-books.ts";
 import { collections, specForKindOrSettings, type CollectionSpec } from "./apms-collections.ts";
@@ -101,7 +101,7 @@ export async function handleEntityV2Http(request: Request): Promise<Response | n
   const parsed = parseEntityV2Path(url.pathname);
   if (!parsed) return null;
   if (!ENTITY_ROWS_ENABLED) return Response.json({ ok: false, error: "rows-disabled" }, { status: 503 });
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   const personId = await resolvePerson(request);
   if (!personId) return unauthorizedJson();
 
@@ -137,12 +137,16 @@ export async function handleEntityV2Http(request: Request): Promise<Response | n
   if (method !== "PATCH") return Response.json({ ok: false, error: "method" }, { status: 405 });
 
   const body = await request.json().catch(() => null);
+  // BATCH-2: access roles and other people's logins are admin-only.
+  const { entityWriteRefusal } = await import("./apms-write-guard.ts");
+  const why = await entityWriteRefusal(key.kind, key.k1 || key.id, personId);
+  if (why) return Response.json({ ok: false, error: "forbidden", message: why }, { status: 403 });
   const result = await patchEntityRow(sql, key, body, personId, liveEntityHooks());
   return Response.json(result.body, { status: result.status });
 }
 
 export async function handleChangesHttp(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   const personId = await resolvePerson(request);
   if (!personId) return unauthorizedJson();
   const url = new URL(request.url);

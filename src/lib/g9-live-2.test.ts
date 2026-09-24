@@ -7,7 +7,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { encodeSse, hintFromEntityTable, publishEntityWrite, resetLiveForTests } from "./company-live.ts";
 import { handleCompanyTickRequest } from "./company-live-http.ts";
-import { TOKEN_SUNNY } from "./apms-request-auth.ts";
+import { issueSessionToken, useMemorySessionsForTests } from "./apms-sessions.ts";
+
+// BATCH-2: only server-issued session tokens are accepted.
+useMemorySessionsForTests();
+const TOKEN_SUNNY = await issueSessionToken("p-admin");
 
 await import(new URL("../../recovered-site/assets/apms-sync.js", import.meta.url).href);
 const sync = (globalThis as unknown as { __apmsSync: SyncApi }).__apmsSync;

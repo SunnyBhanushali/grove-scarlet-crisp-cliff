@@ -17,8 +17,6 @@ const MIME = {
 };
 
 const SESSION_COOKIE = "better-auth.session_token";
-const TOKEN_SUNNY = "apms-preview-sunny";
-const TOKEN_PREFIX = "apms-login.";
 
 const LOAD = "5c5cc138c933bc09d2cf232e1c81b3bbc654ed1bc6c042fa94c1b527783e7bf5";
 const SAVE = "b4b4aa7e0ac816b4d5b83f44cd4fa14cbee181632dfc30d951bda1da6d06ecdb";
@@ -113,16 +111,22 @@ function sendJson(res, status, body, extraHeaders = {}) {
   res.end(json);
 }
 
-function tokenFor(personId) {
-  if (personId === "p-admin") return TOKEN_SUNNY;
-  return `${TOKEN_PREFIX}${personId}`;
+/**
+ * BATCH-2: the dev plugin uses the same server-issued sessions as the built
+ * server (src/lib/apms-sessions.ts). `serveRecovered` resolves the request's
+ * session once and keeps it on `req.__apmsSession`.
+ */
+function sessionPersonIdOf(req) {
+  return req.__apmsSession ? req.__apmsSession.personId : null;
 }
 
-function personIdFromToken(token) {
-  if (!token) return null;
-  if (token === TOKEN_SUNNY) return "p-admin";
-  if (token.startsWith(TOKEN_PREFIX)) return token.slice(TOKEN_PREFIX.length) || null;
-  return null;
+function headersOf(req) {
+  const h = new Headers();
+  for (const [k, v] of Object.entries(req.headers || {})) {
+    if (typeof v === "string") h.set(k, v);
+    else if (Array.isArray(v)) h.set(k, v.join(", "));
+  }
+  return h;
 }
 
 function readToken(req) {
@@ -134,9 +138,8 @@ function readToken(req) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-function sessionPayload(person, cred) {
+function sessionPayload(person, cred, token) {
   const user = cred.sessionUser(person);
-  const token = tokenFor(person.id);
   return {
     session: {
       id: `sess-${person.id}`,
@@ -151,7 +154,7 @@ function sessionPayload(person, cred) {
 }
 
 function isSignedIn(req) {
-  return Boolean(personIdFromToken(readToken(req)));
+  return Boolean(sessionPersonIdOf(req));
 }
 
 function isLoopbackReq(req) {
@@ -165,8 +168,8 @@ function sendUnauthorized(res) {
 
 function sessionCookie(token, https) {
   const base = token
-    ? `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=2592000`
-    : `${SESSION_COOKIE}=; Path=/; Max-Age=0`;
+    ? `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=2592000; HttpOnly`
+    : `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly`;
   return https ? `${base}; SameSite=None; Secure` : `${base}; SameSite=Lax`;
 }
 
@@ -196,7 +199,7 @@ async function handleAuth(req, res, url, server) {
   const method = (req.method || "GET").toUpperCase();
   const cred = await server.ssrLoadModule("/src/lib/apms-credentials.ts");
   if (url.endsWith("/get-session") && (method === "GET" || method === "POST")) {
-    const id = personIdFromToken(readToken(req));
+    const id = sessionPersonIdOf(req);
     if (!id) {
       sendJson(res, 200, null);
       return;
@@ -210,7 +213,7 @@ async function handleAuth(req, res, url, server) {
       sendJson(res, 200, null);
       return;
     }
-    sendJson(res, 200, sessionPayload(person, cred));
+    sendJson(res, 200, sessionPayload(person, cred, req.__apmsSession.token));
     return;
   }
   if (url.endsWith("/sign-in/username") || url.endsWith("/sign-in/email")) {
@@ -223,7 +226,8 @@ async function handleAuth(req, res, url, server) {
       sendJson(res, 401, { message: "Invalid username or password" });
       return;
     }
-    const payload = sessionPayload(person, cred);
+    const sessions = await server.ssrLoadModule("/src/lib/apms-sessions.ts");
+    const payload = sessionPayload(person, cred, await sessions.issueSessionToken(person.id));
     sendJson(res, 200, payload, {
       "set-cookie": sessionCookie(payload.token, requestIsHttps(req)),
       "set-auth-token": payload.token,
@@ -231,6 +235,10 @@ async function handleAuth(req, res, url, server) {
     return;
   }
   if (url.endsWith("/sign-out")) {
+    if (req.__apmsSession) {
+      const sessions = await server.ssrLoadModule("/src/lib/apms-sessions.ts");
+      await sessions.revokeSessionToken(req.__apmsSession.token);
+    }
     sendJson(res, 200, { success: true }, {
       "set-cookie": sessionCookie(null, requestIsHttps(req)),
     });
@@ -241,6 +249,10 @@ async function handleAuth(req, res, url, server) {
 
 async function handleIssued(req, res, server) {
   const method = (req.method || "GET").toUpperCase();
+  if (!sessionPersonIdOf(req)) {
+    sendUnauthorized(res);
+    return;
+  }
   if (method === "GET" || method === "HEAD") {
     sendJson(res, 200, { ok: true, added: 0, sent: 0, failed: [] });
     return;
@@ -257,6 +269,14 @@ async function handleIssued(req, res, server) {
       : inner?.username || inner?.password
         ? [inner]
         : [];
+    // BATCH-2: admin only (403), except a person's own row on /api/issued-logins.
+    const adminAuth = await server.ssrLoadModule("/src/lib/apms-admin-auth.ts");
+    const own = String(req.url || "").startsWith("/api/issued-logins");
+    const refused = await adminAuth.authorizeLoginWrite(headersOf(req), rows, { allowOwn: own });
+    if (refused) {
+      sendJson(res, refused.status, await refused.json());
+      return;
+    }
     const issuedMod = await server.ssrLoadModule("/src/lib/issued-logins.ts");
     const added = await issuedMod.upsertIssuedLogins(rows);
     sendJson(res, 200, { ok: true, added, sent: 0, failed: [] });
@@ -299,9 +319,7 @@ function extractSnapshotJson(input) {
 }
 
 function isCompanyAuthed(req) {
-  const token = readToken(req);
-  if (personIdFromToken(token)) return true;
-  return Boolean(token && String(token).length > 8);
+  return Boolean(sessionPersonIdOf(req));
 }
 
 async function handleCompanyTick(req, res, server) {
@@ -363,10 +381,8 @@ async function handleCompanyLive(req, res, server) {
 
 async function handleCompany(req, res, server, next) {
   const method = (req.method || "GET").toUpperCase();
-  const token = readToken(req);
-  const personId = personIdFromToken(token);
+  const personId = sessionPersonIdOf(req);
   if (!personId) {
-    if (token && String(token).length > 8) return next();
     sendUnauthorized(res);
     return;
   }
@@ -527,7 +543,7 @@ async function handleServerFn(req, res, url, server) {
         return;
       }
       const loaded = await mod.loadCompanySnapshot();
-      sendJson(res, 200, { ...loaded, personId: personIdFromToken(readToken(req)) });
+      sendJson(res, 200, { ...loaded, personId: sessionPersonIdOf(req) });
       server.ssrLoadModule("/src/lib/company-backups.ts").then((b) => b.ensureHourlyBackup()).catch((err) => console.error("[company-backups] hourly", err));
       return;
     }
@@ -579,6 +595,10 @@ function serveRecovered(req, res, next, server) {
     if (skip(url)) return next();
     const canSsr = typeof server?.ssrLoadModule === "function";
     if (!canSsr && (url.startsWith("/api/") || url.startsWith("/_serverFn/"))) return next();
+    if (canSsr && (url.startsWith("/api/") || url.startsWith("/_serverFn/"))) {
+      const auth = await server.ssrLoadModule("/src/lib/apms-request-auth.ts");
+      req.__apmsSession = await auth.sessionFromHeaders(headersOf(req));
+    }
     if (url.startsWith("/api/auth")) {
       await handleAuth(req, res, url, server);
       return;

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ensureSunnyLogin, provisionLoginRows, type LoginRow } from "@/lib/auth-logins";
 import { upsertIssuedLogins } from "@/lib/issued-logins";
+import { authorizeLoginWrite } from "@/lib/apms-admin-auth";
 
 function rowsFrom(body: unknown): LoginRow[] {
   if (!body || typeof body !== "object") return [];
@@ -51,6 +52,9 @@ export const Route = createFileRoute("/api/provision-logins")({
         try {
           const body = await request.json().catch(() => null);
           const rec = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+          // Admin only (401 anonymous, 403 signed-in non-admin).
+          const refused = await authorizeLoginWrite(request.headers, rowsFrom(body), { allowOwn: false });
+          if (refused) return refused;
           const bootstrap = rec.bootstrap === true || rec.ensureSunny === true;
           if (bootstrap) {
             try {

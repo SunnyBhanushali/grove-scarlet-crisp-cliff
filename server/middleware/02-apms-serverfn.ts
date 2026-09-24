@@ -9,10 +9,11 @@ import {
   warmCompanyWire,
 } from "../../src/lib/company-notebook";
 import { ensureHourlyBackup, startBackupScheduler } from "../../src/lib/company-backups";
-import { hasSessionToken, unauthorizedJson } from "../../src/lib/apms-request-auth";
+import { hasValidSession, unauthorizedJson } from "../../src/lib/apms-request-auth";
 import { handleScreenReadHttp } from "../../src/lib/company-screen-read";
 import { handleOrgHttp } from "../../src/lib/company-org-read";
 import { handleCompanyGetRequest } from "../../src/lib/company-wire-http";
+import { requireAdmin } from "../../src/lib/apms-admin-auth";
 
 const LOAD = "5c5cc138c933bc09d2cf232e1c81b3bbc654ed1bc6c042fa94c1b527783e7bf5";
 const SAVE = "b4b4aa7e0ac816b4d5b83f44cd4fa14cbee181632dfc30d951bda1da6d06ecdb";
@@ -94,7 +95,13 @@ export default async function apmsServerFnMiddleware(
   const id = path.slice("/_serverFn/".length).split("?")[0] || "";
   try {
     if (id === LOAD || id === SAVE || id === BACKUP) {
-      if (!hasSessionToken(event.req.headers)) return unauthorizedJson();
+      if (!(await hasValidSession(event.req.headers))) return unauthorizedJson();
+    }
+    if (id === SAVE || id === BACKUP) {
+      // BATCH-2: whole-company write / download — admins only (the SPA only
+      // reaches SAVE as the restore fallback).
+      const gate = await requireAdmin(event.req.headers);
+      if (gate.response) return gate.response;
     }
     if (id === LOAD) {
       void ensureHourlyBackup().catch((err) => console.error("[company-backups] hourly", err));

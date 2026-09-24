@@ -14,7 +14,11 @@ import {
   persistLiveTick,
   resetLiveForTests,
 } from "./company-live.ts";
-import { TOKEN_SUNNY } from "./apms-request-auth.ts";
+import { issueSessionToken, useMemorySessionsForTests } from "./apms-sessions.ts";
+
+// BATCH-2: only server-issued session tokens are accepted.
+useMemorySessionsForTests();
+const TOKEN_SUNNY = await issueSessionToken("p-admin");
 import { memoryEntityBooks, patchEntity } from "./company-entities.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 import type { Snapshot } from "./company-books.ts";

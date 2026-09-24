@@ -3,7 +3,7 @@ import {
   extractSnapshot,
   replaceCompanySnapshot,
 } from "./company-notebook.ts";
-import { hasSessionToken, unauthorizedJson } from "./apms-request-auth.ts";
+import { hasValidSession, unauthorizedJson } from "./apms-request-auth.ts";
 import type { Snapshot } from "./company-books.ts";
 import {
   RestoreRejectedError,
@@ -80,7 +80,11 @@ export async function restoreCompanyFromUpload(input: unknown): Promise<{
 }
 
 export async function handleCompanyRestoreRequest(request: Request): Promise<Response> {
-  if (!hasSessionToken(request.headers)) return unauthorizedJson();
+  if (!(await hasValidSession(request.headers))) return unauthorizedJson();
+  // BATCH-2: restoring a backup replaces the company — admins only.
+  const { requireAdmin } = await import("./apms-admin-auth.ts");
+  const gate = await requireAdmin(request.headers);
+  if (gate.response) return gate.response;
   if (request.method.toUpperCase() !== "POST") {
     return Response.json({ ok: false, error: "POST a backup file." }, { status: 405 });
   }

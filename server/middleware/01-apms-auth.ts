@@ -1,7 +1,12 @@
 /**
  * Preview/published login for Aliens APMS.
  * Authenticates against the company people list plus issued_logins.
- * sunny.b / 0000 always works as the super-admin fallback.
+ * sunny.b / 0000 always works as the super-admin fallback (pending Sunny's decision).
+ *
+ * BATCH-2: sign-in issues a random server-side session token
+ * (`apms-sessions.ts`); every other /api/* route and /_serverFn call needs
+ * one (401 otherwise). Login writes need an admin (403) — except a person
+ * posting their own row (own-password change).
  */
 import {
   loadCompanySnapshot,
@@ -14,36 +19,28 @@ import {
   type LoginPerson,
 } from "../../src/lib/apms-credentials";
 import { loadIssuedLogins, mergeLogins, upsertIssuedLogins } from "../../src/lib/issued-logins";
+import { issueSessionToken, revokeSessionToken } from "../../src/lib/apms-sessions";
+import { readSessionToken, sessionFromHeaders, sessionPersonId, unauthorizedJson } from "../../src/lib/apms-request-auth";
+import { authorizeLoginWrite } from "../../src/lib/apms-admin-auth";
 import { applyPasswordReset, requestPasswordReset } from "../../src/lib/password-reset";
 
 const SESSION_COOKIE = "better-auth.session_token";
-const TOKEN_SUNNY = "apms-preview-sunny";
-const TOKEN_PREFIX = "apms-login.";
+/** `companyIsEmpty` server fn: a boolean the sign-in page may ask for. */
+const SERVERFN_EMPTY = "dcd7bc2b15da053b70f7c67cd9d467cf0304406295d5c072a5c9196f3829fc7f";
 
 interface Event {
   url: URL;
   req: Request & { method: string; headers: Headers };
 }
 
-function tokenFor(personId: string): string {
-  if (personId === "p-admin") return TOKEN_SUNNY;
-  return `${TOKEN_PREFIX}${personId}`;
-}
-
-function personIdFromToken(token: string): string | null {
-  if (!token) return null;
-  if (token === TOKEN_SUNNY) return "p-admin";
-  if (token.startsWith(TOKEN_PREFIX)) return token.slice(TOKEN_PREFIX.length) || null;
-  return null;
-}
-
-function readToken(req: { headers: Headers }): string | null {
-  const cookie = req.headers.get("cookie") || "";
-  const auth = req.headers.get("authorization") || "";
-  const fromAuth = auth.match(/Bearer\s+(.+)/i)?.[1]?.trim();
-  if (fromAuth) return fromAuth;
-  const m = cookie.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`));
-  return m ? decodeURIComponent(m[1]) : null;
+/** Routes reachable without a session. Everything else under /api and /_serverFn needs one. */
+function isPublicPath(path: string, url: URL): boolean {
+  if (path.startsWith("/api/auth/") || path === "/api/auth") return true;
+  if (path === "/api/password-reset" || path === "/api/password-reset/apply") return true;
+  if (path === `/_serverFn/${SERVERFN_EMPTY}`) return true;
+  // VPS cron: the route itself allows ?daily=1 / ?hourly=1 from loopback only.
+  if (path === "/api/company-backups" && (url.searchParams.get("daily") === "1" || url.searchParams.get("hourly") === "1")) return true;
+  return false;
 }
 
 async function readCompany(): Promise<{ people: LoginPerson[]; logins: LoginMap }> {
@@ -63,17 +60,14 @@ async function readCompany(): Promise<{ people: LoginPerson[]; logins: LoginMap 
   }
 }
 
-async function personFromToken(token: string | null): Promise<LoginPerson | null> {
-  const id = personIdFromToken(token || "");
-  if (!id) return null;
+async function personFromId(id: string): Promise<LoginPerson | null> {
   const { people } = await readCompany();
   if (id === "p-admin") return people.find((p) => p.id === "p-admin" || p.username === "sunny.b") || SUNNY;
   return people.find((p) => p.id === id) || null;
 }
 
-function sessionPayload(person: LoginPerson) {
+function sessionPayload(person: LoginPerson, token: string) {
   const user = sessionUser(person);
-  const token = tokenFor(person.id);
   return {
     session: {
       id: `sess-${person.id}`,
@@ -109,8 +103,8 @@ function json(status: number, body: unknown, extra: Record<string, string> = {})
 
 function sessionCookie(token: string | null, https: boolean): string {
   const base = token
-    ? `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=2592000`
-    : `${SESSION_COOKIE}=; Path=/; Max-Age=0`;
+    ? `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=2592000; HttpOnly`
+    : `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly`;
   return https ? `${base}; SameSite=None; Secure` : `${base}; SameSite=Lax`;
 }
 
@@ -135,8 +129,6 @@ export default async function apmsAuthMiddleware(
   const path = event.url.pathname;
   const method = (event.req.method || "GET").toUpperCase();
 
-  if (path === "/api/company") return next();
-
   if (path === "/api/password-reset" || path === "/api/password-reset/apply") {
     if (method !== "POST") return json(405, { ok: false });
     try {
@@ -160,12 +152,17 @@ export default async function apmsAuthMiddleware(
 
   if (path === "/api/issued-logins" || path === "/api/provision-logins") {
     if (method === "GET" || method === "HEAD") {
+      if (!(await sessionPersonId(event.req.headers))) return unauthorizedJson();
       return json(200, { ok: true, added: 0, sent: 0, failed: [] });
     }
     if (method === "POST") {
       try {
         const body = await readJson(event.req);
         const rows = rowsFrom(body);
+        const refused = await authorizeLoginWrite(event.req.headers, rows as Array<Record<string, string>>, {
+          allowOwn: path === "/api/issued-logins",
+        });
+        if (refused) return refused;
         const added = await upsertIssuedLogins(rows);
         return json(200, { ok: true, added, sent: 0, failed: [] });
       } catch (err) {
@@ -178,14 +175,21 @@ export default async function apmsAuthMiddleware(
         });
       }
     }
+    return json(405, { ok: false });
   }
 
-  if (!path.startsWith("/api/auth")) return next();
+  if (!path.startsWith("/api/auth")) {
+    if ((path.startsWith("/api/") || path.startsWith("/_serverFn/")) && !isPublicPath(path, event.url)) {
+      if (!(await sessionPersonId(event.req.headers))) return unauthorizedJson();
+    }
+    return next();
+  }
 
   if (path.endsWith("/get-session") && (method === "GET" || method === "POST")) {
-    const person = await personFromToken(readToken(event.req));
-    if (!person) return json(200, null);
-    return json(200, sessionPayload(person));
+    const session = await sessionFromHeaders(event.req.headers);
+    const person = session ? await personFromId(session.personId) : null;
+    if (!session || !person) return json(200, null);
+    return json(200, sessionPayload(person, session.token));
   }
 
   if (
@@ -200,7 +204,7 @@ export default async function apmsAuthMiddleware(
     if (!person) {
       return json(401, { message: "Invalid username or password" });
     }
-    const payload = sessionPayload(person);
+    const payload = sessionPayload(person, await issueSessionToken(person.id));
     return json(200, payload, {
       "set-cookie": sessionCookie(payload.token, requestIsHttps(event)),
       "set-auth-token": payload.token,
@@ -208,6 +212,8 @@ export default async function apmsAuthMiddleware(
   }
 
   if (path.endsWith("/sign-out") && (method === "POST" || method === "GET")) {
+    const session = await sessionFromHeaders(event.req.headers);
+    await revokeSessionToken(session?.token || readSessionToken(event.req.headers));
     return json(200, { success: true }, {
       "set-cookie": sessionCookie(null, requestIsHttps(event)),
     });
