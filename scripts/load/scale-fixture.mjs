@@ -82,6 +82,20 @@ function growArray(list, want, mut) {
 seed.targetHistory = growArray(seed.targetHistory, TARGET_HISTORY, (row, i) => ({ ...row, id: `th-load-${i}` }));
 seed.notices = growArray(seed.notices, TARGET_NOTICES, (row, i) => ({ ...row, id: `nt-load-${i}` }));
 
+// Editors: live's daytime users are mostly employees (own plans, self
+// comments) plus HR / managers / admins who edit everyone's data. The seed has
+// 3 admins; 47 more active people become admins so ~28 % of signed-in users are
+// editors (they make the shared-record saves). Everyone else stays as seeded.
+const EDITORS = arg("editors", 50);
+let editors = seed.people.filter((p) => ["admin", "super_admin"].includes(String(p.access))).length;
+for (const p of seed.people) {
+  if (editors >= EDITORS) break;
+  if (!p || p.status === "left" || ["admin", "super_admin"].includes(String(p.access))) continue;
+  p.access = "admin";
+  p.accessRoleId = "admin";
+  editors++;
+}
+
 const json = JSON.stringify(seed);
 writeFileSync(out, json);
 const size = (v) => (JSON.stringify(v || null).length / 1e6).toFixed(2) + " MB";
@@ -95,6 +109,7 @@ console.log(
     targetCells: Object.keys(seed.targetCells).length,
     targetHistory: seed.targetHistory.length,
     notices: seed.notices.length,
+    editors,
     sizes: { records: size(seed.records), rewardRecords: size(seed.rewardRecords), people: size(seed.people) },
   }),
 );

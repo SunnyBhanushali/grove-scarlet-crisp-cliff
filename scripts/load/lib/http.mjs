@@ -156,7 +156,7 @@ export class Client {
    * holds one of the tab's six connections for as long as it is open).
    * onEvent(data) per `data:` frame. Returns { close() }.
    */
-  sse(path, onEvent, { name = "sse-connect", onClose } = {}) {
+  sse(path, onEvent, { name = "sse-connect", onClose, light = false } = {}) {
     const t0 = performance.now();
     let closed = false;
     let firstByte = false;
@@ -190,7 +190,11 @@ export class Client {
           for (const line of frame.split("\n")) {
             if (line.startsWith("data:")) {
               try {
-                onEvent(JSON.parse(line.slice(5).trim()));
+                const text = line.slice(5).trim();
+                // `light`: a user that does not track the rows reads only the
+                // frame's head (the server writes `changes` last). Runner CPU.
+                const cut = light ? text.indexOf(',"changes":') : -1;
+                onEvent(cut > 0 ? { ...JSON.parse(text.slice(0, cut) + "}"), changesOmitted: true } : JSON.parse(text));
               } catch {
                 /* ignore bad frame */
               }

@@ -20,6 +20,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { marksOf } from "./lib/marks.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const args = Object.fromEntries(
@@ -46,6 +47,8 @@ const TMP = process.env.LOAD_TMP || "/tmp/apms-load";
 const SERVER_CPUS = args["server-cpus"] ?? "0";
 const PG_CPUS = args["pg-cpus"] ?? "1";
 const RUNNER_CPUS = args["runner-cpus"] ?? "2,3";
+// The timed browsers can get a core of their own (page opens are browser CPU as much as server time).
+const BROWSER_CPUS = args["browser-cpus"] ?? RUNNER_CPUS;
 const PASSWORD = "Load-test-1";
 const OUTPUT_DIR = args.output || ".output";
 const SERVER_ENV = args["server-env"] ? String(args["server-env"]).split(",") : [];
@@ -153,7 +156,7 @@ async function prepareFixture(pool) {
     updated_at timestamptz not null default now())`);
   const people = (
     await pool.query(
-      `select id, payload->>'username' as username, payload->>'status' as status,
+      `select id, payload->>'username' as username, payload->>'status' as status, payload->>'access' as access,
               coalesce(payload->>'mustResetPassword','false') as must_reset from people
         where deleted_at is null and coalesce(payload->>'username','') <> '' order by id`,
     )
@@ -185,9 +188,23 @@ async function prepareFixture(pool) {
   const own = ids.slice(4);
   return {
     // Browsers take people without a forced password change (last in the list).
-    logins: [...people.filter((p) => p.must_reset === "true"), ...people.filter((p) => p.must_reset !== "true")].map((p) => ({ username: p.username, password: PASSWORD, personId: p.id })),
-    fixture: { period, rewardPeriod, people: own, history: history.slice(0, 600), shared },
+    logins: [...people.filter((p) => p.must_reset === "true"), ...people.filter((p) => p.must_reset !== "true")].map((p) => ({
+      username: p.username,
+      password: PASSWORD,
+      personId: p.id,
+      editor: ["admin", "super_admin"].includes(String(p.access || "")),
+      browserOk: p.must_reset !== "true",
+    })),
+    fixture: { period, rewardPeriod, people: own, history: history.slice(0, 600), shared, monthPeople, rewardPeople: [...rewardPeople] },
   };
+}
+
+/** Which browser sync the server ships (the runner models that client's requests). */
+async function clientVersion() {
+  const html = await (await fetch(`${BASE}/`)).text();
+  const m = html.match(/apms-sync\.js\?v=(p0as\d+)/);
+  const v = m ? m[1] : "p0as81";
+  return Number(v.slice(4)) >= 83 ? "p0as83" : "p0as81";
 }
 
 async function assetList() {
@@ -201,14 +218,23 @@ async function assetList() {
 async function browserProbe(stopAt, results) {
   if (!BROWSERS) return;
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium" });
+  const exe = process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium";
+  // Every Chromium process (renderers included) on the browsers' cores.
+  const wrapper = join(TMP, "chromium-pinned.sh");
+  writeFileSync(wrapper, `#!/bin/sh\nexec taskset -c ${BROWSER_CPUS} ${exe} "$@"\n`, { mode: 0o755 });
+  const browser = await chromium.launch({ executablePath: BROWSER_CPUS === "none" ? exe : wrapper });
   try {
     const bpid = browser.process?.()?.pid;
-    if (bpid) pin(bpid, RUNNER_CPUS);
+    if (bpid) pin(bpid, BROWSER_CPUS);
   } catch {
     /* ignore */
   }
-  const users = results.logins.slice(-BROWSERS);
+  // Page opens are timed for both kinds of user: employees get their own
+  // (filtered) company, editors the whole one (slower to hydrate in the browser).
+  const clean = results.logins.filter((l) => l.browserOk);
+  const eds = clean.filter((l) => l.editor);
+  const emps = clean.filter((l) => !l.editor);
+  const users = Array.from({ length: BROWSERS }, (_, i) => (i % 3 === 2 ? eds[i] || emps[i] : emps[i] || eds[i])).filter(Boolean);
   await Promise.all(
     users.map(async (u, i) => {
       await new Promise((r) => setTimeout(r, i * 4000));
@@ -228,7 +254,7 @@ async function browserProbe(stopAt, results) {
         await p.getByRole("button", { name: "Continue" }).click();
         await p.locator("aside, nav").first().getByText("Me", { exact: true }).first().waitFor({ timeout: 90000 });
         await company.catch(() => null);
-        results.pageOpen.push({ kind: "sign-in", ms: Date.now() - t1, total: Date.now() - t0 });
+        results.pageOpen.push({ kind: "sign-in", ms: Date.now() - t1, total: Date.now() - t0, editor: !!u.editor });
       } catch (err) {
         results.browserErrors.push(`sign-in ${u.username}: ${err.message.slice(0, 160)}`);
         await ctx.close();
@@ -256,7 +282,7 @@ async function browserProbe(stopAt, results) {
             })(),
             new Promise((r) => setTimeout(() => r(false), 60000)),
           ]);
-          if (opened) results.pageOpen.push({ kind: "reload", ms: Date.now() - t0, companyMs });
+          if (opened) results.pageOpen.push({ kind: "reload", ms: Date.now() - t0, companyMs, editor: !!u.editor });
           else results.browserErrors.push(`reload ${u.username}: page open > 60 s`);
         } catch (err) {
           results.browserErrors.push(`reload ${u.username}: ${err.message.slice(0, 160)}`);
@@ -292,20 +318,40 @@ async function main() {
   const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 2 });
   const prep = await prepareFixture(pool);
   const assets = await assetList();
-  log(`fixture: ${prep.logins.length} logins, period ${prep.fixture.period}, reward ${prep.fixture.rewardPeriod}, ${assets.length} assets`);
+  const client = args.client || (await clientVersion());
+  // Editors spread evenly over any number of users (≈ their share of the logins).
+  const editorsAll = prep.logins.filter((l) => l.editor);
+  const othersAll = prep.logins.filter((l) => !l.editor);
+  const share = editorsAll.length / prep.logins.length;
+  log(`client ${client}; fixture: ${prep.logins.length} logins (${editorsAll.length} editors), period ${prep.fixture.period}, reward ${prep.fixture.rewardPeriod}, ${assets.length} assets`);
 
   // Enough logins for N users: a person with two tabs is realistic past 180.
-  const logins = Array.from({ length: USERS }, (_, i) => prep.logins[i % (prep.logins.length - BROWSERS)]);
+  // Browsers take their own logins (no forced password change); users cycle the rest.
+  const cleanL = prep.logins.filter((l) => l.browserOk);
+  const bEds = cleanL.filter((l) => l.editor);
+  const bEmps = cleanL.filter((l) => !l.editor);
+  const browserLogins = new Set(
+    Array.from({ length: BROWSERS }, (_, i) => (i % 3 === 2 ? bEds[i] || bEmps[i] : bEmps[i] || bEds[i])).filter(Boolean).map((l) => l.username),
+  );
+  const eds = editorsAll.filter((l) => !browserLogins.has(l.username));
+  const oth = othersAll.filter((l) => !browserLogins.has(l.username));
+  let ei = 0;
+  let oi = 0;
+  const logins = Array.from({ length: USERS }, (_, i) =>
+    Math.floor((i + 1) * share) > Math.floor(i * share) ? eds[ei++ % eds.length] : oth[oi++ % oth.length],
+  );
   const now = Date.now();
   const steadyAt = now + RAMP_S * 1000 + 10000;
   const stopAt = steadyAt + STEADY_S * 1000;
   const config = {
     base: BASE,
+    client,
     fixture: prep.fixture,
     assets,
     rampMs: RAMP_S * 1000,
     steadyAt,
-    observerEvery: USERS >= 100 ? 10 : 2,
+    observerEvery: USERS >= 100 ? 3 : 1,
+    editorSharedRate: 0.7,
     rawWireSample: USERS >= 100 ? 0.03 : 0.1,
     deleteProbeRate: 0.05,
   };
@@ -316,6 +362,9 @@ async function main() {
     if (!slice.length) continue;
     const child = fork(join(root, "scripts/load/vu-worker.mjs"), [], { stdio: "inherit" });
     pin(child.pid, RUNNER_CPUS);
+    // The timed browsers share these cores: they go first (page opens are the
+    // browser's CPU as much as the server's), the simulated users yield.
+    spawnSync("renice", ["-n", "10", "-p", String(child.pid)], { stdio: "ignore" });
     const done = new Promise((res) => child.on("message", (m) => m.type === "done" && res(m.result)));
     child.send({ cmd: "start", config: { ...config, logins: slice, firstIdx: w * per } });
     workers.push({ child, done });
@@ -439,7 +488,7 @@ async function main() {
   }
   for (const [, e] of lastAck) {
     const row = await readRowForCheck(e.row);
-    const got = row && row.payload && row.payload.loadMarks ? Number(row.payload.loadMarks[e.vu]) : NaN;
+    const got = row && row.payload ? Number(marksOf(e.row.split("|")[0], row.payload)[e.vu]) : NaN;
     if (!(got >= e.n)) {
       lost++;
       if (lostList.length < 20) lostList.push({ row: e.row, vu: e.vu, acked: e.n, db: got });
@@ -461,6 +510,8 @@ async function main() {
     if (e.e !== "seen") continue;
     const a = acks.get(e.mark);
     if (!a) continue;
+    // Only saves made while that tab was live (not ones it caught up on when it opened).
+    if (!(a.sent >= (e.ls ?? 0))) continue;
     vis.push(Math.max(0, e.t - a.t));
   }
   const raw = {};
@@ -491,11 +542,14 @@ async function main() {
     id: RUN_ID,
     label: LABEL,
     users: USERS,
+    client,
     steadySeconds: STEADY_S,
-    cores: { server: SERVER_CPUS, postgres: PG_CPUS, runner: RUNNER_CPUS },
+    cores: { server: SERVER_CPUS, postgres: PG_CPUS, runner: RUNNER_CPUS, browsers: BROWSER_CPUS },
     at: new Date().toISOString(),
     targets: {
       pageOpenMs: summarize(reloads.map((p) => p.ms)),
+      pageOpenEmployeeMs: summarize(reloads.filter((p) => !p.editor).map((p) => p.ms)),
+      pageOpenEditorMs: summarize(reloads.filter((p) => p.editor).map((p) => p.ms)),
       signInOpenMs: summarize(browserResults.pageOpen.filter((p) => p.kind === "sign-in").map((p) => p.ms)),
       companyLoadMs: summarize(routes["company-load"]?.ms || []),
       browserCompanyMs: summarize(reloads.map((p) => p.companyMs).filter((x) => x != null).map(Math.round)),
@@ -535,6 +589,8 @@ async function main() {
     "| metric | n | p50 | p95 | p99 | max |",
     "|---|---|---|---|---|---|",
     line("page open (browser reload, ms)", t.pageOpenMs),
+    line("  employee (own filtered company)", t.pageOpenEmployeeMs),
+    line("  editor (whole company)", t.pageOpenEditorMs),
     line("company load (ms)", t.companyLoadMs),
     line("tick (ms)", t.tickMs),
     line("save (ms)", t.saveMs),

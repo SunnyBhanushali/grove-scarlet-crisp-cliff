@@ -1,73 +1,76 @@
 # Load run before-u50
 
-50 simulated users, 180s steady window, server on CPU 0, Postgres on CPU 1. 2026-09-24T16:10:05.807Z
+50 simulated users, 180s steady window, server on CPU 0, Postgres on CPU 1. 2026-09-24T17:10:05.390Z
 
 | metric | n | p50 | p95 | p99 | max |
 |---|---|---|---|---|---|
-| page open (browser reload, ms) | 24 | 5070 | 7522 | 8246 | 8246 |
-| company load (ms) | 50 | 299 | 884 | 1017 | 1017 |
-| tick (ms) | 7711 | 438 | 1022 | 2715 | 5899 |
-| save (ms) | 343 | 1445 | 3465 | 3814 | 4198 |
-| others see a save (ms) | 6118 | 0 | 680 | 1074 | 11600 |
-| server CPU % of one core (1 s samples) | 167 | 96.3 | 98.8 | 99.4 | 99.6 |
-| Postgres CPU % | 172 | 40 | 63 | 68 | 76 |
+| page open (browser reload, ms) | 16 | 6264 | 10957 | 10957 | 10957 |
+|   employee (own filtered company) | 11 | 5635 | 10957 | 10957 | 10957 |
+|   editor (whole company) | 5 | 6264 | 7708 | 7708 | 7708 |
+| company load (ms) | 50 | 424 | 2469 | 2670 | 2670 |
+| tick (ms) | 7528 | 438 | 1670 | 2092 | 6345 |
+| save (ms) | 323 | 885 | 2512 | 3466 | 3777 |
+| others see a save (ms) | 3960 | 181 | 1058 | 13255 | 50179 |
+| server CPU % of one core (1 s samples) | 168 | 94.4 | 98.7 | 99.2 | 99.6 |
+| Postgres CPU % | 163 | 40 | 57 | 64 | 78 |
 
-errors 3, lost saves 0, resurrected deletes 0, bad delete replies 0, saves acked 284, others-see < 1 s 0.9848
-read-after-write: {"row":{"n":284,"bad":0,"why":{}},"wire":{"n":37,"bad":11,"why":{}},"wire+replay":{"n":37,"bad":0,"why":{}}}
-event-loop lag: {"p99Max":608.7,"max":608.7,"p50Avg":19}; RSS MB {"n":167,"avg":944,"p50":949,"p95":1081,"p99":1146,"max":1158}; pg connections {"max":13,"activeMax":8}; runner loop lag max 2682 ms
+errors 2, lost saves 0, resurrected deletes 0, bad delete replies 0, saves acked 300, others-see < 1 s 0.9437
+read-after-write: {"row":{"n":300,"bad":0,"why":{}},"wire":{"n":25,"bad":3,"why":{}},"wire+replay":{"n":25,"bad":0,"why":{}}}
+event-loop lag: {"p99Max":493.4,"max":493.4,"p50Avg":14.6}; RSS MB {"n":168,"avg":851,"p50":848,"p95":963,"p99":1029,"max":1054}; pg connections {"max":13,"activeMax":8}; runner loop lag max 1949 ms
 
 | route | n | p50 | p95 | p99 | max | avg bytes | status |
 |---|---|---|---|---|---|---|---|
-| changes | 17890 | 366 | 1091 | 1522 | 5581 | 4984 | {"200":17890} |
-| tick | 3866 | 436 | 1022 | 2715 | 5570 | 1596 | {"200":3866} |
-| tick-since | 3845 | 441 | 1022 | 2715 | 5899 | 122 | {"200":3845} |
-| people-list | 731 | 325 | 1020 | 1397 | 2715 | 117590 | {"200":731} |
-| static | 600 | 253 | 5221 | 5586 | 5743 | 136468 | {"200":600} |
-| rewards-month | 573 | 371 | 998 | 1883 | 5441 | 853351 | {"200":573} |
-| apms-person | 527 | 321 | 1274 | 1915 | 2715 | 14274 | {"200":527} |
-| apms-month | 462 | 503 | 1157 | 1639 | 5891 | 1142233 | {"200":462} |
-| raw-row | 284 | 364 | 941 | 1653 | 1795 | 7009 | {"200":284} |
-| row-read | 202 | 341 | 914 | 1699 | 2717 | 6422 | {"200":202} |
-| save-month | 73 | 1739 | 3566 | 3781 | 3781 | 14831 | {"200":73} |
-| save-target-history | 66 | 1201 | 3280 | 3814 | 3814 | 528 | {"200":66} |
-| keepalive-retry | 65 | 0 | 0 | 0 | 0 | 0 | {"0":65} |
-| save-notices | 56 | 673 | 2866 | 3637 | 3637 | 165 | {"200":28,"409":28} |
-| save-reward | 55 | 1629 | 3397 | 3943 | 3943 | 8998 | {"200":55} |
-| signin | 50 | 1824 | 6431 | 6451 | 6451 | 487 | {"200":50} |
-| html | 50 | 224 | 983 | 1122 | 1122 | 4196 | {"200":50} |
-| get-session | 50 | 1048 | 2614 | 2614 | 2614 | 487 | {"200":50} |
-| company | 50 | 273 | 854 | 986 | 986 | 348258 | {"200":50} |
-| company-load | 50 | 299 | 884 | 1017 | 1017 | 348258 | {"200":50} |
-| page-open-http | 50 | 4465 | 8152 | 8192 | 8192 | 0 | {"200":50} |
-| sse-connect | 50 | 110 | 362 | 684 | 684 | 0 | {"200":50} |
-| raw-company | 37 | 71 | 824 | 896 | 896 | 354618 | {"200":37} |
-| save-people | 33 | 1292 | 3511 | 3670 | 3670 | 1634 | {"200":33} |
-| person | 31 | 422 | 909 | 2060 | 2060 | 1563 | {"200":31} |
-| org-kind | 23 | 794 | 1554 | 1912 | 1912 | 19049 | {"200":23} |
-| save-people-shared | 16 | 1936 | 4158 | 4158 | 4158 | 1540 | {"200":15,"409":1} |
-| save-month-shared | 15 | 1207 | 4198 | 4198 | 4198 | 14478 | {"200":15} |
-| save-kpi-master-shared | 13 | 1584 | 2529 | 2529 | 2529 | 425 | {"200":12,"409":1} |
-| raw-replay | 11 | 331 | 774 | 774 | 774 | 228827 | {"200":11} |
-| save-cell-shared | 9 | 1926 | 3634 | 3634 | 3634 | 635 | {"200":8,"409":1} |
-| save-reward-shared | 7 | 1714 | 3581 | 3581 | 3581 | 13140 | {"200":7} |
-| save-409 | 3 | 0 | 0 | 0 | 0 | 0 | {"409":3} |
+| changes | 18528 | 320 | 1142 | 1825 | 5828 | 9812 | {"200":18528} |
+| tick | 3777 | 438 | 1670 | 2089 | 6345 | 1683 | {"200":3777} |
+| tick-since | 3751 | 439 | 1666 | 2137 | 5829 | 125 | {"200":3751} |
+| hint-get | 2658 | 539 | 1662 | 2340 | 5826 | 10163 | {"200":2658} |
+| rewards-month | 655 | 372 | 1329 | 1904 | 5393 | 851110 | {"0":1,"200":654} |
+| static | 600 | 200 | 4704 | 5812 | 5914 | 136468 | {"200":600} |
+| people-list | 529 | 273 | 1252 | 1911 | 5844 | 117224 | {"200":529} |
+| apms-person | 405 | 351 | 1171 | 2132 | 4474 | 14563 | {"200":405} |
+| apms-month | 367 | 498 | 1669 | 2458 | 6341 | 1142104 | {"200":367} |
+| raw-row | 300 | 422 | 1281 | 2189 | 2407 | 12548 | {"200":300} |
+| save-month | 233 | 906 | 2586 | 3466 | 3777 | 14224 | {"0":1,"200":232} |
+| row-read | 100 | 411 | 1667 | 2838 | 2838 | 10634 | {"200":100} |
+| keepalive-retry | 58 | 0 | 0 | 0 | 0 | 0 | {"0":58} |
+| signin | 50 | 2055 | 5733 | 6083 | 6083 | 490 | {"200":50} |
+| html | 50 | 283 | 1927 | 1927 | 1927 | 4196 | {"200":50} |
+| get-session | 50 | 1215 | 3751 | 3760 | 3760 | 490 | {"200":50} |
+| company | 50 | 393 | 2424 | 2639 | 2639 | 348252 | {"200":50} |
+| company-load | 50 | 424 | 2469 | 2670 | 2670 | 348252 | {"200":50} |
+| page-open-http | 50 | 5751 | 8814 | 8866 | 8866 | 0 | {"200":50} |
+| sse-connect | 50 | 84 | 428 | 552 | 552 | 0 | {"200":50} |
+| raw-company | 25 | 121 | 837 | 1320 | 1320 | 352016 | {"200":25} |
+| person | 24 | 269 | 1366 | 2996 | 2996 | 1444 | {"200":24} |
+| org-kind | 22 | 669 | 2196 | 5989 | 5989 | 19755 | {"200":22} |
+| save-notices | 20 | 734 | 1946 | 1946 | 1946 | 165 | {"200":10,"409":10} |
+| save-people-shared | 15 | 885 | 3540 | 3540 | 3540 | 1503 | {"200":14,"409":1} |
+| save-month-shared | 13 | 1049 | 2211 | 2211 | 2211 | 14464 | {"200":13} |
+| save-reward-shared | 13 | 664 | 1886 | 1886 | 1886 | 13129 | {"200":12,"409":1} |
+| save-kpi-master-shared | 9 | 497 | 1745 | 1745 | 1745 | 393 | {"200":9} |
+| save-reward | 8 | 1040 | 2436 | 2436 | 2436 | 11162 | {"200":8} |
+| save-cell-shared | 6 | 1366 | 1422 | 1422 | 1422 | 604 | {"200":6} |
+| save-people | 3 | 1340 | 1939 | 1939 | 1939 | 1560 | {"200":3} |
+| save-target-history | 3 | 2212 | 2688 | 2688 | 2688 | 508 | {"200":3} |
+| raw-replay | 3 | 228 | 1629 | 1629 | 1629 | 558388 | {"200":3} |
+| save-409 | 2 | 0 | 0 | 0 | 0 | 0 | {"409":2} |
 
 Top Postgres statements (steady window):
 
 | calls | total ms | mean ms | rows | query |
 |---|---|---|---|---|
-| 677 | 79071 | 116.8 | 2708 | select book, snapshot_json, content_hash from company_books |
-| 615 | 36056 | 58.63 | 615 | insert into company_notebook (id, snapshot_json, updated_at) values ($1, $2, now()) on conflict (id) do update set snapshot_json = excluded.snapshot_json, updat |
-| 442 | 34936 | 79.04 | 80444 | select person_id, payload, rev from month_records where deleted_at is null and period = $1 |
-| 564 | 23865 | 42.31 | 74448 | select person_id, payload, rev from reward_records where deleted_at is null and period = $1 |
-| 194 | 13047 | 67.25 | 194 | insert into company_books (book, snapshot_json, content_hash, updated_at) values ($1, $2, $3, now()) on conflict (book) do update set snapshot_json = excluded.s |
-| 36 | 2889 | 80.26 | 8640 | select person_id, period, payload from month_records where deleted_at is null |
-| 17671 | 2422 | 0.14 | 14715 | with c as ( select seq, kind, id, k1, k2, rev, deleted, at, payload as log_payload from entity_log where seq > $1 order by seq asc limit $2 ), latest as ( selec |
-| 36 | 1826 | 50.73 | 6480 | select person_id, period, payload from reward_records where deleted_at is null |
-| 681 | 1729 | 2.54 | 122580 | select id, payload, rev from people where deleted_at is null |
-| 54 | 1002 | 18.56 | 97042 | select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind <> $1 order by updated_at asc, id asc |
-| 819 | 312 | 0.38 | 819 | select payload, rev, deleted_at from month_records where person_id = $1 and period = $2 |
-| 12408 | 186 | 0.01 | 12408 | select snapshot_json from company_notebook where id = $1 limit $2 |
-| 10096 | 149 | 0.01 | 10096 | select max(seq) as seq from entity_log |
-| 492 | 86 | 0.18 | 492 | select payload, rev, deleted_at from reward_records where person_id = $1 and period = $2 |
-| 36 | 73 | 2.03 | 6480 | select id, payload from people where deleted_at is null |
+| 518 | 41483 | 80.08 | 2072 | select book, snapshot_json, content_hash from company_books |
+| 645 | 30021 | 46.54 | 85140 | select person_id, payload, rev from reward_records where deleted_at is null and period = $1 |
+| 344 | 26637 | 77.43 | 62608 | select person_id, payload, rev from month_records where deleted_at is null and period = $1 |
+| 587 | 24356 | 41.49 | 587 | insert into company_notebook (id, snapshot_json, updated_at) values ($1, $2, now()) on conflict (id) do update set snapshot_json = excluded.snapshot_json, updat |
+| 151 | 17523 | 116.05 | 151 | insert into company_books (book, snapshot_json, content_hash, updated_at) values ($1, $2, $3, now()) on conflict (book) do update set snapshot_json = excluded.s |
+| 18676 | 4117 | 0.22 | 15608 | with c as ( select seq, kind, id, k1, k2, rev, deleted, at, payload as log_payload from entity_log where seq > $1 order by seq asc limit $2 ), latest as ( selec |
+| 518 | 1435 | 2.77 | 93240 | select id, payload, rev from people where deleted_at is null |
+| 14 | 1156 | 82.56 | 3360 | select person_id, period, payload from month_records where deleted_at is null |
+| 14 | 680 | 48.59 | 2520 | select person_id, period, payload from reward_records where deleted_at is null |
+| 2654 | 631 | 0.24 | 2654 | select payload, rev, deleted_at from month_records where person_id = $1 and period = $2 |
+| 35 | 487 | 13.91 | 62895 | select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind <> $1 order by updated_at asc, id asc |
+| 10011 | 169 | 0.02 | 10011 | select max(seq) as seq from entity_log |
+| 241 | 156 | 0.65 | 241 | insert into month_records (person_id, period, payload, rev, updated_at, updated_by, deleted_at) values ($1, $2, $3::jsonb, $4, now(), $5, $7) on conflict (perso |
+| 12443 | 150 | 0.01 | 12443 | select snapshot_json from company_notebook where id = $1 limit $2 |
+| 284 | 131 | 0.46 | 284 | insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by, payload) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning seq |

@@ -29,6 +29,7 @@
  */
 import { Client, Metrics, rand, sleep } from "./lib/http.mjs";
 import { monitorEventLoopDelay } from "node:perf_hooks";
+import { marksOf, withMark } from "./lib/marks.mjs";
 
 const metrics = new Metrics();
 const loop = monitorEventLoopDelay({ resolution: 20 });
@@ -74,6 +75,13 @@ function changeKey(ch) {
   return `${ch.kind}|${ch.id}|`;
 }
 
+/** Fields of the org book the SPA sends with `PATCH /api/company` (row-owned ones are ignored server-side). */
+const ORG_BOOK_FIELDS = [
+  "companies", "brands", "businessUnits", "sbuMembers", "functions", "subFunctions", "roles", "accessRoles",
+  "customReports", "reportFolders", "notices", "appRequests", "roleCases", "trash", "logins",
+  "dismissedAlertIds", "setupDone", "companyFactor", "pendingRoleDeletes", "months", "seedGeneration",
+];
+
 class VU {
   constructor(idx, cfg, login) {
     this.idx = idx;
@@ -91,8 +99,19 @@ class VU {
     this.timers = [];
     this.screen = "home";
     this.saveN = 0;
-    this.observer = idx % cfg.observerEvery === 0;
+    // Editors (HR / managers / admins) edit everyone's rows and see every change.
+    this.editor = !!login.editor;
+    this.observer = this.editor && idx % cfg.observerEvery === 0;
+    this.seen = new Set();
     this.firstOpen = true;
+    this.announced = 0;
+    this.issuedFor = 0;
+    this.etags = new Map();
+    this.hintSeen = new Set();
+    this.lastPushAt = 0;
+    // Saves acknowledged before this moment reach this tab by its page-open
+    // replay, not live: "others see" only counts saves after it.
+    this.liveSince = Infinity;
   }
 
   get phase() {
@@ -137,13 +156,22 @@ class VU {
       // Only the envelope fields we need; the SPA parses the whole snapshot.
       const snap = JSON.parse(outer.snapshotJson);
       feedSeq = Number(snap.feedSeq) || 0;
+      if (this.editor) {
+        // The SPA sends its org book (catalogs as it holds them) after org / people edits.
+        this.orgBook = {};
+        for (const f of ORG_BOOK_FIELDS) if (snap[f] !== undefined) this.orgBook[f] = snap[f];
+        this.bookGens = snap.bookGens || {};
+      }
       this.wireAt = Number(outer.notebookUpdatedAt) || 0;
       this.at = Math.max(this.at, this.wireAt);
     }
     this.seq = feedSeq;
+    this.hintSeen = new Set();
+    this.liveSince = Infinity;
     await this.pollChanges();
     metrics.record("page-open-http", performance.now() - t0, html.status, 0);
     this.openLive();
+    this.liveSince = Date.now();
   }
 
   openLive() {
@@ -152,6 +180,7 @@ class VU {
       "/api/company-live",
       (ev) => this.onLive(ev, "sse"),
       {
+        light: !this.editor,
         onClose: () => {
           if (running && this.alive) setTimeout(() => this.alive && this.openLive(), 3000);
         },
@@ -159,10 +188,74 @@ class VU {
     );
   }
 
+  /**
+   * apms-sync fetchHintNow: a live hint (`entities[]` on a tick / SSE frame)
+   * makes the tab GET that row once per page load (people, reward records,
+   * target cells and generic rows always; APMS rows only on an APMS screen).
+   * p0as83 skips it while the stream pushes the feed (the row is in the feed).
+   */
+  hints(ev) {
+    const list = Array.isArray(ev && ev.entities) ? ev.entities.slice(-20) : [];
+    for (const h of list) {
+      if (!h || !h.type || !h.id) continue;
+      const t = String(h.type).replace(/_/g, "-");
+      const key = `${t}|${h.id}|${h.period || ""}`;
+      if (this.hintSeen.has(key)) continue;
+      const hot = t === "people" || t === "month-records" || t === "reward-records" || t === "target-cells";
+      if (this.cfg.client === "p0as83" && this.lastPushAt && Date.now() - this.lastPushAt < 60000 && (hot || t.startsWith("e:"))) {
+        this.hintSeen.add(key);
+        continue;
+      }
+      let url = "";
+      if (t === "people") url = `/api/people/${encodeURIComponent(h.id)}`;
+      else if (t === "target-cells") url = `/api/target-cells/${encodeURIComponent(h.id)}`;
+      else if (t === "reward-records" && h.period) url = `/api/reward-records/${h.period}/${encodeURIComponent(h.id)}`;
+      else if (t === "month-records" && h.period && this.screen.startsWith("apms")) url = `/api/month-records/${h.period}/${encodeURIComponent(h.id)}`;
+      else if (t.startsWith("e:")) url = `/api/e/${encodeURIComponent(t.slice(2))}/${encodeURIComponent(h.id)}${h.period ? "/" + encodeURIComponent(h.period) : ""}`;
+      if (!url) continue;
+      this.hintSeen.add(key);
+      void this.c.get(url, { name: "hint-get", raw: true });
+    }
+  }
+
   onLive(ev, via) {
+    this.hints(ev);
     const at = Number(ev && ev.at) || 0;
+    if (this.cfg.client === "p0as83" && ev && ev.push) {
+      // apms-sync p0as83: the live stream pushes the feed rows.
+      const seq = Number(ev.seq) || 0;
+      if (seq > this.announced) this.announced = seq;
+      if (at > this.at) this.at = at;
+      if (Array.isArray(ev.changes) || ev.changesOmitted) {
+        const from = Number(ev.since);
+        this.lastPushAt = Date.now();
+        if (seq > this.seq && !this.inflight && from <= this.seq) {
+          if (ev.changes) this.applyChanges(ev.changes.filter((c) => (Number(c.seq) || 0) > this.seq));
+          this.seq = seq;
+          metrics.record("pushed-page", 0, 200, 0);
+        } else if (seq > this.seq && from > this.seq) {
+          void this.pollChanges();
+        }
+        return;
+      }
+      if (seq > this.seq && !this.pushWait) {
+        this.pushWait = setTimeout(() => {
+          this.pushWait = null;
+          if (this.alive && this.announced > this.seq) void this.pollChanges();
+        }, 1500);
+      }
+      return;
+    }
     if (at > this.at) {
       this.at = at;
+      if (this.cfg.client === "p0as83") {
+        // apms-sync p0as83: poll only when the feed head is past the cursor
+        // (and past what an in-flight poll was sent for).
+        const seq = Number(ev.seq) || 0;
+        if (seq > this.announced) this.announced = seq;
+        if (seq && seq <= this.seq) return;
+        if (seq && this.inflight && seq <= this.issuedFor) return;
+      }
       void this.pollChanges();
     }
   }
@@ -179,22 +272,14 @@ class VU {
       return this.inflight;
     }
     this.pollAgain = false;
+    this.issuedFor = this.announced;
     const since = this.seq;
     this.inflight = (async () => {
       const r = await this.c.get(`/api/changes?since=${since}&payload=1&limit=500`, { name: "changes" });
       const body = r.status === 200 ? r.json() : null;
-      const now = Date.now();
       if (body && Array.isArray(body.changes)) {
         this.seq = Math.max(this.seq, Number(body.seq) || 0);
-        for (const ch of body.changes) {
-          const key = changeKey(ch);
-          const known = this.rows.get(key);
-          if (known && Number(ch.rev) >= known.rev) this.rows.set(key, { rev: Number(ch.rev), payload: ch.payload || {}, deleted: !!ch.deleted });
-          const mark = ch.payload && ch.payload.lastMark;
-          if (this.observer && mark && !String(mark).startsWith(this.id + ":")) {
-            metrics.events.push({ e: "seen", mark, t: now, by: this.id });
-          }
-        }
+        this.applyChanges(body.changes);
       }
     })().finally(() => {
       this.inflight = null;
@@ -202,6 +287,27 @@ class VU {
     });
     return this.inflight;
   }
+
+  applyChanges(changes) {
+    const now = Date.now();
+    for (const ch of changes) {
+      const key = changeKey(ch);
+      const known = this.rows.get(key);
+      if (known && Number(ch.rev) >= known.rev) this.rows.set(key, { rev: Number(ch.rev), payload: ch.payload || {}, deleted: !!ch.deleted });
+      if (this.observer && ch.payload && !ch.deleted) {
+        // Every mark in the row this observer has not seen yet (a burst of
+        // saves on one row between two polls shows up as one change).
+        for (const [vu, n] of Object.entries(marksOf(ch.kind, ch.payload))) {
+          if (vu === this.id) continue;
+          const mark = `${vu}:${n}`;
+          if (this.seen.has(mark)) continue;
+          this.seen.add(mark);
+          metrics.events.push({ e: "seen", mark, t: now, by: this.id, ls: this.liveSince });
+        }
+      }
+    }
+  }
+
 
   async screenLoop() {
     while (this.alive) {
@@ -211,7 +317,8 @@ class VU {
       while (this.alive && Date.now() < until) {
         await this.readScreen(first);
         first = false;
-        await sleep(2000);
+        // p0as81 re-reads an open list every 2 s; p0as83 every 20 s (the feed brings changes).
+        await sleep(this.cfg.client === "p0as83" ? 20000 : 2000);
       }
     }
   }
@@ -221,12 +328,12 @@ class VU {
     const period = f.period;
     const s = this.screen;
     // The runner does not need the rows; `raw` skips decoding the body (runner CPU).
-    if (s === "people") return this.c.get("/api/people?limit=80", { name: "people-list", raw: true });
-    if (s === "rewards") return this.c.get(`/api/reward-records/${f.rewardPeriod}?limit=80`, { name: "rewards-month", raw: true });
-    if (s === "apms-month") return this.c.get(`/api/month-records/${period}?limit=80`, { name: "apms-month", raw: true });
+    if (s === "people") return this.screenGet("/api/people?limit=80", "people-list");
+    if (s === "rewards") return this.screenGet(`/api/reward-records/${f.rewardPeriod}?limit=80`, "rewards-month");
+    if (s === "apms-month") return this.screenGet(`/api/month-records/${period}?limit=80`, "apms-month");
     if (s === "apms-person") {
-      const pid = f.people[this.idx % f.people.length];
-      return this.c.get(`/api/month-records/${period}/${encodeURIComponent(pid)}`, { name: "apms-person" });
+      const pid = this.editor ? f.people[this.idx % f.people.length] : this.login.personId;
+      return this.screenGet(`/api/month-records/${period}/${encodeURIComponent(pid)}`, "apms-person");
     }
     if (!first) return null;
     if (s === "org") {
@@ -234,22 +341,42 @@ class VU {
       return this.c.get(`/api/org?kind=${kind}`, { name: "org-kind" });
     }
     if (s === "person") {
-      const pid = f.people[Math.floor(Math.random() * f.people.length)];
+      const pid = this.editor ? f.people[Math.floor(Math.random() * f.people.length)] : this.login.personId;
       return this.c.get(`/api/people/${encodeURIComponent(pid)}`, { name: "person" });
     }
     return null;
   }
 
+  /** A list re-read; p0as83 sends the ETag it last got (304 = unchanged). */
+  async screenGet(path, name) {
+    if (this.cfg.client !== "p0as83") return this.c.get(path, { name, raw: true });
+    const hit = this.etags.get(path);
+    const headers = hit && Date.now() - hit.at < 60000 ? { "if-none-match": hit.etag } : {};
+    const r = await this.c.get(path, { name, raw: true, headers });
+    if (r.status === 200 && r.headers.etag) this.etags.set(path, { etag: r.headers.etag, at: hit && hit.etag === r.headers.etag ? hit.at : Date.now() });
+    return r;
+  }
+
   pickSaveRow() {
     const f = this.cfg.fixture;
-    if (Math.random() < 0.2) return { ...f.shared[Math.floor(Math.random() * f.shared.length)], shared: true };
-    const i = this.idx;
-    const r = Math.random();
-    const pid = f.people[i % f.people.length];
-    if (r < 0.35) return { table: "month", period: f.period, personId: pid };
-    if (r < 0.6) return { table: "reward", period: f.rewardPeriod, personId: pid };
-    if (r < 0.75) return { table: "people", id: pid };
-    return { table: "entity", kind: "target-history", id: f.history[i % f.history.length] };
+    const me = this.login.personId;
+    if (this.editor) {
+      // Editors make the shared-record saves (≈20 % of all saves with the
+      // fixture's 28 % editors) and edit other people's plans.
+      if (Math.random() < this.cfg.editorSharedRate) return { ...f.shared[Math.floor(Math.random() * f.shared.length)], shared: true };
+      const r = Math.random();
+      const pid = f.people[Math.floor(Math.random() * f.people.length)];
+      if (r < 0.4) return { table: "month", period: f.period, personId: pid };
+      if (r < 0.7) return { table: "reward", period: f.rewardPeriod, personId: pid };
+      if (r < 0.85) return { table: "people", id: pid };
+      return { table: "entity", kind: "target-history", id: f.history[this.idx % f.history.length] };
+    }
+    // Everyone else: their own plan (self comments), as batch 3 allows.
+    const hasReward = f.rewardPeople.includes(me);
+    if (hasReward && Math.random() < 0.4) return { table: "reward", period: f.rewardPeriod, personId: me, own: true };
+    if (f.monthPeople.includes(me)) return { table: "month", period: f.period, personId: me, own: true };
+    if (hasReward) return { table: "reward", period: f.rewardPeriod, personId: me, own: true };
+    return null;
   }
 
   async currentRow(row) {
@@ -295,22 +422,34 @@ class VU {
 
   async doSave() {
     const row = this.pickSaveRow();
+    if (!row) return;
     const n = ++this.saveN;
     const mark = `${this.id}:${n}`;
-    const edit = (p) => ({ ...p, lastMark: mark, loadMarks: { ...(p && p.loadMarks), [this.id]: n } });
+    const edit = (p) => withMark(row.table, p || {}, this.id, n);
     const res = await this.save(row, edit, `save-${row.table === "entity" ? row.kind : row.table}${row.shared ? "-shared" : ""}`);
+    if (res.status === 200 && this.editor && this.orgBook && (row.table === "people" || row.table === "entity")) void this.bookPatch();
     if (res.status === 200) {
       metrics.events.push({ e: "ack", mark, vu: this.id, n, row: feedKey(row), path: hotPath(row), t: res.ackAt, sent: res.sentAt, attempts: res.attempts });
       // Read-after-write: the row right away, as the screen's next read does.
       const r = await this.c.get(hotPath(row), { name: "raw-row" });
       const b = r.json();
-      const ok = !!b && b.payload && b.payload.loadMarks && Number(b.payload.loadMarks[this.id]) >= n;
+      const ok = !!b && Number(marksOf(row.table, b.payload)[this.id]) >= n;
       // A read that failed (timeout under overload) is not a stale read: recorded apart.
       if (r.status === 200) metrics.events.push({ e: "raw", kind: "row", ok, mark, why: ok ? undefined : `rev ${b && b.rev} vs acked ${res.rev}` });
       else metrics.events.push({ e: "raw", kind: "row-failed", ok: false, mark, why: `status ${r.status}` });
       if (Math.random() < this.cfg.rawWireSample) await this.rawWire(row, mark, n);
     } else if (res.status !== "skip" && res.status !== "deleted") {
       metrics.error("save", `${res.status} ${hotPath(row)}`);
+    }
+  }
+
+  /** The SPA's org-book PATCH after an org / people edit (409 → rebase on the answer's gens, once). */
+  async bookPatch() {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await this.c.patch("/api/company", { books: { org: this.orgBook }, baseGens: this.bookGens, clientOpId: `${this.id}-b-${Date.now()}` }, { name: "book-patch" });
+      const b = r.json() || {};
+      if (b.bookGens && typeof b.bookGens === "object") this.bookGens = b.bookGens;
+      if (r.status !== 409) return;
     }
   }
 
@@ -331,13 +470,13 @@ class VU {
     else if (row.table === "cell") p = snap.targetCells?.[row.id];
     else if (row.kind === "target-history") p = (snap.targetHistory || []).find((x) => x && x.id === row.id);
     else if (row.kind === "kpi-master") p = (snap.kpiMaster || []).find((x) => x && x.id === row.id);
-    inWire = !!p && p.loadMarks && Number(p.loadMarks[this.id]) >= n;
+    inWire = !!p && Number(marksOf(row.table, p)[this.id]) >= n;
     let inReplay = inWire;
     if (!inWire) {
       const f = await this.c.get(`/api/changes?since=${Number(snap.feedSeq) || 0}&payload=1&limit=500`, { name: "raw-replay" });
       const fb = f.json();
       const key = feedKey(row);
-      inReplay = !!fb?.changes?.some((ch) => changeKey(ch) === key && ch.payload?.loadMarks && Number(ch.payload.loadMarks[this.id]) >= n);
+      inReplay = !!fb?.changes?.some((ch) => changeKey(ch) === key && Number(marksOf(row.table, ch.payload)[this.id]) >= n);
     }
     metrics.events.push({ e: "raw", kind: "wire", ok: inWire, mark });
     metrics.events.push({ e: "raw", kind: "wire+replay", ok: inReplay, mark });
@@ -361,14 +500,21 @@ class VU {
     this.alive = true;
     if (!(await this.signIn())) return;
     await this.openPage();
-    this.timers.push(setInterval(() => void this.tick(false), 2500));
-    await sleep(rand(0, 2500));
-    this.timers.push(setInterval(() => void this.tick(true), 2500));
+    if (this.cfg.client === "p0as83") {
+      // One real tick per 5 s, shared by the SPA and sync timers (whichever fires first).
+      let flip = false;
+      await sleep(rand(0, 5000));
+      this.timers.push(setInterval(() => void this.tick((flip = !flip)), 5000));
+    } else {
+      this.timers.push(setInterval(() => void this.tick(false), 2500));
+      await sleep(rand(0, 2500));
+      this.timers.push(setInterval(() => void this.tick(true), 2500));
+    }
     void this.screenLoop();
     void (async () => {
       await sleep(rand(5000, 30000));
       while (this.alive) {
-        if (Math.random() < this.cfg.deleteProbeRate) await this.deleteProbe();
+        if (this.editor && Math.random() < this.cfg.deleteProbeRate) await this.deleteProbe();
         else await this.doSave();
         await sleep(rand(20000, 40000));
       }
@@ -384,6 +530,7 @@ class VU {
 
   stop() {
     this.alive = false;
+    if (this.pushWait) clearTimeout(this.pushWait);
     for (const t of this.timers) clearInterval(t);
     if (this.sse) this.sse.close();
     this.c.close();
