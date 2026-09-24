@@ -168,6 +168,14 @@ async function prepareFixture(pool) {
       [p.username, p.id, PASSWORD],
     );
   }
+  // The server imports the hot tables in the background after boot (p0as81
+  // lazily); a run that started before it had no month to save to.
+  for (let i = 0; i < 240; i++) {
+    const n = (await pool.query(`select (select count(*) from month_records) m, (select count(*) from reward_records) r`)).rows[0];
+    if (Number(n.m) > 0 && Number(n.r) > 0) break;
+    if (i === 239) throw new Error("hot tables never imported (month_records / reward_records empty)");
+    await new Promise((r) => setTimeout(r, 500));
+  }
   const period = (await pool.query(`select period from month_records where deleted_at is null group by 1 order by count(*) desc limit 1`)).rows[0]?.period;
   const rewardPeriod = (await pool.query(`select period from reward_records where deleted_at is null group by 1 order by count(*) desc limit 1`)).rows[0]?.period;
   const monthPeople = (await pool.query(`select person_id from month_records where period = $1 and deleted_at is null order by person_id`, [period])).rows.map((r) => r.person_id);
