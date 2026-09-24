@@ -138,6 +138,8 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 
 - **BATCH-2** — 24 Sep 2026 IST. Stamp **p0as81** (`scripts/stamp-p0as81-batch2.mjs`: routes from p0as80 + login-view in place), migration `0010_apms_sessions.sql`. **Security:** server-issued session tokens only (`apms_sessions`, SHA-256; forged / `apms-login.*` / `apms-preview-sunny` → 401 on every `/api/*` and `/_serverFn/*`), HttpOnly cookie, sign-out revokes; `/api/issued-logins` + `/api/provision-logins` anonymous 401 / non-admin 403 (own row allowed on issued-logins) / admin 200; admin-only restore, backups, legacy snapshot save, access-role rows, other people's login rows, access-role changes and other people's passwords via `/api/people/:id`; forgot password never returns a temp password and changes nothing unless it was emailed. **Three users on Org / People / Me / Home / Settings** (`scripts/e2e/batch2-three-users.mjs`): restore reaches every screen (resync logged last + `pg_notify`, `restorePull`, apply reason `restore` wins over unsaved edits); access-role Save sends only changed fields; setupDone / companyFactor saved; backup list live; failed feed poll retries; accepted passwords not re-sent; Trash restore re-creates over the tombstone only when this save removed the trash row (people too; stale book tombstones dropped); autosave reruns after an in-flight save; stable ids for derived reminders; KROC editor no stale autosave; Brands & SBUs tree depth / un-nest / reorder; drag-left at the end of a subtree un-nests; **sibling reorder saved** (`sortKey` on sibling rows, `siblingOrder` collections, people in book order). See `REPORT-BATCH-2.md`.
 
+- **BATCH-3** — 24 Sep 2026 IST. Stamp **p0as82** (`scripts/stamp-p0as82-batch3.mjs` + `stamp-p0as82-targets.mjs`: routes from p0as81, login-view in place, sync / collections `?v=p0as82`), migration `0011_batch3_security.sql` (record only; runtime-created). **Server-side permissions** (LOCK PERMISSIONS, `src/lib/apms-permissions.ts`): per-viewer wire, every read / write path, hidden fields preserved (also through 409), 403 `{error:"forbidden", kind, field}`. **Passwords** scrypt-hashed everywhere + one-time conversion with a backup table; nothing secret on any reply (incl. backup download, book 409, restore reply). **Sign-in** lock-out 5 / username, 30 / IP per 15 min (DB), admin unlock (Assign people → Locked sign-ins), `APMS_DEFAULT_PIN=on|off` (default on), sessions end on admin reset / own change and open tabs land on sign-in. **Targets / Rewards**: delete guard, `targetLinkBroken` icon + banner + Re-link, relink offer on same-name re-create, second-group regression, import blank keeps the value + summary. **Also fixed**: public company dumps (salaries, plain passwords) served anonymously — removed; `uat.*` keep-alive removed; month-wipe tombstone by any user; Me → Save crash for non-admins (TDZ); an admin's stale temp password re-sent with later edits; fresh-DB seed race (empty months / targets books) and partial first wire (53 / 180 people); double-counted wrong passwords; Download sheet repeating passwords. See `REPORT-BATCH-3.md`.
+
 ## OPEN
 
 - ROWS-V2: **built (node-server) and two-browser tested on local Postgres (p0as78 / p0aw3) — `REPORT-ROWS-V2-SMOKE.md`. NOT on live.** Next: staging 3010 with `aliens_apms_test`, then live.
@@ -200,6 +202,7 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - ROSTER-LOCK: **done in tree** (p0as44). Rewards/APMS/award store `rosterId`; reads use that roster; rebind is admin+audit only.
 - BOOT-PAREN: **done in tree** (p0as45). Extra `)` in routes G9 patch removed; SPA parses. Hard refresh `?v=p0as45`.
 - BATCH-2: **done in tree** (p0as81). Open design decisions: server-side read scoping and write permissions per access role (today only the SPA enforces grants), hashing stored passwords, sign-in rate limit, revoking sessions on an admin password reset, `sunny.b`/`0000` and the `0000` default (pending Sunny). Live until Eng cuts p0as81 (every browser signs in once after the cut).
+- BATCH-3: **done in tree** (p0as82, branch `batch-3`, not merged). Open decisions for Sunny in `REPORT-BATCH-3.md` §6 (targets visible to employees, role-case writes, HR backups, SPA-only flags, `sunny.b` lock-out exemption, per-IP limit, when to switch `APMS_DEFAULT_PIN` off, git-history purge of the old dumps). Live until Eng cuts p0as82 (every browser signs in once; one-time password conversion; drop the backup table after).
 - Do not start Step 8.
 
 ## ACCEPTANCE
@@ -255,14 +258,22 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 | Forgot password never returns a temp password, never changes a password it did not email | **pass** (BATCH-2 e2e) | untested on live until cut |
 | Org / People / Me / Home / Settings × six checks, three users | **pass** (BATCH-2, fresh DB; see REPORT-BATCH-2.md) | untested until cut |
 | Restore wins over B's unsaved edit; B and C switch without reload | **pass** (BATCH-2) | untested until cut |
+| Server-side permissions: employee / manager / function head / HR read only what their role allows on every read route (wire, books, LOAD, people, APMS / Rewards lists + rows, /api/e, /api/changes ± payload, hints, org, backups); refused writes 403 `{error, kind, field}` on every write route | **pass** (security-batch3 176/176, fresh DB) | untested until p0as82 is cut |
+| Restricted user's save keeps hidden fields (also through a 409 merge) | **pass** (security-batch3 F, batch-3 restricted-editor / employee-d) | untested until cut |
+| Passwords scrypt at rest; one-time conversion + backup table; idempotent; nothing secret on any read | **pass** (security-batch3 H + unit) | untested until cut |
+| Lock-out 5 / user, 30 / IP, survives restart, admin unlock; sign-in screen message | **pass** (security-batch3 L, batch-3 signin-lockout) | untested until cut |
+| Admin reset / own change ends the other sessions; open tabs on sign-in < 2 s | **pass** (security-batch3 S, batch-3 session-ended) | untested until cut |
+| `APMS_DEFAULT_PIN` on / off | **pass** (security-batch3 D, batch-3 default-pin) | untested until cut (switch stays on) |
+| Targets delete guard / broken link icon + banner + Re-link / relink offer / second group / import blank keeps + summary | **pass** (batch-3 targets-* scenarios + unit) | untested until cut |
 
 No fake live G9 pass.
 
 ## KNOWN BROKEN
 
 - ROWS-V2 two-browser smoke passes locally; SPA editors still write derived role fields (`band`) from their own state and re-seed award prizes on load (one 409 probe per row, no write). See `REPORT-ROWS-V2-SMOKE.md` → Follow-ups.
-- Legacy sign-in (`apms-credentials.ts`): `sunny.b` / `sunny` with password `0000` always signs in, and any person with no stored password signs in with `0000` (167 of 176 active people on the seed). Server-side only now (the wire no longer carries passwords), but still a hard-coded credential — **pending Sunny's decision** (BATCH-2 left it in place as instructed).
-- BATCH-2: any signed-in person can still READ the whole company and WRITE most rows through the API; access-role grants are enforced in the SPA only (admin-only exceptions listed in LOCKS). Passwords at rest are plain text. No sign-in rate limit.
+- Legacy sign-in (`apms-credentials.ts`): `sunny.b` / `sunny` with password `0000` always signs in, and any person with no stored password signs in with `0000` — **while `APMS_DEFAULT_PIN=on` (default, left on for Sunny)**. `APMS_DEFAULT_PIN=off` refuses both (BATCH-3, tested). Pending Sunny: issue remaining logins, give sunny.b its own password, then switch off.
+- ~~BATCH-2: any signed-in person can still READ the whole company and WRITE most rows through the API~~ — fixed in BATCH-3 (server-side permissions, hashed passwords, sign-in limits). Still SPA-only: flags `month_actuals`, `changelog`, `approve`, `frozen_edit`; role-case approval steps (see REPORT-BATCH-3 §6).
+- Git history of this repository still contains the two company dumps that were in `public/` (salaries, 10 plain-text login passwords) and the seed's 9 plain-text logins; purging needs a force-push (Sunny's call). Treat those passwords as exposed: re-issue them.
 - Live G9 on p0as14: B entityGets=0 / pulls=55. Fixed in tree p0as69 (hop B: do not drop hints vs lastWireAt; hyphen URL; no company GET). Next LOAD-10 must be LIVE_SEES_HIRE 3/3, LIVE_SEES_LOCK 3/3, B entityGets >= 2.
 - This tree is not on Contabo. Hard refresh on live still loads p0as12/p0as14. Preview must load `routes-e2g7y5q8-13m-p0as72.js` and `apms-sync.js?v=p0as77`.
 - Restore targets still a separate hole until p0as41 is cut.
@@ -271,7 +282,7 @@ No fake live G9 pass.
 
 ## HANDOFF
 
-- Stamp / host: **tree p0as81** (routes `routes-e2g7y5q8-13m-p0as81.js`, sync / collections / login-view / dnd-engine `?v=p0as81`), server migration `0010_apms_sessions.sql`; **live p0as39 / LOAD-10 p0as14** https://apms.alienstattoo.in
-- What passed (fresh DB, built node-server, three real admins): batch 2 Org / People / Me / Home / Settings × six checks, restore-wins and password-reset special cases; security suite (44 routes × forged tokens 401; login writes 401/403/200); batch 1 APMS / Rewards / Targets + module smoke. `npm test` and `npm run typecheck` clean. See `REPORT-BATCH-2.md`.
-- What is still open: see OPEN (design decisions) and KNOWN BROKEN; `sunny.b`/`0000` pending Sunny.
-- Exact next named job: Sunny decides on `0000`; Eng cut p0as81 when asked (`NITRO_PRESET=node-server`; everyone signs in once). Do not start Step 8.
+- Stamp / host: **tree p0as82** (routes `routes-e2g7y5q8-13m-p0as82.js`, sync / collections / login-view `?v=p0as82`), branch `batch-3`, pack `aliens-apms-p0as82.zip` (pre-built `.output`, no install / build); **live p0as39 / LOAD-10 p0as14** https://apms.alienstattoo.in
+- What passed (fresh DB per suite, built node-server): see `REPORT-BATCH-3.md` §1 — batch 3 (four browsers), security batch 3 and batch 2, batch 1, batch 2 ×3; `npm test` + `npm run typecheck` clean.
+- What is still open: REPORT-BATCH-3 §6 (decisions for Sunny); KNOWN BROKEN.
+- Exact next named job: Sunny decides §6 items; Eng cuts p0as82 when asked (drop `apms_password_backup_*` after sign-in is confirmed; remove live `uat.*` rows). Do not start Step 8.

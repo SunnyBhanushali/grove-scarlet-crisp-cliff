@@ -794,9 +794,9 @@ export async function loadRequestedBooks(ids: BookId[], personId?: string): Prom
   let slim = parseSnapshot(wire.snapshotJson) || {};
   if (personId) {
     // BATCH-3: `?books=` reads are filtered by the caller's access role like the wire.
-    const { wireForViewer } = await import("./company-wire-http");
-    const scoped = await wireForViewer(wire, personId);
-    if (!scoped.full) slim = scoped.view.snapshot as Snapshot;
+    const { snapshotForViewer } = await import("./company-wire-http");
+    const seen = await snapshotForViewer(wire, personId);
+    if (seen) slim = seen as Snapshot;
   }
   const books: Partial<Record<BookId, Record<string, unknown>>> = {};
   for (const id of ids) books[id] = bookPayload(slim, id);

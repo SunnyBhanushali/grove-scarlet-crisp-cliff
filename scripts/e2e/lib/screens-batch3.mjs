@@ -21,7 +21,7 @@
 import { ScreenResult, realWrites, brief, pwEq } from "./harness.mjs";
 import { openWithoutWrites, endChecks } from "./screens-apms.mjs";
 import { openSettings, resetLogin, freshPage, uiSignIn, setFirstPassword, apiSignIn, apiPost, personIdByName } from "./settings-page.mjs";
-import { openFile, detail, startEdit, setField, saveEdit, openMe, changeOwnPassword, signInAny, waitQuiet } from "./people-page.mjs";
+import { openFile, detail, startEdit, setField, saveEdit, openMe, changeOwnPassword, signInAny, waitQuiet, field } from "./people-page.mjs";
 
 const NIK = { user: "nikhil.pati", name: "Nikhil Patil" };
 const RAVI = { user: "ravi.kuma", name: "Ravi Kumar Bable", pw: "Ravi-e2e-1" };
@@ -414,7 +414,12 @@ export async function restrictedEditor(ctx, run) {
     await openFile(ctx, C, member.name);
     await openFile(ctx, F.page, member.name);
     const cLoc = await detail(C, "Location");
-    const fLoc = (await detail(F.page, "Location")) ?? ((await F.page.locator("main").innerText()).includes(a2.location) ? a2.location : null);
+    // A function head's read-only card has no Location row; the Edit form shows it.
+    let fLoc = await detail(F.page, "Location");
+    if (fLoc === null) {
+      await startEdit(F.page);
+      fLoc = await field(F.page, "Location").inputValue().catch(() => null);
+    }
     await shot(F.page, "restricted-editor-after-reload");
     R.expect(5, cLoc === a2.location && fLoc === a2.location, `after reload C "${cLoc}", F "${fLoc}", DB "${a2.location}"`);
   } finally {

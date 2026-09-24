@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 import { hasValidSession, sessionPersonId, unauthorizedJson } from "./apms-request-auth";
 import { getCompanyWire, type CompanyWire } from "./company-notebook";
 
@@ -51,31 +52,40 @@ export function clientMatchesWire(clientAt: number, wireAt: number): boolean {
  * access role (apms-permissions `filterSnapshot`), encoded once per viewer and
  * wire version and cached (small LRU).
  */
-type ViewerWire = { at: number; jsonBody: Buffer; gzipBody: Buffer; snapshot: Record<string, unknown> };
+type ViewerWire = { at: number; gzipBody: Buffer };
 const viewerWires = new Map<string, ViewerWire>();
-const VIEWER_WIRE_MAX = 400;
+// Only the gzip body is kept (~75 KB for an employee; JSON is decompressed on
+// the rare request without gzip), so 200 viewers cost ~15 MB, not gigabytes.
+const VIEWER_WIRE_MAX = 200;
 
 export function resetViewerWiresForTests(): void {
   viewerWires.clear();
+}
+
+/** The snapshot as this person may read it; null when they read everything (use the shared wire). */
+export async function snapshotForViewer(wire: CompanyWire, personId: string): Promise<Record<string, unknown> | null> {
+  const { loadViewer, viewKey, filterSnapshot } = await import("./apms-permissions.ts");
+  const viewer = await loadViewer(personId);
+  if (viewKey(viewer) === "full") return null;
+  const slim =
+    (wire.slim as Record<string, unknown> | undefined) ||
+    (JSON.parse(wire.snapshotJson || "{}") as Record<string, unknown>);
+  return filterSnapshot(viewer, slim);
 }
 
 export async function wireForViewer(
   wire: CompanyWire,
   personId: string,
 ): Promise<{ full: true } | { full: false; view: ViewerWire }> {
-  const { loadViewer, viewKey, filterSnapshot } = await import("./apms-permissions.ts");
-  const viewer = await loadViewer(personId);
-  const key = viewKey(viewer);
+  const { loadViewer, viewKey } = await import("./apms-permissions.ts");
+  const key = viewKey(await loadViewer(personId));
   if (key === "full") return { full: true };
   const hit = viewerWires.get(key);
   if (hit && hit.at === wire.at) return { full: false, view: hit };
-  const slim =
-    (wire.slim as Record<string, unknown> | undefined) ||
-    (JSON.parse(wire.snapshotJson || "{}") as Record<string, unknown>);
-  const filtered = filterSnapshot(viewer, slim);
+  const filtered = await snapshotForViewer(wire, personId);
   const { encodeCompanyWire } = await import("./company-wire-cache.ts");
-  const enc = encodeCompanyWire(filtered, wire.at, wire.bookGens);
-  const view = { at: wire.at, jsonBody: enc.jsonBody, gzipBody: enc.gzipBody, snapshot: enc.slim as Record<string, unknown> };
+  const enc = encodeCompanyWire(filtered || {}, wire.at, wire.bookGens);
+  const view = { at: wire.at, gzipBody: enc.gzipBody };
   viewerWires.delete(key);
   viewerWires.set(key, view);
   while (viewerWires.size > VIEWER_WIRE_MAX) viewerWires.delete(viewerWires.keys().next().value as string);
@@ -99,9 +109,9 @@ export async function handleCompanyGetRequest(request: Request): Promise<Respons
   if (clientMatchesWire(at, wire.at)) {
     return new Response(unchangedWireBody(wire.at, personId, wire.bookGens), { status: 200, headers });
   }
-  const bodies = scoped.full ? wire : scoped.view;
+  const gzipBody = scoped.full ? wire.gzipBody : scoped.view.gzipBody;
   if (acceptGzip(request.headers)) {
-    return new Response(new Uint8Array(bodies.gzipBody), {
+    return new Response(new Uint8Array(gzipBody), {
       status: 200,
       headers: {
         ...headers,
@@ -109,5 +119,6 @@ export async function handleCompanyGetRequest(request: Request): Promise<Respons
       },
     });
   }
-  return new Response(new Uint8Array(bodies.jsonBody), { status: 200, headers });
+  const jsonBody = scoped.full ? wire.jsonBody : gunzipSync(scoped.view.gzipBody);
+  return new Response(new Uint8Array(jsonBody), { status: 200, headers });
 }
