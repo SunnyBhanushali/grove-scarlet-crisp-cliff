@@ -142,3 +142,31 @@ test("plans KRA/KPI rows use people-style pointer dnd", () => {
   assert.equal(css.includes("apms-rt--dragging-kra"), true);
   assert.equal(css.includes(".plan-kra-body"), true);
 });
+
+test("slotToDrop: drag left after the last child of a subtree takes the ancestor's parent", async () => {
+  // sunny > t3 > (t1, t2); t1 dragged left one level into the slot after t2 (end of the list).
+  const rows = [
+    { id: "sunny", key: "person:sunny", depth: 1 },
+    { id: "t3", key: "person:t3", depth: 2 },
+    { id: "t1", key: "person:t1", depth: 3 },
+    { id: "t2", key: "person:t2", depth: 3 },
+  ];
+  const h = 52;
+  const rects = rows.map((_, i) => ({ top: i * h, bottom: (i + 1) * h, height: h }));
+  const target = projectSlot(rows, rects, 2, 3 * h + 30, -30);
+  assert.ok(target);
+  assert.equal(target.depth, 2);
+  assert.equal(target.parentId, "sunny");
+  const want = { overKey: "person:t3", mode: "after" };
+  assert.deepEqual(slotToDrop(rows, 2, target), want);
+  // Same maths in the browser engine the SPA loads.
+  // (URL import: the engine is plain browser JS, not type-checked.)
+  const engineUrl = new URL("../../recovered-site/assets/apms-dnd-engine.js", import.meta.url).href;
+  const engine = (await import(engineUrl)) as {
+    slotToDrop: (...a: unknown[]) => unknown;
+    projectSlot: (...a: unknown[]) => unknown;
+  };
+  assert.deepEqual(engine.slotToDrop(rows, 2, engine.projectSlot(rows, rects, 2, 3 * h + 30, -30, 28, 1)), want);
+  // Still "after prev" when prev is at the target depth.
+  assert.deepEqual(slotToDrop(rows, 2, { t: 3, depth: 3, parentId: "t3" }), { overKey: "person:t2", mode: "after" });
+});

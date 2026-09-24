@@ -99,6 +99,12 @@ export function slotToDrop(
   if (next && target.depth <= next.depth) {
     return { overKey: next.key, mode: "before" };
   }
+  // Shallower than prev (drag left at the end of a subtree): go after prev's
+  // ancestor at the target depth, so the row takes that ancestor's parent.
+  for (let i = target.t - 1; i >= 0; i--) {
+    if (others[i].depth === target.depth) return { overKey: others[i].key, mode: "after" };
+    if (others[i].depth < target.depth) break;
+  }
   return { overKey: prev.key, mode: "after" };
 }
 

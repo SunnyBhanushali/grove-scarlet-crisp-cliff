@@ -133,6 +133,59 @@ export function stampLogin(src) {
   return out;
 }
 
+// Org batch-2 fixes: KROC editor autosave (fix 1), Brands & SBUs drag depth +
+// top-of-brand reorder (fix 2), brand/SBU double-click rename (fix 5).
+const ORG_FIXES = [
+ {
+  "what": "org fix 1: Role KROC editor (Pf): track the KRAs the draft was seeded from; an idle editor takes other users' KRA changes and the 8 s autosave only fires for a real local edit (it used to re-save the stale draft over them).",
+  "old": "(0,Z.useEffect)(()=>{o((i.kras||[]).map(ci))},[e]);let d=JSON.stringify(a)!==JSON.stringify((i.kras||[]).map(ci)),f=zt(a);",
+  "new": "let sd=(0,Z.useRef)(null),sk=JSON.stringify((i.kras||[]).map(ci));sd.current===null&&(sd.current=JSON.stringify(a));(0,Z.useEffect)(()=>{let v=(i.kras||[]).map(ci);sd.current=JSON.stringify(v);o(v)},[e]);(0,Z.useEffect)(()=>{JSON.stringify(a)===sd.current&&sk!==sd.current&&(sd.current=sk,o(JSON.parse(sk)))},[sk]);let d=JSON.stringify(a)!==sd.current,f=zt(a);",
+  "n": 1
+ },
+ {
+  "what": "org fix 1: Role KROC editor (Pf): after Save draft / Publish the saved KRAs become the new seed.",
+  "old": "r(e,e=>{e.kras=a,e.krocStatus=t,e.krocSavedAt=new Date().toISOString()}),c(t===",
+  "new": "r(e,e=>{e.kras=a,e.krocStatus=t,e.krocSavedAt=new Date().toISOString()}),sd.current=JSON.stringify(a),c(t===",
+  "n": 1
+ },
+ {
+  "what": "org fix 2: Brands & SBUs drag: root drop wrapper so brands sit at depth 1 (like person:root / fn:root); without it every row was depth 0 and drag-left / reorder could only nest.",
+  "old": "children:e})}function zd(){",
+  "new": "children:(0,Q.jsx)(`div`,{\"data-drop\":`sbu:root`,children:e})})}function zd(){",
+  "n": 1
+ },
+ {
+  "what": "org fix 2: Brand row: the data-drop element now wraps the brand row AND its SBU list (children were a sibling container, so the drag engine saw no nesting).",
+  "old": "return(0,Q.jsxs)(`div`,{children:[(0,Q.jsx)(Ud,{open:s,hasKids:m.length>0||g,",
+  "new": "return(0,Q.jsxs)(`div`,{\"data-drop\":`brand:${e.id}`,className:ec(Qs(),`brand:${e.id}`,e.id),children:[(0,Q.jsx)(Ud,{outer:!0,open:s,hasKids:m.length>0||g,",
+  "n": 1
+ },
+ {
+  "what": "org fix 2: SBU row: the data-drop element wraps the SBU row AND its nested SBUs.",
+  "old": "return(0,Q.jsxs)(`div`,{children:[(0,Q.jsx)(Ud,{open:s,hasKids:m.length>0||y,",
+  "new": "return(0,Q.jsxs)(`div`,{\"data-drop\":`sbu:${e.id}`,className:ec(Qs(),`sbu:${e.id}`,e.id),children:[(0,Q.jsx)(Ud,{outer:!0,open:s,hasKids:m.length>0||y,",
+  "n": 1
+ },
+ {
+  "what": "org fix 2: Ud row chrome: when the caller owns the data-drop wrapper (outer), the row itself is not a second drop target.",
+  "old": "onDelete:p,onGroup:m,dropKey:h,dragId:g}){let _=Qs();return(0,Q.jsxs)(`div`,{\"data-drop\":h,className:ec(_,h||``,g||``),children:[",
+  "new": "onDelete:p,onGroup:m,dropKey:h,dragId:g,outer:ox}){let _=Qs();return(0,Q.jsxs)(`div`,{\"data-drop\":ox?void 0:h,className:ox?`relative`:ec(_,h||``,g||``),children:[",
+  "n": 1
+ },
+ {
+  "what": "org fix 5: Brand/SBU/company row: single click opens the page after 300 ms unless a double-click follows (double-click = inline rename), and the row button ignores clicks while its rename input is open (Space typed in the input activated the button and opened the page / toggled the company). Before, the first click of a double-click opened the page so rename was unreachable.",
+  "old": "onClick:a||n,onDoubleClick:e=>{e.preventDefault(),e.stopPropagation(),c()},children:(0,Q.jsx)(`span`,{className:`min-w-0 flex-1`,children:r?(0,Q.jsx)(Gd,{value:i,onSave:o,onCancel:s}):(0,Q.jsxs)(`span`,{className:`block text-left`,onDoubleClick:e=>{e.preventDefault(),e.stopPropagation(),c()},",
+  "new": "onClick:e=>{if(r)return;if(!a)return n(e);clearTimeout(window.__apmsUdOpen);if(e.detail>1)return;window.__apmsUdOpen=setTimeout(()=>a(),300)},onDoubleClick:e=>{e.preventDefault(),e.stopPropagation(),clearTimeout(window.__apmsUdOpen),c()},children:(0,Q.jsx)(`span`,{className:`min-w-0 flex-1`,children:r?(0,Q.jsx)(Gd,{value:i,onSave:o,onCancel:s}):(0,Q.jsxs)(`span`,{className:`block text-left`,onDoubleClick:e=>{e.preventDefault(),e.stopPropagation(),clearTimeout(window.__apmsUdOpen),c()},",
+  "n": 1
+ },
+ {
+  "what": "org fix 2: Brands & SBUs drop handler (Ld): a drop in the first slot under a brand arrives as 'inside brand'; treat it as 'before the brand's first SBU' so a same-depth reorder to the top of a brand calls reorderSbu (it only called nestSbu(e,null), a no-op, so nothing was written).",
+  "old": "n===`before`&&t[0]&&r.reorderSbu(e,t[0].id,`before`)",
+  "new": "(n===`before`||n===`inside`)&&t[0]&&r.reorderSbu(e,t[0].id,`before`)",
+  "n": 1
+ }
+];
+
 export function stampRoutes(src) {
   let out = times(src, APPLY_OLD, APPLY_NEW, 3, "live apply hook (restore)");
   out = times(out, ROLE_STATE_OLD, ROLE_STATE_NEW, 1, "access role dialog: values at open");
@@ -140,8 +193,11 @@ export function stampRoutes(src) {
   out = times(out, SUB_OLD, SUB_NEW, 1, "save trigger fields");
   out = times(out, BK_OLD, BK_NEW, 1, "backup list refresh");
   out = times(out, LOGIN_REF_OLD, LOGIN_REF_NEW, 2, "login-view reference");
+  // apms-dnd-engine.js changed (drag-left at the end of a subtree): new ?v=.
+  out = times(out, "apms-dnd-engine.js?v=p0as52", `apms-dnd-engine.js?v=${V}`, 1, "dnd engine reference");
   out = times(out, SAVE_BUSY_OLD, SAVE_BUSY_NEW, 1, "autosave while a save is in flight");
   out = times(out, SAVE_END_OLD, SAVE_END_NEW, 1, "autosave reruns after the in-flight save");
+  for (const f of ORG_FIXES) out = times(out, f.old, f.new, f.n, f.what);
   return out;
 }
 
