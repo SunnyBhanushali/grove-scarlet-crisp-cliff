@@ -71,9 +71,26 @@ async function main() {
   signin.expect(6, !w.length && !fives.length, w.length ? `writes on sign-in: ${w.join("; ")}` : fives.length ? `5xx: ${fives.join("; ")}` : "no writes, no 5xx");
   results.push(signin);
 
+  /**
+   * Between scenarios: wait until no browser has sent a write for 3 s (max
+   * 30 s), so a save still finishing from the previous scenario (e.g. the org
+   * book carrying the tombstones of the people it trashed at its end) is not
+   * counted as a write caused by opening the next screen (check 6).
+   */
+  async function quiesce() {
+    const t0 = Date.now();
+    for (;;) {
+      await Promise.all(Object.values(pages).map((p) => ctx.settled(p, 5000)));
+      const last = Math.max(0, ...["A", "B", "C"].flatMap((t) => ctx.net[t].filter((n) => n.m !== "GET").map((n) => n.t)));
+      if (Date.now() - last >= 3000 || Date.now() - t0 > 30000) return;
+      await ctx.sleep(500);
+    }
+  }
+
   const run = Date.now().toString(36);
   for (const [name, fn] of SCENARIOS) {
     if (only.length && !only.includes(name)) continue;
+    await quiesce();
     console.log(`\n== ${name}`);
     try {
       results.push(await fn(ctx, run + name.length));
