@@ -1,3 +1,4 @@
+import { verifyPassword } from "./apms-password.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { slimForWire, slimPersonForWire, slimLoginsForWire } from "./company-wire-slim.ts";
@@ -35,7 +36,9 @@ test("people PATCH: a client that never saw the password cannot erase it; a new 
     passwordHash: "h1",
   });
   assert.deepEqual(preservePersonSecrets({ id: "p1", name: "A", password: "" }, stored).password, "old");
-  assert.deepEqual(preservePersonSecrets({ id: "p1", name: "A", password: "new" }, stored).password, "new");
+  // BATCH-3: a new password is stored as a scrypt hash; the current one re-sent is no change.
+  assert.ok(verifyPassword("new", String(preservePersonSecrets({ id: "p1", name: "A", password: "new" }, stored).password)));
+  assert.equal(preservePersonSecrets({ id: "p1", name: "A", password: "old" }, stored).password, "old");
   // brand-new person with no stored row and no password: nothing invented
   assert.deepEqual(preservePersonSecrets({ id: "p9", name: "New" }, null), { id: "p9", name: "New" });
 });

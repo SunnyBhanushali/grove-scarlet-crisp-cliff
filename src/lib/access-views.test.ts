@@ -184,10 +184,10 @@ test("the person can write Self comments while the plan is open or locked", () =
   assert.match(routes, /"data-mgr-notes":`ro`/);
 });
 
-test("stamp p0as81 (on p0as80); fallbackPost still absent; G9 path kept", () => {
-  assert.match(html, /routes-e2g7y5q8-13m-p0as81\.js/);
-  assert.match(html, /apms-collections\.js\?v=p0as81/);
-  assert.match(html, /apms-sync\.js\?v=p0as81/);
+test("stamp p0as82 (on p0as81); fallbackPost still absent; G9 path kept", () => {
+  assert.match(html, /routes-e2g7y5q8-13m-p0as82\.js/);
+  assert.match(html, /apms-collections\.js\?v=p0as82/);
+  assert.match(html, /apms-sync\.js\?v=p0as82/);
   assert.match(routes, /login-view-f2j6t0x4-11a3-p0ar\.js\?v=p0as68/);
   assert.equal(login.includes("fallbackPost"), false);
   assert.equal(routes.includes("fallbackPost"), false);
@@ -228,7 +228,7 @@ test("p0as80 routes: a live-entity (feed) apply clears the dirty flag its own se
     "nothing else changed",
   );
   const index = readFileSync(new URL("../../public/assets/index-f4j9a7t3-11v-p0ar.js", import.meta.url), "utf8");
-  assert.equal(index.includes("routes-e2g7y5q8-13m-p0as81.js"), true);
+  assert.equal(index.includes("routes-e2g7y5q8-13m-p0as82.js"), true);
   assert.equal(index.includes("routes-e2g7y5q8-13m-p0as78.js"), false);
 });
 
@@ -242,4 +242,20 @@ test("p0as81 routes (BATCH-2): restore apply, access-role Save sends only change
   assert.equal(stamped.includes("Object.keys(d).length&&n.patchAccessRole(r.id,d)"), true);
   assert.equal(stamped.includes("`tombstones`,`setupDone`,`companyFactor`])"), true, "setupDone triggers a save");
   assert.equal(stamped.includes("setInterval(async()=>{try{let e=await fetch(`/api/company-backups`"), true, "backup list re-reads");
+});
+
+test("p0as82 routes (BATCH-3): p0as81 + the batch-3 stamp, nothing else; login-view carries the sign-in / Me pairs", async () => {
+  const { stampRoutes, AUTH_ROUTES_FIXES, AUTH_LOGIN_FIXES } = await import("../../scripts/stamp-p0as82-batch3.mjs");
+  const { TARGETS_ROUTES_FIXES, TARGETS_LOGIN_FIXES } = await import("../../scripts/stamp-p0as82-targets.mjs");
+  const base = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as81.js", import.meta.url), "utf8");
+  const stamped = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as82.js", import.meta.url), "utf8");
+  assert.equal(stamped, stampRoutes(base), "p0as82 = p0as81 + the batch-3 stamp");
+  for (const f of [...AUTH_ROUTES_FIXES, ...TARGETS_ROUTES_FIXES]) assert.ok(stamped.includes(f.new), f.what);
+  for (const f of [...AUTH_LOGIN_FIXES, ...TARGETS_LOGIN_FIXES]) assert.equal(login.split(f.new).length - 1, f.n, f.what);
+  assert.equal(stamped.split("login-view-f2j6t0x4-11a3-p0ar.js?v=p0as82").length - 1, 2);
+  assert.ok(stamped.includes("__selfPid"), "Me → Edit → Save no longer reads a shadowed `e`");
+  assert.ok(stamped.includes("function AwLocks("), "Locked sign-ins card");
+  assert.ok(!stamped.includes("password:e.password,access:e.access}));Ai(`aliens-logins-"), "Download sheet carries no passwords");
+  assert.ok(sync.includes("function checkSessionEnded("), "a session ended elsewhere leaves the app");
+  assert.ok(sync.includes('payload: sansSentSecret(entityRevKey("people", id), nextPeople[id], prevPeople[id])'), "an accepted password is not re-sent");
 });

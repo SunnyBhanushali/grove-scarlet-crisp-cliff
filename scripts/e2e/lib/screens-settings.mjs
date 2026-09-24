@@ -478,8 +478,10 @@ export async function settingsLogins(ctx, run) {
   const lines = sheet.trim().split(/\r?\n/);
   const head = lines[0].split(",");
   const pwCol = head.findIndex((h) => /password/i.test(h));
-  const withPw = lines.slice(1).filter((l) => (l.split(",")[pwCol] || "").replace(/"/g, "").trim()).length;
-  R.note(`Download sheet: ${lines.length - 1} rows, columns ${head.join("|")}; rows with a password: ${withPw} (passwords are stripped from the wire since NO-SECRETS-WIRE, so the sheet the UI calls "it has passwords" has them only for logins issued in this session)`);
+  const withPw = pwCol < 0 ? 0 : lines.slice(1).filter((l) => (l.split(",")[pwCol] || "").replace(/"/g, "").trim()).length;
+  // BATCH-3: a temporary password is shown once (issue dialog / CSV at issue time); the sheet is usernames only.
+  if (pwCol >= 0 || withPw) R.fail(1, `Download sheet still carries passwords (column ${pwCol}, ${withPw} rows)`);
+  R.note(`Download sheet: ${lines.length - 1} rows, columns ${head.join("|")}; password column ${pwCol >= 0 ? "present" : "absent"} (BATCH-3: usernames only)`);
 
   // Issue remaining (only people without a real login).
   const issuedBefore = Number((await ctx.sql("select count(*) n from issued_logins"))[0].n);

@@ -705,7 +705,32 @@ export function isEmptyish(v: unknown): boolean {
   return false;
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+/** Missing, null, "", [] and {} are the same "nothing" (the SPA fills empty defaults on hydrate). */
+function blank(v: unknown): boolean {
+  if (v === undefined || v === null || v === "") return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as Record<string, unknown>).length === 0;
+  return false;
+}
+/** Deep copy with "nothing" values removed from objects, for comparing content. */
+function norm(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(norm);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+      const x = norm((v as Record<string, unknown>)[k]);
+      if (!blank(x)) out[k] = x;
+    }
+    return out;
+  }
+  return v;
+}
+const same = (a: unknown, b: unknown) => {
+  const na = norm(a);
+  const nb = norm(b);
+  if (blank(na) && blank(nb)) return true;
+  return JSON.stringify(na ?? null) === JSON.stringify(nb ?? null);
+};
 
 /**
  * Keep stored values for fields the viewer cannot see. A placeholder value

@@ -409,7 +409,7 @@
         k1: row.k1,
         k2: row.k2,
         url: C.rowPath(row),
-        payload: row.payload,
+        payload: sansSentSecret("e:" + spec.kind + ":" + row.id, row.payload, prev[id] && prev[id].payload),
         deleted: false,
         revKey: "e:" + spec.kind + ":" + row.id,
       });
@@ -2509,7 +2509,12 @@
         ops.push({
           kind: "people",
           url: "/api/people/" + encodeURIComponent(id),
-          payload: nextPeople[id],
+          // BATCH-3: a password this browser already saved (and the server
+          // accepted) is not sent again with a later edit of another field:
+          // the server stores a hash and would take the re-sent temporary
+          // password as a new one (resetting the person and ending their
+          // sessions after they had set their own).
+          payload: sansSentSecret(entityRevKey("people", id), nextPeople[id], prevPeople[id]),
           deleted: false,
           revKey: entityRevKey("people", id),
           personId: id,

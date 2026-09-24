@@ -73,7 +73,11 @@ export async function openPeople(ctx, p, view = "List") {
   }
   await sub.click();
   await p.waitForTimeout(1000);
-  await p.locator("main").getByRole("button", { name: "Add person", exact: true }).waitFor({ timeout: 15000 });
+  // Add person is only there for People create; a function head (edit only) sees the search box.
+  await Promise.race([
+    p.locator("main").getByRole("button", { name: "Add person", exact: true }).waitFor({ timeout: 15000 }),
+    searchBox(p).waitFor({ timeout: 15000 }),
+  ]);
   if (view) await setView(p, view);
 }
 export async function setView(p, view) {
@@ -144,7 +148,11 @@ export async function openFile(ctx, p, name) {
     await search(p, name);
   }
   await treeRow(p, name).locator("button[title='Edit']").click();
-  await p.locator("main").getByText("Compensation plan", { exact: true }).waitFor({ timeout: 10000 });
+  // "Compensation plan" is only on files the viewer may see pay for; the Edit button is on every file.
+  await Promise.race([
+    p.locator("main").getByText("Compensation plan", { exact: true }).waitFor({ timeout: 10000 }),
+    p.locator("main").getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 10000 }),
+  ]);
   await p.waitForTimeout(700);
 }
 

@@ -58,6 +58,13 @@ export const AUTH_ROUTES_FIXES = [
     n: 1,
   },
   {
+    what:
+      "Settings → Assign people → Download sheet: usernames only. A temporary password is shown once — in the one-time login dialog / the CSV downloaded when logins are issued — and never again (before, the sheet repeated every password issued in this browser session and said 'it has passwords').",
+    old: "function D(){let e=E.map(e=>({name:e.name,email:e.email,username:e.username,password:e.password,access:e.access}));Ai(`aliens-logins-${new Date().toISOString().slice(0,10)}.csv`,Fe(e)),l(`Login sheet downloaded. Share one-to-one — it has passwords.`)}",
+    new: "function D(){let e=E.map(e=>({name:e.name,email:e.email,username:e.username,access:e.access}));Ai(`aliens-logins-${new Date().toISOString().slice(0,10)}.csv`,Fe(e)),l(`Login sheet downloaded (usernames only — temporary passwords are shown once, when they are issued).`)}",
+    n: 1,
+  },
+  {
     what: "Me → Edit → Save (selfLock): use the id taken at the top of the form",
     old: "if(selfLock){let a=ti(l.firstName,l.lastName,l.name),s=n.updatePerson(e.id,",
     new: "if(selfLock){let a=ti(l.firstName,l.lastName,l.name),s=n.updatePerson(__selfPid,",
