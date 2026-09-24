@@ -25,13 +25,16 @@
 
   var SPECS = [
     // ---- org book -----------------------------------------------------------
-    pick("companies", "companies", "list", "org"),
-    pick("brands", "brands", "list", "org"),
-    pick("businessUnits", "sbus", "list", "org"),
+    // `siblingOrder` (BATCH-2): drag-reorder among siblings is stored as
+    // `sortKey` on each sibling row; lists are kept sorted by it (stable, rows
+    // without one keep their place after those that have one).
+    pick("companies", "companies", "list", "org", { siblingOrder: true }),
+    pick("brands", "brands", "list", "org", { siblingOrder: true }),
+    pick("businessUnits", "sbus", "list", "org", { siblingOrder: true }),
     pick("sbuMembers", "sbu-members", "list", "org", { keyFields: ["groupId", "memberId"] }),
-    pick("functions", "functions", "list", "org"),
-    pick("subFunctions", "sub-functions", "list", "org"),
-    pick("roles", "roles", "map", "org"),
+    pick("functions", "functions", "list", "org", { siblingOrder: true }),
+    pick("subFunctions", "sub-functions", "list", "org", { siblingOrder: true }),
+    pick("roles", "roles", "map", "org", { siblingOrder: true }),
     pick("accessRoles", "access-roles", "list", "org"),
     pick("customReports", "custom-reports", "list", "org"),
     pick("reportFolders", "report-folders", "list", "org"),
@@ -179,6 +182,54 @@
       .map(function (w) { return w.x; });
   }
 
+  function keyOf(x) {
+    return isPlainObject(x) && typeof x.sortKey === "number" && isFinite(x.sortKey) ? x.sortKey : Infinity;
+  }
+  /** Stable sort by `sortKey` (siblingOrder specs and people). Same array back when nothing moves. */
+  function sortBySortKey(list) {
+    if (!Array.isArray(list) || !list.some(function (x) { return keyOf(x) !== Infinity; })) return list;
+    var out = list
+      .map(function (x, i) { return { x: x, i: i }; })
+      .sort(function (a, b) {
+        var ka = keyOf(a.x);
+        var kb = keyOf(b.x);
+        return ka === kb ? a.i - b.i : ka < kb ? -1 : 1;
+      })
+      .map(function (w) { return w.x; });
+    for (var i = 0; i < out.length; i++) if (out[i] !== list[i]) return out;
+    return list;
+  }
+  function sortMapBySortKey(map) {
+    if (!isPlainObject(map)) return map;
+    var keys = Object.keys(map);
+    var sorted = sortBySortKey(keys.map(function (k) { return { k: k, sortKey: keyOf(map[k]) }; }));
+    var moved = false;
+    for (var i = 0; i < keys.length; i++) if (sorted[i].k !== keys[i]) moved = true;
+    if (!moved) return map;
+    var out = {};
+    sorted.forEach(function (e) { out[e.k] = map[e.k]; });
+    return out;
+  }
+  function orderField(spec, value) {
+    if (!spec || !spec.siblingOrder) return value;
+    return spec.shape === "map" ? sortMapBySortKey(value) : sortBySortKey(value);
+  }
+  /** Put people and every siblingOrder field in `sortKey` order. Same object back when nothing moves. */
+  function orderSiblings(snapshot) {
+    if (!isPlainObject(snapshot)) return snapshot;
+    var out = snapshot;
+    function set(field, value) {
+      if (value === out[field]) return;
+      if (out === snapshot) out = Object.assign({}, snapshot);
+      out[field] = value;
+    }
+    if (Array.isArray(snapshot.people)) set("people", sortBySortKey(snapshot.people));
+    SPECS.forEach(function (spec) {
+      if (spec.siblingOrder && snapshot[spec.field] !== undefined) set(spec.field, orderField(spec, snapshot[spec.field]));
+    });
+    return out;
+  }
+
   /** Rebuild the snapshot field from rows (live rows only). */
   function fromRows(spec, rows) {
     if (spec.shape === "scalar") {
@@ -194,14 +245,14 @@
         list.push(r.payload);
       });
       // Keep a stable order: by explicit `order`/`sort` if present, else by insertion
-      return spec.ordered ? sortByPos(list) : list;
+      return spec.ordered ? sortByPos(list) : orderField(spec, list);
     }
     if (spec.shape === "map") {
       var map = {};
       rows.forEach(function (r) {
         map[r.id] = unwrap(r.payload);
       });
-      return map;
+      return orderField(spec, map);
     }
     if (spec.shape === "map2") {
       var tree = {};
@@ -234,13 +285,13 @@
         if (idx >= 0) list.splice(idx, 1);
       } else if (idx >= 0) list[idx] = row.payload;
       else list.push(row.payload);
-      return spec.ordered ? sortByPos(list) : list;
+      return spec.ordered ? sortByPos(list) : orderField(spec, list);
     }
     if (spec.shape === "map") {
       var map = isPlainObject(current) ? Object.assign({}, current) : {};
       if (deleted) delete map[row.id];
       else map[row.id] = unwrap(row.payload);
-      return map;
+      return orderField(spec, map);
     }
     if (spec.shape === "map2") {
       var tree = isPlainObject(current) ? Object.assign({}, current) : {};
@@ -295,6 +346,8 @@
     fromRows: fromRows,
     applyRow: applyRow,
     sortByPos: sortByPos,
+    sortBySortKey: sortBySortKey,
+    orderSiblings: orderSiblings,
     rowPath: rowPath,
     wrap: wrap,
     unwrap: unwrap,

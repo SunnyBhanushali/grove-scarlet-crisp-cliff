@@ -294,6 +294,22 @@ export function overlayHotSlices(snapshot: Snapshot, slices: HotSlices): Snapsho
   return next;
 }
 
+/** People from the hot table in the books' order (rows not in the book last, by id). */
+export function orderPeopleLikeBook(next: Snapshot, book: Snapshot): Snapshot {
+  if (!Array.isArray(next.people) || !Array.isArray(book.people)) return next;
+  const at = new Map<string, number>();
+  (book.people as Array<Record<string, unknown>>).forEach((p, i) => {
+    if (p && typeof p.id === "string" && !at.has(p.id)) at.set(p.id, i);
+  });
+  const people = (next.people as Array<Record<string, unknown>>).slice().sort((a, b) => {
+    const ia = at.has(String(a?.id)) ? (at.get(String(a?.id)) as number) : Infinity;
+    const ib = at.has(String(b?.id)) ? (at.get(String(b?.id)) as number) : Infinity;
+    if (ia !== ib) return ia < ib ? -1 : 1;
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  });
+  return { ...next, people };
+}
+
 /**
  * GET assemble: rows win. Empty people table + books have people → import once.
  * If assembled people would be empty while books have people → keep books (never ship empty UI).
@@ -337,6 +353,15 @@ export async function assembleForGet(sql: HotSql, snapshot: Snapshot): Promise<{
     overlaid = await overlayEntityFields(sql, overlaid, async () => snapshot);
   } catch (err) {
     console.error("[assemble] entity overlay failed; using books for generic fields", err);
+  }
+  // BATCH-2: one order for every client — people keep the book's order (the
+  // hot table has none), then drag-reorder (`sortKey`) wins among siblings.
+  overlaid = orderPeopleLikeBook(overlaid, snapshot);
+  try {
+    const { collections } = await import("./apms-collections.ts");
+    overlaid = collections.orderSiblings(overlaid);
+  } catch (err) {
+    console.error("[assemble] sibling order failed", err);
   }
   const assembledPeople = flattenPeople(overlaid.people).length;
   const meta: AssembleMeta = {

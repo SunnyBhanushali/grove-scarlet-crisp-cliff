@@ -9,6 +9,7 @@ export type CollectionSpec = {
   book: "org" | "plans" | "months" | "targets";
   keyFields?: string[];
   ordered?: boolean;
+  siblingOrder?: boolean;
 };
 
 export type EntityRowShape = {
@@ -31,6 +32,8 @@ export type CollectionsApi = {
   toRows(spec: CollectionSpec, value: unknown, skipped?: Array<{ field: string; index: number }>): EntityRowShape[];
   fromRows(spec: CollectionSpec, rows: EntityRowShape[]): unknown;
   applyRow(spec: CollectionSpec, current: unknown, row: EntityRowShape, deleted: boolean): unknown;
+  sortBySortKey<T>(list: T[]): T[];
+  orderSiblings<T>(snapshot: T): T;
   rowPath(row: { kind: string; id: string; k1?: string | null; k2?: string | null }): string;
   wrap(value: unknown): Record<string, unknown>;
   unwrap(payload: unknown): unknown;

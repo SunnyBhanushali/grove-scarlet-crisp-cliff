@@ -91,3 +91,46 @@ test("patchPayload reads both body shapes", () => {
   assert.deepEqual(patchPayload({ data: { payload: { b: 2 } } }), { b: 2 });
   assert.deepEqual(patchPayload(null), {});
 });
+
+// ---------------------------------------------------------------------------
+// BATCH-2 sibling order (drag-reorder is saved as `sortKey` on sibling rows).
+// ---------------------------------------------------------------------------
+test("sibling order: lists and maps sort by sortKey, stable, same object when nothing moves", async () => {
+  const { collections } = await import("./apms-collections.ts");
+  const list = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  assert.equal(collections.sortBySortKey(list), list, "no keys → untouched");
+  const moved = collections.sortBySortKey([{ id: "a", sortKey: 2 }, { id: "x" }, { id: "b", sortKey: 0 }, { id: "c", sortKey: 1 }]);
+  assert.deepEqual(moved.map((x) => x.id), ["b", "c", "a", "x"]);
+  const snap = { people: [{ id: "p1", sortKey: 1 }, { id: "p2", sortKey: 0 }], roles: { r1: { sortKey: 1 }, r2: { sortKey: 0 } }, notices: [{ id: "n" }] };
+  const out = collections.orderSiblings(snap);
+  assert.deepEqual(out.people.map((x) => x.id), ["p2", "p1"]);
+  assert.deepEqual(Object.keys(out.roles), ["r2", "r1"]);
+  assert.equal(out.notices, snap.notices);
+  assert.equal(collections.orderSiblings(out), out, "already ordered → same object");
+  // A feed row with a new sortKey moves in place.
+  const spec = collections.specForKind("functions")!;
+  const fns = [{ id: "f1", sortKey: 0 }, { id: "f2", sortKey: 1 }];
+  const next = collections.applyRow(spec, fns, { kind: "functions", id: "f2", k1: "f2", k2: null, payload: { id: "f2", sortKey: -1 } }, false) as Array<{ id: string }>;
+  assert.deepEqual(next.map((x) => x.id), ["f2", "f1"]);
+});
+
+test("sibling order: the SPA reorder writes sortKey 0..n-1 on the moved row's siblings only", async () => {
+  const { stampLogin } = await import("../../scripts/stamp-p0as81-batch2.mjs");
+  const { readFileSync } = await import("node:fs");
+  const login = readFileSync(new URL("../../public/assets/login-view-f2j6t0x4-11a3-p0ar.js", import.meta.url), "utf8");
+  assert.equal(stampLogin(login), login, "login-view chunk carries the stamp (idempotent)");
+  const m = login.match(/function _sk\(a,t,k\)\{[^]*?\}\}\)\}/);
+  assert.ok(m, "helper present");
+  const _sk = new Function(`${m![0]}; return _sk;`)() as (a: Array<Record<string, unknown>>, t: string, k: (x: Record<string, unknown>) => string) => Array<Record<string, unknown>>;
+  const people = [
+    { id: "boss" },
+    { id: "t3", managerId: "boss" },
+    { id: "other", managerId: "x" },
+    { id: "t1", managerId: "boss" },
+    { id: "t2", managerId: "boss", sortKey: 2 },
+  ];
+  const out = _sk(people, "t3", (x) => String(x.managerId || ""));
+  assert.deepEqual(out.filter((x) => x.managerId === "boss").map((x) => [x.id, x.sortKey]), [["t3", 0], ["t1", 1], ["t2", 2]]);
+  assert.equal(out[4], people[4], "an unchanged sibling keeps its object (no write)");
+  assert.equal(out[2], people[2], "other managers' people untouched");
+});

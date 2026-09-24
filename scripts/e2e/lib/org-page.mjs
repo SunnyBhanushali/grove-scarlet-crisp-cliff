@@ -6,7 +6,25 @@
 
 /** Open Org → <sub> (Overview / Brands & SBUs / Functions / Roles / People). */
 export async function openOrg(ctx, p, sub) {
-  await ctx.nav(p, "Org", sub);
+  const side = p.locator("aside, nav").first();
+  const item = side.getByText(sub, { exact: true }).first();
+  if (sub && !(await p.locator("div.fixed.inset-0").count()) && (await item.isVisible().catch(() => false))) {
+    // Org is already expanded: go straight to the sub page.
+    await item.click();
+    await p.waitForTimeout(1200);
+  } else {
+    try {
+      await ctx.nav(p, "Org", sub);
+    } catch {
+      // Under load the sub-item can render late: click "Org" once more below.
+      await side.getByText("Org", { exact: true }).first().click().catch(() => {});
+      await p.waitForTimeout(1500);
+    }
+  }
+  if (sub && !(await p.locator("main").getByText(sub === "Overview" ? "Snapshot of the company" : sub, { exact: sub !== "Overview" }).count())) {
+    await item.click({ timeout: 15000 });
+    await p.waitForTimeout(1200);
+  }
   await p.locator("main").first().waitFor();
   // The side-nav item keeps a selected role / SBU open: step back to the list with the breadcrumb.
   for (let i = 0; i < 2; i++) {

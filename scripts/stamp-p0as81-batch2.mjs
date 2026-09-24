@@ -1,3 +1,4 @@
+// @ts-nocheck -- build-time stamp script (string replacements), imported by a unit test
 /**
  * Stamp p0as81 — BATCH-2 (Org / People / Me / Home / Settings, three users).
  *
@@ -17,6 +18,16 @@
  *  4. Settings → Backup: the list of server copies re-reads every 3 s while
  *     the screen is open (it was read once on open, so other admins never saw
  *     a new copy without a reload).
+ *
+ *  5. Routes load the login-view chunk as ?v=p0as81 (see below).
+ *
+ * login-view chunk (edited in place, like every earlier change to it):
+ *  6. Drag-reorder among siblings (People tree, Brands & SBUs, Functions,
+ *     Roles) only re-ordered the local array: nothing was saved, other users
+ *     never saw it and a reload put the old order back. The moved row's
+ *     siblings (same manager / parent / brand / company) now get `sortKey`
+ *     0..n-1 in their new order, which is saved as row data; the server and
+ *     the sync keep those lists sorted by it (apms-collections siblingOrder).
  *
  * apms-sync.js and apms-collections.js get ?v=p0as81 (apms-sync.js is edited
  * in recovered-site/assets and copied to public/assets by this script).
@@ -66,12 +77,43 @@ const BK_OLD = "(0,Z.useEffect)(()=>{d()},[]);async function f(e,t){let n=await 
 const BK_NEW =
   "(0,Z.useEffect)(()=>{d();let q=setInterval(async()=>{try{let e=await fetch(`/api/company-backups`,{credentials:`include`}),t=await e.json();Array.isArray(t.items)&&n(t.items)}catch{}},3e3);return()=>clearInterval(q)},[]);async function f(e,t){let n=await fetch(`/api/company-backups`";
 
+// 5. routes load the fixed login-view chunk
+const LOGIN = "login-view-f2j6t0x4-11a3-p0ar.js";
+const LOGIN_REF_OLD = `${LOGIN}?v=p0as80`;
+const LOGIN_REF_NEW = `${LOGIN}?v=${V}`;
+
+// 6. sibling order (login-view)
+const SK_FN = "function _sk(a,t,k){let m=a.find(x=>x&&x.id===t);if(!m)return a;let g=k(m),i=0;return a.map(x=>{if(!x||k(x)!==g)return x;let s=i++;return x.sortKey===s?x:{...x,sortKey:s}})}";
+const LOGIN_PAIRS = [
+  ["function nestAtTop(e,t,n,r){", SK_FN + "function nestAtTop(e,t,n,r){", 1, "sibling sortKey helper"],
+  ["people:_e(e.people,n,r,i)", "people:_sk(_e(e.people,n,r,i),n,x=>x.managerId||``)", 2, "people reorder / nudge"],
+  ["people:nestAtTop(e.people,n,r,`managerId`)", "people:_sk(nestAtTop(e.people,n,r,`managerId`),n,x=>x.managerId||``)", 1, "people nest"],
+  ["businessUnits:_e(e.businessUnits,n,r,i)", "businessUnits:_sk(_e(e.businessUnits,n,r,i),n,x=>(x.parentId||``)+`|`+(x.brandId||``))", 1, "SBU reorder"],
+  ["brands:_e(e.brands,n,r,i)", "brands:_sk(_e(e.brands,n,r,i),n,x=>x.companyId||``)", 1, "brand reorder"],
+  ["functions:_e(e.functions,n,r,i)", "functions:_sk(_e(e.functions,n,r,i),n,x=>x.parentId||``)", 1, "function reorder"],
+  ["functions:nestAtTop(e.functions,n,r,`parentId`)", "functions:_sk(nestAtTop(e.functions,n,r,`parentId`),n,x=>x.parentId||``)", 1, "function nest"],
+  [
+    "return s<0?{}:(o.splice(i===`after`?s+1:s,0,a),{roles:Object.fromEntries(o)})",
+    "if(s<0)return{};o.splice(i===`after`?s+1:s,0,a);let q=_sk(o.map(([k,v])=>({...v,id:v&&v.id||k})),n,x=>x.reportsToRoleId||``);return{roles:Object.fromEntries(o.map(([k,v],j)=>[k,q[j].sortKey===(v&&v.sortKey)?v:{...v,sortKey:q[j].sortKey}]))}",
+    1,
+    "role reorder",
+  ],
+];
+
+export function stampLogin(src) {
+  if (src.includes(SK_FN)) return src;
+  let out = src;
+  for (const [from, to, n, what] of LOGIN_PAIRS) out = times(out, from, to, n, what);
+  return out;
+}
+
 export function stampRoutes(src) {
   let out = times(src, APPLY_OLD, APPLY_NEW, 3, "live apply hook (restore)");
   out = times(out, ROLE_STATE_OLD, ROLE_STATE_NEW, 1, "access role dialog: values at open");
   out = times(out, ROLE_SAVE_OLD, ROLE_SAVE_NEW, 1, "access role Save");
   out = times(out, SUB_OLD, SUB_NEW, 1, "save trigger fields");
   out = times(out, BK_OLD, BK_NEW, 1, "backup list refresh");
+  out = times(out, LOGIN_REF_OLD, LOGIN_REF_NEW, 2, "login-view reference");
   return out;
 }
 
@@ -99,6 +141,8 @@ function run() {
     const from = join(root, dir, FROM);
     if (!existsSync(from)) continue;
     writeFileSync(join(root, dir, TO), stampRoutes(readFileSync(from, "utf8")));
+    const login = join(root, dir, LOGIN);
+    if (existsSync(login)) writeFileSync(login, stampLogin(readFileSync(login, "utf8")));
     for (const f of readdirSafe(join(root, dir))) {
       if (!/^index-.*\.js$/.test(f)) continue;
       const p = join(root, dir, f);

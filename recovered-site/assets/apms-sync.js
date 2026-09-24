@@ -1296,6 +1296,8 @@
           return body;
         }
         var applied = false;
+        // BATCH-2: a sibling reorder (sortKey) from the feed moves the row on screen too.
+        if (next && next !== local && C && typeof C.orderSiblings === "function") next = C.orderSiblings(next);
         if (next && next !== local && hooks && typeof hooks.apply === "function") {
           try {
             applied = hooks.apply(Object.assign({}, next, { bookGens: Object.assign({}, lastGens, remoteGens) }), "live-entity") !== false;
@@ -1369,6 +1371,7 @@
         });
       });
       if (pulled.bookGens) merged.bookGens = Object.assign({}, pulled.bookGens);
+      if (C && typeof C.orderSiblings === "function") merged = C.orderSiblings(merged);
       merged.notebookUpdatedAt = Math.max(Number(pulled.notebookUpdatedAt) || 0, Number(local.notebookUpdatedAt) || 0, Date.now());
       var ok = false;
       try {
@@ -3586,6 +3589,7 @@
     });
     var slices = dirtySlices(local);
     var merged = applyPulledBooks(local, pulled.books, dirtySet);
+    if (C && typeof C.orderSiblings === "function") merged = C.orderSiblings(merged);
     var hits = collectRowConflicts(local, pulled.books, slices);
     lastRowConflicts = hits;
     if (pulled.bookGens) merged.bookGens = Object.assign({}, localGens, pulled.bookGens);
