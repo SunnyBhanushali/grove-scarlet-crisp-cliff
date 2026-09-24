@@ -14,7 +14,125 @@ bundled): deployable with **no `npm install` and no build**
 Note: `ROADMAP.md` is not in the repository (not on `batch-2`, `rows-v2` or
 `main`); ROADMAP #3 / #4 were taken from Part C of the brief.
 
-__RESULTS__
+## 1. Results — the final gate (all pass)
+
+One build of this branch (commit b7849f4, the build inside the zip), each suite on its own fresh database, one at a time, built node-server:
+
+| Suite | Result |
+|---|---|
+| `npm test` | 196 + 447 pass, 0 fail |
+| `npm run typecheck` | clean |
+| Security batch 3 (every route: read / write / secrets / sign-in limits / anonymous) | **176 / 176** |
+| Security batch 2 (rerun) | **43 / 43** |
+| Batch 3 — four browsers (admins A / B / C + low-permission employee D, plus a restricted editor F), real sign-in limits | **PASS** — 11 screens, 52 pass, 0 fail, 9 n/a |
+| Batch 1 (rerun in full) | **PASS** — 32 screens, 147 pass, 0 fail, 3 n/a |
+| Batch 2 (rerun in full) × 3 | **PASS ×3** — 28 screens each, 148 pass, 0 fail, 24 n/a |
+
+Part D: the batch-2 "one hire by B not saved within 20 s" intermittent was reproduced, its cause found and fixed (§5 #18). In the three final batch-2 runs every hire was saved; C saw both concurrent hires 1.1 / 0.7 / 0.4 s after the saves (people-views) and 0.6 / 0.1 / 0.4 s (people-hire). The committed `docs/e2e/batch-3/` holds the evidence of the previous gate run (before the Part D fix); the final run's reports / logs carry the test sign-in passwords in their request logs and were not committed (kept with the build, available on request).
+
+### Batch 3 — four browsers (checks 1–6 per screen)
+
+| Module | Screen | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|---|
+| All | sign-in | — | — | — | — | — | pass |
+| Sign-in | signin-lockout | pass | pass | pass | n/a | pass | pass |
+| Settings | session-ended | pass | pass | pass | n/a | pass | pass |
+| All | employee-d | pass | pass | pass | pass | pass | pass |
+| Org | restricted-editor | pass | pass | pass | n/a | pass | pass |
+| Targets | targets-link-guard | pass | pass | pass | pass | pass | pass |
+| Rewards | targets-link-broken | pass | pass | pass | n/a | pass | pass |
+| Targets | targets-link-relink | pass | pass | pass | pass | pass | pass |
+| Targets | targets-second-group | pass | n/a | pass | n/a | pass | pass |
+| Targets | targets-import-blank | pass | pass | pass | n/a | pass | pass |
+| Sign-in | default-pin | pass | pass | pass | n/a | n/a | pass |
+
+### Batch 2 — rerun (run 1 shown; runs 2 and 3 identical: all pass)
+
+
+| Module | Screen | 1 | 2 | 3 | 4 | 5 | 6 | C saw it after |
+|---|---|---|---|---|---|---|---|---|
+| All | sign-in | — | — | — | — | — | pass |  |
+| Org | org-overview | n/a | n/a | pass | n/a | pass | pass | 0.4 s |
+| Org | org-units | pass | pass | pass | pass | pass | pass | 0.0 s / 0.5 s |
+| Org | org-units-drag | pass | pass | pass | pass | pass | pass | 0.9 s / 0.0 s / 0.6 s |
+| Org | org-sbu-members | pass | pass | pass | pass | pass | pass | 0.5 s / 0.1 s |
+| Org | org-functions | pass | pass | pass | pass | pass | pass | 0.5 s / 0.7 s |
+| Org | org-roles | pass | pass | pass | pass | pass | pass | 0.4 s / 0.0 s |
+| Org | org-roles-kroc | pass | pass | pass | pass | pass | pass | 0.1 s / 0.3 s |
+| Org | org-chart-drag | pass | pass | pass | pass | pass | pass | 0.6 s / 1.0 s / 0.9 s |
+| Org | people-views | n/a | n/a | pass | n/a | pass | pass | 1.1 s / 4.8 s |
+| Org | people-hire | pass | pass | pass | pass | pass | pass | 0.6 s |
+| Org | people-edit | pass | pass | pass | pass | pass | pass | 0.5 s |
+| Org | people-managers | pass | pass | pass | pass | pass | pass | 0.3 s / 3.8 s |
+| Org | people-status | pass | pass | pass | pass | pass | pass | 0.6 s |
+| Org | people-mass-update | pass | pass | pass | pass | pass | pass | 0.3 s |
+| Org | people-trash-restore | pass | n/a | pass | pass | pass | pass | 0.7 s |
+| Home | home-notice-badge | n/a | n/a | n/a | n/a | pass | pass |  |
+| Home | home-alerts | pass | pass | pass | pass | pass | pass | 1.5 s |
+| Me | me-password | pass | pass | pass | n/a | pass | pass | 1.8 s |
+| Me | me-profile | pass | pass | pass | pass | pass | pass | 0.6 s |
+| Settings | settings-access-roles | pass | pass | pass | pass | pass | pass | 2.0 s / 1.2 s |
+| Settings | settings-assign | pass | pass | pass | n/a | pass | pass | 1.7 s / 1.0 s |
+| Settings | settings-logins | pass | pass | pass | n/a | pass | pass | 2.0 s / 3.3 s / 2.1 s |
+| Sign-in | forgot-password | n/a | n/a | n/a | n/a | n/a | pass |  |
+| Settings | settings-setup | pass | n/a | pass | n/a | pass | pass | 1.4 s |
+| Settings | settings-trash | pass | n/a | pass | pass | pass | pass | 1.4 s |
+| Settings | settings-backup | pass | n/a | pass | n/a | pass | pass | 2.0 s |
+| Settings | settings-restore | pass | pass | pass | pass | pass | pass | 2.0 s / 3.4 s / 1.2 s |
+
+
+| Screen | Special check | Result | Detail |
+|---|---|---|---|
+| settings-logins | must-reset | pass | Kiran Kumar Nayaka signed in with the temporary password: set a new password, app opened; DB mustResetPassword false, issued = new true; sign-in new 200 / temporary 401; C dropped "Must set password" 3.3 s after |
+| settings-logins | special | pass | A reset B (floyd.dsil): old password → 401 (want 401), browser sign-in with the old password → refused; new password → 200. B's open session after the reset: get-session gone (revoked), B's screen showed the sign-in page 0.0 s after the reset. B then signed in with the new password → set a new passw |
+| settings-logins | security | pass | anonymous POST /api/issued-logins 401 (want 401); employee POST another person's row 403 (want 403), POST /api/provision-logins 403 (want 403), own row 200 (want 200); Kiran Kumar Nayaka's password unchanged: sign-in 200 |
+| settings-logins | issue-remaining | pass | Issue remaining (166): message "Issued 166 logins. The sheet downloaded — share each row privately."; CSV rows 166; issued_logins 6 → 171, CSV rows whose issued password differs 0; sample vishal.kuma signs in with its CSV password 200, with 0000 401; put back nikhil.pati (200); B/C/A/nikhil still si |
+| forgot-password | needHr | pass | aaynar.kuma (@aliens.local): screen "Contact HR / Contact HR to reset this password."; request POST /api/password-reset 200 {"ok":true,"needHr":true,"message":"Contact HR to reset this password."}; password / mustReset / reset tokens unchanged true |
+| forgot-password | public-email | pass | ronlind.mene (public email, no mail server): screen "Contact HR / Contact HR to reset this password."; response {"ok":true,"needHr":true,"message":"Contact HR to reset this password."}; password unchanged true, Ronlind-e2e-1 still signs in 200 |
+| settings-backup | restore-file | pass | overlay "Restored: Restored 180 people. Closed months stayed as stored. 53 month records. 49 reward records. Reload to see it." after 2.2 s (button Reload); DB: "E2E bk fn mufskbcd14" live rows 0 (want 0), people 180; B dropped it 5.5 s, C 5.6 s after the file was picked (without reload) |
+| settings-backup | restore-empty-targets | pass | file with targetCells {} and targetNodes []: overlay "Restored: Restored 180 people. Closed months stayed as stored. 53 month records. 49 reward records. Reload to see it."; live targets before {"cells":114,"nodes":23,"members":94} → after {"cells":114,"nodes":23,"members":94} (contract: restore pro |
+| settings-restore | special | pass | restore: "Restored. A marked copy of what was live is in the list if you need to go back." after 2.0 s; C dropped the after-backup function 2.0 s after; B's open form then held "E2E B unsaved mufskbcd15", B pressed Tab + Save; B's Functions list without the function 15.3 s after the restore; DB: aft |
+
+### Batch 1 — rerun
+
+
+| Module | Screen | 1 | 2 | 3 | 4 | 5 | 6 | C saw it after |
+|---|---|---|---|---|---|---|---|---|
+| All | sign-in | — | — | — | — | — | pass |  |
+| APMS | apms-month-list | pass | pass | pass | pass | pass | pass | 0.7 s |
+| APMS | apms-plan-open | pass | pass | pass | pass | pass | pass | 2.5 s |
+| APMS | apms-plan-locked | pass | pass | pass | pass | pass | pass | 2.2 s |
+| APMS | apms-plan-drag | pass | pass | pass | pass | pass | pass | 0.7 s |
+| APMS | apms-self-comments | pass | pass | pass | pass | pass | pass | 1.0 s |
+| APMS | apms-eo | pass | pass | pass | pass | pass | pass | 2.6 s / 1.9 s |
+| APMS | apms-quarter-review | pass | pass | pass | n/a | pass | pass | 1.0 s |
+| APMS | apms-lock-close | pass | pass | pass | pass | pass | pass | 2.1 s |
+| Targets | targets-delete-recreate | pass | pass | pass | pass | pass | pass | 3.5 s / 1.2 s |
+| Rewards | rewards-month-list | pass | pass | pass | pass | pass | pass | 0.7 s |
+| Rewards | rewards-plan-open | pass | pass | pass | pass | pass | pass | 2.3 s |
+| Rewards | rewards-mass-update | pass | pass | pass | pass | pass | pass | 0.1 s |
+| Rewards | rewards-my-rewards | pass | pass | pass | pass | pass | pass | 1.1 s |
+| Rewards | rewards-lock-close | pass | pass | pass | pass | pass | pass | 2.0 s |
+| Targets | targets-cells | pass | pass | pass | pass | pass | pass | 1.5 s |
+| Targets | targets-groups | pass | pass | pass | pass | pass | pass | 0.8 s |
+| Targets | targets-drag | pass | pass | pass | pass | pass | pass | 0.9 s |
+| Targets | targets-month-list | pass | pass | pass | pass | pass | pass | 3.9 s |
+| Targets | targets-copy-month | pass | pass | pass | pass | pass | pass | 1.2 s |
+| Targets | targets-import | pass | pass | pass | pass | pass | pass | 1.6 s |
+| Targets | targets-target-tab | pass | pass | pass | pass | pass | pass | 1.4 s / 1.2 s |
+| Targets | targets-month-status | pass | pass | pass | pass | pass | pass | 2.9 s |
+| Home | smoke-home | — | — | — | — | n/a | pass |  |
+| Me | smoke-me | — | — | — | — | pass | pass |  |
+| Org | smoke-org | — | — | — | — | pass | pass |  |
+| KPI | smoke-kpi | — | — | — | — | pass | pass |  |
+| Awards | smoke-awards | — | — | — | — | pass | pass |  |
+| MIS | smoke-mis | — | — | — | — | pass | pass |  |
+| Settings | smoke-settings | — | — | — | — | pass | pass |  |
+| Improve | smoke-improve | — | — | — | — | pass | pass |  |
+| Roster | smoke-roster | — | — | — | — | — | n/a |  |
+
+FAILS:
+None.
 
 ## 2. Permission mapping (LOCK "PERMISSIONS")
 
@@ -91,8 +209,8 @@ an admin raises a salary while a function head's form is open; the function
 head saves, the admin's salary stands).
 
 **Live updates** still reach everyone through the same change feed, filtered
-per person: employee D saw an allowed change in **__DLAT__** (admin C
-**__CLAT__**).
+per person: employee D saw an allowed change in **0.28 s** (admin C
+**0.40 s**).
 
 ## 3. Passwords and sign-in
 
