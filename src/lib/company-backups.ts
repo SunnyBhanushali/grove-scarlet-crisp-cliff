@@ -1,7 +1,7 @@
 import { getSql } from "./db";
 import {
   extractSnapshot,
-  readLiveSnapshot,
+  readAuthoritativeSnapshot,
   replaceCompanySnapshot,
 } from "./company-notebook";
 import { peopleCount, type Snapshot } from "./company-books";
@@ -184,7 +184,7 @@ export async function saveManualBackup(opts?: {
   createdBy?: string;
   label?: string;
 }): Promise<BackupMeta> {
-  const live = await readLiveSnapshot();
+  const live = await readAuthoritativeSnapshot();
   const incoming = opts?.json ? extractSnapshot(opts.json) : null;
   const snapshot = incoming && peopleCount(incoming) > 0 ? incoming : live;
   if (!snapshot || peopleCount(snapshot) < 1) {
@@ -208,7 +208,7 @@ export async function ensureHourlyBackup(at: Date = new Date()): Promise<{
   if (hourlyLock) return hourlyLock;
   hourlyLock = (async () => {
     if (!inHourlyBackupWindow(at)) return { ok: true as const, skipped: "window" };
-    const live = await readLiveSnapshot();
+    const live = await readAuthoritativeSnapshot();
     if (!live || peopleCount(live) < 1) return { ok: true as const, skipped: "empty" };
     const key = istHourKey(at);
     const recent = await listBackups();
@@ -260,7 +260,7 @@ export async function restoreBackup(
   if (!target) throw new Error("That copy is not on the server any more.");
   const snapshot = extractSnapshot(target.snapshotJson);
   if (!snapshot) throw new Error("That copy could not be read.");
-  const live = await readLiveSnapshot();
+  const live = await readAuthoritativeSnapshot();
   let undo: BackupMeta | null = null;
   if (live && peopleCount(live) > 0) {
     undo = await insertBackup({

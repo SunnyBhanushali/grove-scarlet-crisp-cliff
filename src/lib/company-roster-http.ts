@@ -103,7 +103,7 @@ export async function handleRosterHttp(request: Request): Promise<Response> {
   const { getCompanyWire } = await import("./company-notebook.ts");
   const { personIdForWire } = await import("./company-wire-http.ts");
   const { getSql } = await import("./db.ts");
-  const wire = await getCompanyWire();
+  const wire = await getCompanyWire({ encode: false });
   const personId = await personIdForWire(request, wire);
   if (!personId) return unauthorizedJson();
 

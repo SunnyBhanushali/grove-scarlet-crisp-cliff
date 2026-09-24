@@ -15,6 +15,7 @@ import { ensureHashed, verifyPassword } from "./apms-password.ts";
 import type { HotSql } from "./company-hot-tables.ts";
 import type { Snapshot, BookId } from "./company-books.ts";
 import { collections, specForKindOrSettings, type CollectionSpec, type EntityRowShape } from "./apms-collections.ts";
+import { noteWireWriteEnd, noteWireWriteStart } from "./company-wire-cache.ts";
 
 export type EntityId = { kind: string; id: string; k1: string | null; k2: string | null };
 
@@ -206,6 +207,46 @@ export async function loadEntityFields(sql: HotSql): Promise<Record<string, unkn
     }
     // Always emit the field, empty when no live rows, so the overlay replaces
     // whatever stale value the book still carries.
+    out[spec.field] = collections.fromRows(spec, byKind.get(spec.kind) || []);
+  }
+  return out;
+}
+
+/**
+ * PERF: the fields of these kinds only, built exactly as `loadEntityFields`
+ * builds them (same rows, same order, same `fromRows`), so the in-memory wire
+ * can take one commit without re-reading every row.
+ */
+export async function loadEntityFieldsForKinds(sql: HotSql, kinds: string[]): Promise<Record<string, unknown>> {
+  const want = [...new Set(kinds)].filter((k) => k && k !== META_KIND);
+  if (!want.length) return {};
+  const rows = await sql.query<{
+    kind: string;
+    id: string;
+    k1: string | null;
+    k2: string | null;
+    payload: unknown;
+    rev: number;
+    deleted_at: string | null;
+  }>(
+    "select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind = any($1::text[]) order by updated_at asc, id asc",
+    [want],
+  );
+  const byKind = new Map<string, StoredEntity[]>();
+  for (const r of rows) {
+    const row = rowFromDb(r);
+    const list = byKind.get(row.kind) || [];
+    list.push(row);
+    byKind.set(row.kind, list);
+  }
+  const out: Record<string, unknown> = {};
+  for (const spec of collections.SPECS) {
+    if (!want.includes(spec.kind)) continue;
+    if (spec.kind === "settings") {
+      const value = collections.fromRows(spec, byKind.get("settings") || []);
+      if (value !== undefined) out[spec.field] = value;
+      continue;
+    }
     out[spec.field] = collections.fromRows(spec, byKind.get(spec.kind) || []);
   }
   return out;
@@ -466,6 +507,28 @@ export async function patchEntityRow(
   if (!parsed) return { status: 400, body: { ok: false, error: "invalid-patch" } };
 
   return enqueue(`${key.kind}:${key.id}`, async () => {
+    // PERF: the wire's feed position may not pass this write until it is patched in.
+    noteWireWriteStart();
+    let seqDone = 0;
+    try {
+      const out = await patchEntityRowLocked(sql, key, spec, parsed, updatedBy, hooks);
+      seqDone = Number(out.body.seq) || 0;
+      return out;
+    } finally {
+      noteWireWriteEnd(seqDone);
+    }
+  });
+}
+
+async function patchEntityRowLocked(
+  sql: HotSql,
+  key: EntityId,
+  spec: CollectionSpec,
+  parsed: EntityPatchInput,
+  updatedBy: string,
+  hooks: EntityHooks,
+): Promise<EntityPatchResult> {
+  {
     if (parsed.clientOpId && (await seenOp(sql, parsed.clientOpId))) {
       const current = await readEntity(sql, key);
       return {
@@ -569,7 +632,7 @@ export async function patchEntityRow(
       }
     }
     return { status: 200, body: entityBody(won, { seq, ...(bookGens ? { bookGens } : {}) }) };
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------

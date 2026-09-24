@@ -1,4 +1,5 @@
 import type { BookId, BookPatchResult, Snapshot } from "./company-books";
+import { bumpAllHotGens } from "./company-read-cache.ts";
 
 /** Minimal SQL surface used by the importer (matches `Sql.query`). */
 export type HotSql = {
@@ -209,6 +210,19 @@ export async function importHotTables(
   snapshot: Snapshot,
   opts: { updatedBy?: string } = {},
 ): Promise<HotTableCounts> {
+  try {
+    return await importHotTablesInner(sql, snapshot, opts);
+  } finally {
+    // PERF: bulk write → every cached screen read is stale.
+    bumpAllHotGens();
+  }
+}
+
+async function importHotTablesInner(
+  sql: HotSql,
+  snapshot: Snapshot,
+  opts: { updatedBy?: string } = {},
+): Promise<HotTableCounts> {
   const updatedBy = opts.updatedBy || "book-import";
   const people = flattenPeople(snapshot.people);
   const monthRecords = flattenPersonPeriodMap(snapshot.records);
@@ -392,6 +406,7 @@ function tombPersonId(key: string): string {
 
 /** Soft-delete matching hot rows. Missing PATCH keys never reach here. */
 async function applyTombstoneDeletes(sql: HotSql, rows: TombRow[]) {
+  if (rows.length) bumpAllHotGens();
   for (const row of rows) {
     const { field, key } = row;
     if (!field || !key) continue;

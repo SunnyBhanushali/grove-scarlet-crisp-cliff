@@ -84,7 +84,9 @@ export async function wireForViewer(
   if (hit && hit.at === wire.at) return { full: false, view: hit };
   const filtered = await snapshotForViewer(wire, personId);
   const { encodeCompanyWire } = await import("./company-wire-cache.ts");
-  const enc = encodeCompanyWire(filtered || {}, wire.at, wire.bookGens);
+  // PERF: one of these per viewer and wire version (the version moves with
+  // every save): gzip level 1 is ~3× faster than 5 for ~20 % more bytes.
+  const enc = encodeCompanyWire(filtered || {}, wire.at, wire.bookGens, { gzipLevel: 1 });
   const view = { at: wire.at, gzipBody: enc.gzipBody };
   viewerWires.delete(key);
   viewerWires.set(key, view);
@@ -94,10 +96,10 @@ export async function wireForViewer(
 
 export async function handleCompanyGetRequest(request: Request): Promise<Response> {
   if (!(await hasValidSession(request.headers))) return unauthorizedJson();
-  const wire = await getCompanyWire();
+  // PERF: the live copy; the full body is encoded only if this reply needs it.
+  let wire = await getCompanyWire({ encode: false });
   const personId = await personIdForWire(request, wire);
   if (!personId) return unauthorizedJson();
-  const scoped = await wireForViewer(wire, personId);
   const at = clientAt(request);
   const headers: Record<string, string> = {
     "content-type": "application/json; charset=utf-8",
@@ -108,6 +110,11 @@ export async function handleCompanyGetRequest(request: Request): Promise<Respons
   };
   if (clientMatchesWire(at, wire.at)) {
     return new Response(unchangedWireBody(wire.at, personId, wire.bookGens), { status: 200, headers });
+  }
+  const scoped = await wireForViewer(wire, personId);
+  if (scoped.full) {
+    wire = await getCompanyWire();
+    headers.etag = `"apms-${wire.at}"`;
   }
   const gzipBody = scoped.full ? wire.gzipBody : scoped.view.gzipBody;
   if (acceptGzip(request.headers)) {

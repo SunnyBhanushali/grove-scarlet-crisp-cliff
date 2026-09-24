@@ -11,7 +11,7 @@
  * Nothing here is ever sent to a browser: the wire strips `password` /
  * `passwordHash` (NO-SECRETS-WIRE).
  */
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt, scryptSync, timingSafeEqual } from "node:crypto";
 
 export const HASH_PREFIX = "scrypt$";
 const N = 16384;
@@ -55,6 +55,34 @@ export function verifyPassword(password: string, stored: unknown): boolean {
       p: Number(p),
       maxmem: 64 * 1024 * 1024,
     });
+    return safeEqual(got, key);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * PERF: `verifyPassword` off the event loop. scrypt (N=16384) costs ~50 ms of
+ * CPU; at sign-in time (a burst when the day starts) that blocked every other
+ * request. Same result as `verifyPassword`, computed on the libuv pool.
+ */
+export async function verifyPasswordAsync(password: string, stored: unknown): Promise<boolean> {
+  const pass = String(password || "");
+  const s = stored === undefined || stored === null ? "" : String(stored);
+  if (!pass || !s) return false;
+  if (!isPasswordHash(s)) return safeEqual(Buffer.from(pass), Buffer.from(s));
+  const [, n, r, p, saltB64, keyB64] = s.split("$");
+  try {
+    const key = Buffer.from(keyB64, "base64url");
+    const got = await new Promise<Buffer>((resolve, reject) =>
+      scrypt(
+        pass,
+        Buffer.from(saltB64, "base64url"),
+        key.length,
+        { N: Number(n), r: Number(r), p: Number(p), maxmem: 64 * 1024 * 1024 },
+        (err, out) => (err ? reject(err) : resolve(out)),
+      ),
+    );
     return safeEqual(got, key);
   } catch {
     return false;

@@ -16,7 +16,7 @@ import {
   findPerson,
   sessionUser,
   usernameKey,
-  verifyLoginDetailed,
+  verifyLoginDetailedAsync,
   type LoginMap,
   type LoginPerson,
 } from "../../src/lib/apms-credentials";
@@ -71,8 +71,54 @@ async function readCompany(): Promise<{ people: LoginPerson[]; logins: LoginMap 
   }
 }
 
+/**
+ * PERF: sign-in and every page open's get-session assembled the whole company
+ * (all four books, ~6 MB, parsed and re-stringified) to find one person. The
+ * people and logins rows are the authority for exactly these fields: read
+ * them. The book path stays as the fallback for a database whose rows are not
+ * filled yet.
+ */
+async function readLoginRows(): Promise<{ people: LoginPerson[]; logins: LoginMap } | null> {
+  try {
+    const { getSql } = await import("../../src/lib/db");
+    const sql = await getSql();
+    const people = (
+      await sql.query<{ id: string; payload: Record<string, unknown> }>(`select id, payload from people where deleted_at is null`)
+    ).map((r) => ({ ...(r.payload || {}), id: r.id }) as unknown as LoginPerson);
+    if (!people.length) return null;
+    const { collections } = await import("../../src/lib/apms-collections.ts");
+    const spec = collections.specForField("logins");
+    const rows = await sql.query<{ kind: string; id: string; k1: string | null; k2: string | null; payload: Record<string, unknown>; rev: number }>(
+      `select kind, id, k1, k2, payload, rev from entities where kind = 'logins' and deleted_at is null order by updated_at asc, id asc`,
+    );
+    const fromRows = spec ? (collections.fromRows(spec, rows.map((r) => ({ ...r, deleted: false }))) as LoginMap | undefined) : undefined;
+    const issued = await loadIssuedLogins();
+    return { people, logins: mergeLogins(fromRows && typeof fromRows === "object" ? fromRows : {}, issued) };
+  } catch (err) {
+    console.error("[apms-auth] login rows", err);
+    return null;
+  }
+}
+
+async function readLoginDirectory(): Promise<{ people: LoginPerson[]; logins: LoginMap }> {
+  return (await readLoginRows()) || readCompany();
+}
+
 async function personFromId(id: string): Promise<LoginPerson | null> {
-  const { people } = await readCompany();
+  try {
+    const { getSql } = await import("../../src/lib/db");
+    const sql = await getSql();
+    const key = id === "p-admin" ? null : id;
+    if (key) {
+      const rows = await sql.query<{ payload: Record<string, unknown> }>(`select payload from people where id = $1 and deleted_at is null`, [key]);
+      if (rows[0]) return { ...(rows[0].payload || {}), id } as unknown as LoginPerson;
+      const any = await sql.query<{ n: number }>(`select 1 as n from people limit 1`);
+      if (any.length) return null;
+    }
+  } catch {
+    /* rows not ready: book path below */
+  }
+  const { people } = await readLoginDirectory();
   if (id === "p-admin") return people.find((p) => p.id === "p-admin" || p.username === "sunny.b") || SUNNY;
   return people.find((p) => p.id === id) || null;
 }
@@ -234,7 +280,7 @@ export default async function apmsAuthMiddleware(
     const body = await readJson(event.req);
     const user = String(body.username || body.email || "");
     const pass = String(body.password || "");
-    const { people, logins } = await readCompany();
+    const { people, logins } = await readLoginDirectory();
     // BATCH-3: lock-out per username (5 / 15 min) and per IP (30 / 15 min), in the DB.
     const known = findPerson(people, user);
     const lockKey = usernameKey(known?.username || known?.email || user);
@@ -243,7 +289,7 @@ export default async function apmsAuthMiddleware(
     if (locked) {
       return json(429, { code: "LOCKED", message: lockMessage(locked), lockedMinutes: locked.minutes, scope: locked.scope });
     }
-    const verdict = verifyLoginDetailed(people, logins, user, pass);
+    const verdict = await verifyLoginDetailedAsync(people, logins, user, pass);
     const person = verdict.person;
     if (!person) {
       const lock = await recordSigninFailure(lockKey, ip).catch(() => null);

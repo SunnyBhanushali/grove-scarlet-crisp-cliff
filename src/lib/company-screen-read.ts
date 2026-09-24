@@ -177,28 +177,41 @@ export async function handleScreenReadHttp(request: Request): Promise<Response |
   const offset = url.searchParams.get("offset");
 
   // BATCH-3: rows and fields are filtered by the caller's access role.
-  const { loadViewer, readPerson, canReadRecord } = await import("./apms-permissions.ts");
+  const { loadViewer, readPerson, canReadRecord, viewKey } = await import("./apms-permissions.ts");
   const viewer = await loadViewer(personId);
+  // PERF: answered from memory while the table / month is unchanged (see
+  // company-read-cache.ts). A filtered viewer's scope can change with the org
+  // (managers, access roles) without a row write: key it on the org context too.
+  const { cachedJsonResponse, hotGen } = await import("./company-read-cache.ts");
+  const vk = viewKey(viewer);
+  const scope = vk === "full" ? vk : `${vk}@${viewer.ctx.at}`;
 
   if (parsed.kind === "people") {
-    const page = await listPeoplePage(sql, { limit: Number(limit) || undefined, q, sbu, offset: Number(offset) || 0 });
-    const people = Array.isArray((page as { people?: unknown[] }).people)
-      ? (page as { people: Array<Record<string, unknown>> }).people.map((p) => readPerson(viewer, slimPersonForWire(p) as Record<string, unknown>))
-      : (page as { people?: unknown }).people;
-    return Response.json({ ok: true, ...page, people });
+    const key = `people|${q}|${sbu}|${limit || ""}|${offset || ""}|${scope}`;
+    return cachedJsonResponse(request, key, hotGen("people"), async () => {
+      const page = await listPeoplePage(sql, { limit: Number(limit) || undefined, q, sbu, offset: Number(offset) || 0 });
+      const people = Array.isArray((page as { people?: unknown[] }).people)
+        ? (page as { people: Array<Record<string, unknown>> }).people.map((p) => readPerson(viewer, slimPersonForWire(p) as Record<string, unknown>))
+        : (page as { people?: unknown }).people;
+      return { ok: true, ...page, people };
+    });
   }
   const table = parsed.kind === "reward-records" ? "reward_records" : "month_records";
   const lister = parsed.kind === "reward-records" ? listRewardMonthPage : listMonthRecordsPage;
-  const all = await lister(sql, parsed.period || "", { limit: -1, offset: 0 });
-  const visible = all.records.filter((r) => canReadRecord(viewer, table, r.personId));
-  const lim = clampLimit(Number(limit) || undefined);
-  const off = Math.max(0, Number(offset) || 0);
-  return Response.json({
-    ok: true,
-    period: all.period,
-    records: visible.slice(off, off + lim),
-    total: visible.length,
-    limit: lim,
-    offset: off,
+  const period = parsed.period || "";
+  const key = `${table}|${period}|${limit || ""}|${offset || ""}|${scope}`;
+  return cachedJsonResponse(request, key, hotGen(table, period), async () => {
+    const all = await lister(sql, period, { limit: -1, offset: 0 });
+    const visible = all.records.filter((r) => canReadRecord(viewer, table, r.personId));
+    const lim = clampLimit(Number(limit) || undefined);
+    const off = Math.max(0, Number(offset) || 0);
+    return {
+      ok: true,
+      period: all.period,
+      records: visible.slice(off, off + lim),
+      total: visible.length,
+      limit: lim,
+      offset: off,
+    };
   });
 }

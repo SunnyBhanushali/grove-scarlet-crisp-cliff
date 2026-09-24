@@ -187,7 +187,7 @@ test("the person can write Self comments while the plan is open or locked", () =
 test("stamp p0as82 (on p0as81); fallbackPost still absent; G9 path kept", () => {
   assert.match(html, /routes-e2g7y5q8-13m-p0as82\.js/);
   assert.match(html, /apms-collections\.js\?v=p0as82/);
-  assert.match(html, /apms-sync\.js\?v=p0as82/);
+  assert.match(html, /apms-sync\.js\?v=p0as8[23]/); // p0as83 = PERF sync stamp
   assert.match(routes, /login-view-f2j6t0x4-11a3-p0ar\.js\?v=p0as68/);
   assert.equal(login.includes("fallbackPost"), false);
   assert.equal(routes.includes("fallbackPost"), false);

@@ -67,8 +67,8 @@ export function liveEntityHooks(): EntityHooks {
       return undefined;
     },
     async publish(spec: CollectionSpec, row: StoredEntity, seq: number) {
-      const { notifyCompanyLive, currentLiveGens } = await import("./company-live");
-      const { softInvalidateCompanyWire } = await import("./company-wire-cache");
+      const { notifyCompanyLive, currentLiveGens, noteFeedSeq } = await import("./company-live");
+      noteFeedSeq(seq);
       const prev = currentLiveGens() || { org: 0, plans: 0, months: 0, targets: 0 };
       const gens = { ...prev, [spec.book]: (Number(prev[spec.book]) || 0) + 1 };
       await notifyCompanyLive(Date.now(), gens, [
@@ -79,14 +79,39 @@ export function liveEntityHooks(): EntityHooks {
           seq,
         } as { type: string; id: string; period?: string; seq?: number },
       ]);
-      try {
-        softInvalidateCompanyWire();
-      } catch {
-        /* ignore */
-      }
+      // PERF: patch the in-memory wire before the save returns (read-after-write),
+      // re-reading only this kind's rows instead of reassembling the company.
+      await applyEntityCommitToWire(row.kind, spec.book);
       return gens;
     },
   };
+}
+
+/** Kinds whose wire fields are built together (fold / prune read them as a group). */
+const WIRE_KIND_GROUPS: string[][] = [
+  ["roles", "role-krocs"],
+  ["target-nodes", "target-root-order", "target-members"],
+];
+
+/**
+ * PERF: one generic commit → the wire's fields for that kind (and its group),
+ * read from the rows and finished exactly as the full assemble does (role KROC
+ * fold, dangling-target prune, sibling order, secrets stripped).
+ */
+export async function applyEntityCommitToWire(kind: string, book?: string): Promise<boolean> {
+  const { applyEntityFieldsToWire } = await import("./company-wire-cache.ts");
+  const { loadEntityFieldsForKinds } = await import("./company-entity-store.ts");
+  const { slimForWire } = await import("./company-wire-slim.ts");
+  const kinds = WIRE_KIND_GROUPS.find((grp) => grp.includes(kind)) || [kind];
+  return applyEntityFieldsToWire(
+    async () => {
+      const { getSql } = await import("./db");
+      const sql = (await getSql()) as unknown as HotSql;
+      return loadEntityFieldsForKinds(sql, kinds);
+    },
+    (snap) => slimForWire(collections.orderSiblings(pruneDanglingTargets(foldRoleKrocsIntoRoles(snap)))),
+    (book as import("./company-books.ts").BookId) || undefined,
+  );
 }
 
 async function resolvePerson(request: Request): Promise<string | null> {
@@ -196,6 +221,43 @@ export async function guardEntityPatch(
   return { body, refused: null };
 }
 
+/**
+ * PERF: every open tab polls the feed right after every save, nearly all from
+ * the same cursor. One database read (and, for viewers who see everything, one
+ * serialized body) per (cursor, limit, payload) answers them all while the
+ * newest known feed position has not moved; a short TTL covers commits this
+ * process has not heard of yet.
+ */
+type FeedPage = { at: number; head: number; seq: number; changes: Awaited<ReturnType<typeof changesSince>>; fullBody?: string };
+const FEED_CACHE_MS = 1000;
+const feedPages = new Map<string, FeedPage>();
+const feedFlights = new Map<string, Promise<FeedPage>>();
+
+async function feedPage(sql: HotSql, since: number, limit: number, withPayload: boolean): Promise<FeedPage> {
+  const { currentFeedSeq } = await import("./company-live.ts");
+  const head = currentFeedSeq();
+  const key = `${since}|${limit}|${withPayload ? 1 : 0}`;
+  const hit = feedPages.get(key);
+  if (hit && hit.head === head && head > 0 && Date.now() - hit.at < FEED_CACHE_MS) return hit;
+  const flying = feedFlights.get(key);
+  if (flying) return flying;
+  const run = (async () => {
+    const changes = await changesSince(sql, since, limit, { withPayload });
+    const seq = changes.length ? changes[changes.length - 1].seq : await latestSeq(sql);
+    const page: FeedPage = { at: Date.now(), head, seq, changes };
+    if (feedPages.size > 200) feedPages.clear();
+    feedPages.set(key, page);
+    return page;
+  })().finally(() => feedFlights.delete(key));
+  feedFlights.set(key, run);
+  return run;
+}
+
+export function resetFeedCacheForTests(): void {
+  feedPages.clear();
+  feedFlights.clear();
+}
+
 export async function handleChangesHttp(request: Request): Promise<Response> {
   if (!(await hasValidSession(request.headers))) return unauthorizedJson();
   const personId = await resolvePerson(request);
@@ -206,19 +268,25 @@ export async function handleChangesHttp(request: Request): Promise<Response> {
     const sql = (await getSql()) as unknown as HotSql;
     return Response.json({ ok: true, seq: await latestSeq(sql) }, { headers: { "cache-control": "no-store" } });
   }
-  const since = Number(url.searchParams.get("since") || 0);
-  const limit = Number(url.searchParams.get("limit") || 200);
+  const sinceRaw = Number(url.searchParams.get("since") || 0);
+  const limitRaw = Number(url.searchParams.get("limit") || 200);
+  const since = Number.isFinite(sinceRaw) ? sinceRaw : 0;
+  const limit = Number.isFinite(limitRaw) ? limitRaw : 200;
   const { getSql } = await import("./db");
   const sql = (await getSql()) as unknown as HotSql;
   const withPayload = url.searchParams.get("payload") === "1";
-  const changes = await changesSince(sql, Number.isFinite(since) ? since : 0, Number.isFinite(limit) ? limit : 200, { withPayload });
-  const seq = changes.length ? changes[changes.length - 1].seq : await latestSeq(sql);
+  const page = await feedPage(sql, since, limit, withPayload);
   // BATCH-3: rows the caller may not read are dropped, hidden fields removed.
   // The cursor still moves past them (seq is the last row scanned).
   const perm = await import("./apms-permissions.ts");
   const viewer = await perm.loadViewer(personId);
-  const seen = changes.map((c) => perm.filterChange(viewer, c)).filter((c) => c !== null);
-  return Response.json({ ok: true, since: Number.isFinite(since) ? since : 0, seq, changes: seen });
+  const headers = { "content-type": "application/json", "cache-control": "no-store" };
+  if (perm.viewKey(viewer) === "full") {
+    page.fullBody ??= JSON.stringify({ ok: true, since, seq: page.seq, changes: page.changes });
+    return new Response(page.fullBody, { headers });
+  }
+  const seen = page.changes.map((c) => perm.filterChange(viewer, c)).filter((c) => c !== null);
+  return new Response(JSON.stringify({ ok: true, since, seq: page.seq, changes: seen }), { headers });
 }
 
 /** Overlay authority rows over a snapshot (GET assemble / backups). */

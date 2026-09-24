@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { BookGens } from "./company-books";
 import { patchCompanyWireEntity, softInvalidateCompanyWire } from "./company-wire-cache.ts";
+import { bumpFromFeedKind } from "./company-read-cache.ts";
 
 const TICK_ID = "live-tick";
 const bus = new EventEmitter();
@@ -30,6 +31,8 @@ export function resetLiveForTests(): void {
   lastGens = null;
   lastEntities = [];
   lastEmitted = [];
+  lastFeedSeq = 0;
+  liveReadAt = 0;
 }
 
 export function hydrateLiveFromTickRow(parsed: {
@@ -87,10 +90,40 @@ export function encodeSse(
   at: number,
   gens?: BookGens | null,
   entities?: LiveEntityHint[] | null,
+  extra?: Record<string, unknown> | null,
 ): string {
   const payload: Record<string, unknown> = gens ? { at, bookGens: gens } : { at };
   payload.entities = Array.isArray(entities) ? entities : [];
+  // PERF: the newest change-feed position this process knows; a client whose
+  // cursor is already there skips its /api/changes poll.
+  if (lastFeedSeq) payload.seq = lastFeedSeq;
+  if (extra) Object.assign(payload, extra);
   return `data: ${JSON.stringify(payload)}\n\n`;
+}
+
+/** PERF: newest change-feed seq committed (this process) or heard (LISTEN). */
+let lastFeedSeq = 0;
+const feedSeqListeners = new Set<(seq: number) => void>();
+export function noteFeedSeq(seq: unknown): void {
+  const n = Number(seq) || 0;
+  if (n > lastFeedSeq) {
+    lastFeedSeq = n;
+    for (const fn of feedSeqListeners) {
+      try {
+        fn(n);
+      } catch {
+        /* a listener's failure is its own */
+      }
+    }
+  }
+}
+/** PERF: called whenever the feed head moves (the live stream pushes the new rows). */
+export function onFeedSeq(fn: (seq: number) => void): () => void {
+  feedSeqListeners.add(fn);
+  return () => feedSeqListeners.delete(fn);
+}
+export function currentFeedSeq(): number {
+  return lastFeedSeq;
 }
 
 export function liveSseHeaders(): Record<string, string> {
@@ -180,7 +213,27 @@ export async function persistLiveTick(): Promise<boolean> {
   }
 }
 
-export async function readLiveAt(): Promise<number> {
+/**
+ * PERF: every tick request and every open live stream (every 2 s) read the
+ * tick row. One read per LIVE_READ_MS serves them all; the in-process state is
+ * current anyway (commits and LISTEN update it), the row only carries other
+ * workers' ticks.
+ */
+const LIVE_READ_MS = 1000;
+let liveReadAt = 0;
+let liveReadFlight: Promise<number> | null = null;
+
+export function readLiveAt(): Promise<number> {
+  if (Date.now() - liveReadAt < LIVE_READ_MS) return Promise.resolve(lastAt);
+  if (liveReadFlight) return liveReadFlight;
+  liveReadFlight = readLiveAtNow().finally(() => {
+    liveReadAt = Date.now();
+    liveReadFlight = null;
+  });
+  return liveReadFlight;
+}
+
+async function readLiveAtNow(): Promise<number> {
   try {
     const sql = await getSqlLazy();
     const rows = await sql<{ snapshot_json: string }>`
@@ -297,7 +350,17 @@ export function startEntityListen(): void {
   const url = typeof process !== "undefined" ? String(process.env.DATABASE_URL || "").trim() : "";
   if (!url) return;
   let pending: ReturnType<typeof setTimeout> | null = null;
-  const onNotify = () => {
+  const onNotify = (payload?: string) => {
+    try {
+      if (payload) {
+        const n = JSON.parse(payload) as { seq?: number; kind?: string; k2?: string | null };
+        noteFeedSeq(n.seq);
+        // PERF: a commit (maybe by another worker) → that table's cached screen reads.
+        if (n.kind) bumpFromFeedKind(String(n.kind), n.k2);
+      }
+    } catch {
+      /* not JSON */
+    }
     // Coalesce the burst of rows one save commits into one tick.
     if (pending) return;
     pending = setTimeout(() => {
@@ -318,8 +381,8 @@ export function startEntityListen(): void {
       };
       client.on("error", retry);
       client.on("end", retry);
-      client.on("notification", (msg: { channel: string }) => {
-        if (msg.channel === "apms_entities") onNotify();
+      client.on("notification", (msg: { channel: string; payload?: string }) => {
+        if (msg.channel === "apms_entities") onNotify(msg.payload);
       });
       await client.connect();
       // The listener must not keep a stopping server alive: without this a

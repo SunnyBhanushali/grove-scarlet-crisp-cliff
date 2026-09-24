@@ -1,4 +1,4 @@
-import { verifyPassword } from "./apms-password.ts";
+import { verifyPassword, verifyPasswordAsync } from "./apms-password.ts";
 
 export type LoginPerson = {
   id: string;
@@ -98,6 +98,32 @@ export function verifyLoginDetailed(
   if (!person) return { person: null, reason: "wrong" };
   const stored = storedPassword(person, logins);
   if (stored) return verifyPassword(pass, stored) ? { person, reason: "ok" } : { person: null, reason: "wrong" };
+  if (pass === DEFAULT_PIN) return { person, reason: "ok" };
+  return { person: null, reason: "wrong" };
+}
+
+/** PERF: `verifyLoginDetailed` with the password hash checked off the event loop. Same rules. */
+export async function verifyLoginDetailedAsync(
+  people: LoginPerson[],
+  logins: LoginMap,
+  usernameOrEmail: string,
+  password: string,
+  opts: { defaultPin?: boolean } = {},
+): Promise<LoginVerdict> {
+  const pass = String(password || "");
+  if (!pass) return { person: null, reason: "wrong" };
+  const key = usernameKey(usernameOrEmail);
+  const pinOn = opts.defaultPin ?? defaultPinEnabled();
+
+  if (pass === DEFAULT_PIN && !pinOn) return { person: null, reason: "default-pin-off" };
+  if ((key === "sunny.b" || key === "sunny") && pass === DEFAULT_PIN) {
+    return { person: findPerson(people, "sunny.b") || SUNNY, reason: "ok" };
+  }
+
+  const person = findPerson(people, usernameOrEmail);
+  if (!person) return { person: null, reason: "wrong" };
+  const stored = storedPassword(person, logins);
+  if (stored) return (await verifyPasswordAsync(pass, stored)) ? { person, reason: "ok" } : { person: null, reason: "wrong" };
   if (pass === DEFAULT_PIN) return { person, reason: "ok" };
   return { person: null, reason: "wrong" };
 }

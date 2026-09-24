@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getSql } from "./db";
 import { notifyCompanyLive, currentLiveAt, currentLiveGens } from "./company-live";
 import seed from "./company-seed.json";
@@ -134,11 +135,48 @@ function payload(row: CompanyLoad): CompanyLoad {
   };
 }
 
-async function loadBookRows() {
+/**
+ * PERF: the four books are 0.1–3 MB of text each and were read from Postgres
+ * in full by every mirror, wire assemble, sign-in and session check. Keep the
+ * text of each book with its `content_hash` (written with every book write,
+ * by either server module copy) and fetch a book's text only when its hash
+ * moved. Callers still parse their own copy.
+ */
+type BookTextCache = Map<string, { hash: string; text: string }>;
+const bookTextCache: BookTextCache = ((globalThis as typeof globalThis & { __apmsBookText__?: BookTextCache }).__apmsBookText__ ??=
+  new Map());
+
+async function loadBookRows(): Promise<BookRow[]> {
   const sql = await getSql();
-  return sql<BookRow>`
-    select book, snapshot_json, content_hash from company_books
+  const heads = await sql<{ book: string; content_hash: string }>`
+    select book, content_hash from company_books
   `;
+  const stale = heads
+    .filter((h) => {
+      const hit = bookTextCache.get(h.book);
+      return !hit || !h.content_hash || hit.hash !== h.content_hash;
+    })
+    .map((h) => h.book);
+  if (stale.length) {
+    const fresh = await sql<BookRow>`
+      select book, snapshot_json, content_hash from company_books where book = any(${stale})
+    `;
+    for (const row of fresh) {
+      if (row.content_hash) bookTextCache.set(row.book, { hash: row.content_hash, text: row.snapshot_json });
+      else bookTextCache.delete(row.book);
+    }
+    const byBook = new Map(fresh.map((r) => [r.book, r]));
+    return heads.map((h) => {
+      const row = byBook.get(h.book);
+      if (row) return row;
+      const hit = bookTextCache.get(h.book)!;
+      return { book: h.book, snapshot_json: hit.text, content_hash: hit.hash };
+    });
+  }
+  return heads.map((h) => {
+    const hit = bookTextCache.get(h.book)!;
+    return { book: h.book, snapshot_json: hit.text, content_hash: hit.hash };
+  });
 }
 
 function rowsToBooks(rows: BookRow[]): Partial<Record<BookId, Snapshot>> {
@@ -152,8 +190,13 @@ function rowsToBooks(rows: BookRow[]): Partial<Record<BookId, Snapshot>> {
 }
 
 async function writeBook(book: BookId, snap: Snapshot, hash: string) {
+  return writeBookJson(book, JSON.stringify(snap), hash);
+}
+
+async function writeBookJson(book: BookId, json: string, hash: string) {
   const sql = await getSql();
-  const json = JSON.stringify(snap);
+  // The next read of this book costs nothing (hash check only).
+  bookTextCache.set(book, { hash, text: json });
   await sql`
     insert into company_books (book, snapshot_json, content_hash, updated_at)
     values (${book}, ${json}, ${hash}, now())
@@ -193,19 +236,39 @@ async function writeCombined(snapshot: Snapshot) {
   `;
 }
 
-async function persistBooks(snapshot: Snapshot, mode: PersistMode, only?: readonly BookId[]) {
+async function persistBooks(
+  snapshot: Snapshot,
+  mode: PersistMode,
+  only?: readonly BookId[],
+  opts: { mirror?: boolean } = {},
+) {
   const incoming = splitSnapshot(snapshot);
-  const existing = rowsToBooks(await loadBookRows());
+  const rows = await loadBookRows();
+  // A mirror only needs the stored hashes; parse the books only for the other modes.
+  const existing = opts.mirror ? {} : rowsToBooks(rows);
+  const storedHashes = new Map(rows.map((r) => [r.book, r.content_hash]));
   const writeIds = only?.length ? only : BOOK_IDS;
   for (const book of writeIds) {
     const next = incoming[book];
+    if (opts.mirror) {
+      // PERF: a mirror hashes the text it writes (one stringify) instead of a
+      // key-sorted stringify of the whole book on top of it. The hash is only
+      // compared for "unchanged" and used as the read-cache key.
+      const json = JSON.stringify(next);
+      const mhash = "m:" + createHash("sha256").update(json).digest("hex");
+      if (storedHashes.get(book) === mhash) continue;
+      await writeBookJson(book, json, mhash);
+      continue;
+    }
     const hash = bookHash(next);
     const stored = existing[book];
     if (!stored) {
       await writeBook(book, next, hash);
       continue;
     }
-    const storedHash = bookHash(stored);
+    // PERF: the stored hash is on the row (written with the book); hashing the
+    // stored book again (a sorted stringify of MBs) was per mirror.
+    const storedHash = storedHashes.get(book) || bookHash(stored);
     if (storedHash === hash) continue;
     if (mode === "fill-missing") continue;
     if (mode === "skip-stale") {
@@ -213,6 +276,19 @@ async function persistBooks(snapshot: Snapshot, mode: PersistMode, only?: readon
       if (seen.has(hash) && hash !== storedHash) continue;
     }
     await writeBook(book, next, hash);
+  }
+  if (opts.mirror) {
+    // PERF: a row mirror changes one book. The caller's merged snapshot is what
+    // is stored now; re-reading all four books and rewriting the legacy
+    // combined notebook row (~6 MB, a fallback read only when the books are
+    // empty) on every mirror was most of a save's cost. The combined row is
+    // still rewritten by restore / snapshot saves and at most every 10 min here.
+    if (Date.now() - lastCombinedAt > COMBINED_EVERY_MS) {
+      lastCombinedAt = Date.now();
+      const all = assembleSnapshot(rowsToBooks(await loadBookRows()));
+      if (!isThinSnapshot(all)) await writeCombined(all).catch((err) => console.error("[company-notebook] writeCombined", err));
+    }
+    return snapshot;
   }
   const assembled = assembleSnapshot(rowsToBooks(await loadBookRows()));
   try {
@@ -222,6 +298,9 @@ async function persistBooks(snapshot: Snapshot, mode: PersistMode, only?: readon
   }
   return assembled;
 }
+
+const COMBINED_EVERY_MS = 10 * 60 * 1000;
+let lastCombinedAt = 0;
 
 async function importHotTablesAfterCommit(snapshot: Snapshot, updatedBy: string) {
   if (isThinSnapshot(snapshot)) return;
@@ -243,6 +322,14 @@ type BookSliceResult = { ok: boolean; snapshot: Snapshot };
  * with it. Slices that arrive while a write for the same book is running are
  * group-committed: applied together in the next single book write.
  */
+/**
+ * PERF: book mirrors wait this long (5 s) so a burst of saves (250 users save every
+ * 20–40 s: several a second) becomes one book write instead of one each. The
+ * rows are the authority (reads assemble from them; backups overlay them), so
+ * a book a moment behind loses nothing.
+ */
+export const MIRROR_GATHER_MS = Number(process.env.APMS_MIRROR_GATHER_MS ?? 5000) || 0;
+
 const bookSliceQueues = new Map<BookId, { items: Array<{ opts: BookSliceOpts; resolve: (r: BookSliceResult) => void }>; running: boolean }>();
 
 export async function applyEntityBookSlice(opts: BookSliceOpts): Promise<BookSliceResult> {
@@ -263,6 +350,8 @@ async function drainBookSlices(book: BookId): Promise<void> {
   q.running = true;
   try {
     while (q.items.length) {
+      // PERF: gather the rows of the next MIRROR_GATHER_MS into one book write.
+      await new Promise((r) => setTimeout(r, MIRROR_GATHER_MS));
       const batch = q.items.splice(0);
       const list = batch.map((b) => b.opts);
       let result: BookSliceResult;
@@ -316,7 +405,7 @@ async function applyBookSlices(book: BookId, list: BookSliceOpts[]): Promise<Boo
   next.bookGens = { ...gens, [book]: (Number(gens[book]) || 0) + 1 };
   next.notebookUpdatedAt = Date.now();
   const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, stored));
-  const assembled = await persistBooks(merged, "replace", [book]);
+  const assembled = await persistBooks(merged, "replace", [book], { mirror: true });
   await notifyCompanyLive(
     Number(assembled.notebookUpdatedAt) || Date.now(),
     normalizeBookGens(assembled),
@@ -358,6 +447,8 @@ async function drainEntityRows(book: BookId): Promise<void> {
   q.running = true;
   try {
     while (q.items.length) {
+      // PERF: gather the rows of the next MIRROR_GATHER_MS into one book write.
+      await new Promise((r) => setTimeout(r, MIRROR_GATHER_MS));
       const batch = q.items.splice(0);
       try {
         const gens = await enqueueBooks([book], () => applyEntityRows(book, batch));
@@ -386,13 +477,14 @@ async function applyEntityRows(book: BookId, batch: Array<{ spec: EntityBookSpec
   next.bookGens = { ...gens, [book]: (Number(gens[book]) || 0) + 1 };
   next.notebookUpdatedAt = Date.now();
   const merged = stripSnapshotUiSession(mergePreserveUatFixtures(next, existing));
-  const assembled = await persistBooks(merged, "replace", [book]);
+  const assembled = await persistBooks(merged, "replace", [book], { mirror: true });
   return normalizeBookGens(assembled) as Record<string, number>;
 }
 
 /** Org book only — no assembleForGet / no people overlay. */
 export async function readOrgBook(): Promise<Snapshot> {
-  const rows = await loadBookRows();
+  // PERF: parse the org book only (every Org screen read parsed all four, ~6 MB).
+  const rows = (await loadBookRows()).filter((r) => r.book === "org");
   const books = rowsToBooks(rows);
   return books.org && typeof books.org === "object" ? books.org : {};
 }
@@ -519,6 +611,18 @@ export async function readLiveSnapshot(): Promise<Snapshot | null> {
     select snapshot_json from company_notebook where id = ${NOTEBOOK_ID} limit 1
   `;
   return parseSnapshot(legacy[0]?.snapshot_json ?? null);
+}
+
+/**
+ * PERF / data safety: the company as the rows hold it (books overlaid with hot
+ * rows and entity rows — the same assemble GET uses, secrets kept). Book
+ * mirrors are group-committed a moment after the row commit, so readers that
+ * must not miss a save (backups) read this instead of the books alone.
+ */
+export async function readAuthoritativeSnapshot(): Promise<Snapshot | null> {
+  const books = await readLiveSnapshot();
+  if (!books) return null;
+  return overlaySnapshotForGet(books);
 }
 
 export async function loadCompanySnapshot(): Promise<CompanyLoad> {
@@ -790,8 +894,9 @@ export async function loadRequestedBooks(ids: BookId[], personId?: string): Prom
   bookGens: Record<BookId, number>;
   notebookUpdatedAt: number;
 }> {
-  const wire = await getCompanyWire();
-  let slim = parseSnapshot(wire.snapshotJson) || {};
+  const wire = await getCompanyWire({ encode: false });
+  // PERF: the live copy, not a re-parse of the encoded body.
+  let slim: Snapshot = wire.slim || parseSnapshot(wire.snapshotJson) || {};
   if (personId) {
     // BATCH-3: `?books=` reads are filtered by the caller's access role like the wire.
     const { snapshotForViewer } = await import("./company-wire-http");
@@ -821,6 +926,16 @@ async function overlaySnapshotForGet(snapshot: Snapshot): Promise<Snapshot> {
 }
 
 export async function companyIsEmpty(): Promise<boolean> {
+  // PERF: asked by every sign-in page. The people rows answer it without
+  // assembling the company; the book path stays for a fresh database.
+  try {
+    const rows = await (await getSql()).query<{ n: number }>(
+      "select count(*)::int as n from (select 1 from people where deleted_at is null limit 10) t",
+    );
+    if (Number(rows[0]?.n) >= 10) return false;
+  } catch {
+    /* hot tables not created yet */
+  }
   const loaded = await loadCompanySnapshot();
   return isThin(loaded.snapshotJson);
 }

@@ -12,8 +12,10 @@ import {
   clearPeopleTombs,
 } from "./company-hot-tables.ts";
 import { unauthorizedJson, hasValidSession } from "./apms-request-auth.ts";
-import { publishEntityWrite, hintFromEntityTable, liveTypeFromTable } from "./company-live.ts";
+import { publishEntityWrite, hintFromEntityTable, liveTypeFromTable, noteFeedSeq } from "./company-live.ts";
 import { appendHotTableChange } from "./company-entity-store.ts";
+import { noteWireWriteEnd, noteWireWriteStart } from "./company-wire-cache.ts";
+import { bumpHotGen } from "./company-read-cache.ts";
 
 export type EntityKey =
   | { table: "people"; id: string }
@@ -422,6 +424,7 @@ async function hydrateFromBook(
   const payload = sliceFromSnapshot(snapshot, key);
   if (!payload) return null;
   await insertIfMissing(sql, key, payload, "hydrate");
+  bumpHotGen(key.table, key.table === "people" || key.table === "target_cells" ? null : key.period);
   return readRow(sql, key);
 }
 
@@ -447,7 +450,18 @@ export async function patchEntity(
   books: EntityBooks,
   updatedBy = "entity-patch",
 ): Promise<EntityResult> {
-  return enqueueEntityPatch(key, () => patchEntityUnlocked(sql, key, input, books, updatedBy));
+  return enqueueEntityPatch(key, async () => {
+    // PERF: the wire's feed position may not pass this write until it is patched in.
+    noteWireWriteStart();
+    let seqDone = 0;
+    try {
+      const out = await patchEntityUnlocked(sql, key, input, books, updatedBy);
+      seqDone = Number(out.body.seq) || 0;
+      return out;
+    } finally {
+      noteWireWriteEnd(seqDone);
+    }
+  });
 }
 
 async function patchEntityUnlocked(
@@ -485,6 +499,9 @@ async function patchEntityUnlocked(
     const current = (await readRow(sql, key)) || stored;
     return { status: 409, body: staleBody(key, current, "stale") };
   }
+  // PERF: cached screen reads of this table / month are stale from now on
+  // (after the commit, so a rebuild at the new generation reads this row).
+  bumpHotGen(key.table, key.table === "people" || key.table === "target_cells" ? null : key.period);
   if (parsed.clientOpId) {
     await rememberWriteId(sql, parsed.clientOpId, { table: key.table, rev: nextRev }, updatedBy);
   }
@@ -515,6 +532,7 @@ async function patchEntityUnlocked(
   }
 
   let liveGens: Record<string, number> | undefined;
+  noteFeedSeq(feedSeq);
   try {
     liveGens = await publishEntityWrite(
       key.table,

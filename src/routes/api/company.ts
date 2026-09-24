@@ -64,7 +64,7 @@ export const Route = createFileRoute("/api/company")({
           const ids = requestedBookIds(request);
           if (ids.length) {
             if (!(await hasValidSession(request.headers))) return unauthorizedJson();
-            const wire = await getCompanyWire();
+            const wire = await getCompanyWire({ encode: false });
             const personId = await personIdForWire(request, wire);
             if (!personId) return unauthorizedJson();
             const body = await loadRequestedBooks(ids, personId);
@@ -80,7 +80,7 @@ export const Route = createFileRoute("/api/company")({
       POST: async ({ request }) => {
         try {
           if (!(await hasValidSession(request.headers))) return unauthorizedJson();
-          const wire = await getCompanyWire();
+          const wire = await getCompanyWire({ encode: false });
           const personId = await personIdForWire(request, wire);
           if (!personId) return unauthorizedJson();
           const body = await request.json().catch(() => null);

@@ -2,7 +2,7 @@
  * Aliens APMS per-book sync (Google Docs / Zoho grade).
  * PATCH only dirty books with baseGen. 409 rebases that book. Live pulls
  * only clean books whose generation moved. UI nav never rides the wire.
- * Stamp: p0as79 — HOT-FEED people/month/reward/cells on /api/changes; id-list removals stick. p0as78 ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
+ * Stamp: p0as83 — PERF: no hint GET for rows the pushed feed carries; feed pages pushed on the live stream are applied like a poll (poll only on a gap); feed poll only when tick/SSE `seq` is past the cursor; one real tick per 5 s (30 s hidden) shared by the SPA and sync timers; list screens re-read every 20 s with If-None-Match (304). p0as79 — HOT-FEED people/month/reward/cells on /api/changes; id-list removals stick. p0as78 ROWS-V2 every collection is a row; per-row 409 → 3-way field merge; change feed /api/changes. p0as77 MOD-APMS fetch-on-access month-records. p0as76 ARMY-2. p0as75 ARMY. p0as74 MOD-ORG. p0as73 APMS. p0as72 routes. p0as69 G9. p0as60.
  */
 (function (global) {
   "use strict";
@@ -130,6 +130,9 @@
   var C = global.__apmsCollections || null;
   var liveSeq = 0;
   var lastChangesAt = 0;
+  var announcedSeq = 0;
+  var pollIssuedSeq = 0;
+  var PUSH_WAIT_MS = 1500;
   var changesInFlight = null;
   var lastMergeTrace = [];
 
@@ -1047,7 +1050,7 @@
       var q = snap && snap.peopleQuery != null ? String(snap.peopleQuery) : snap && snap.q != null ? String(snap.q) : "";
       var pkey = "people\0" + view + "\0" + q;
       var nowP = Date.now();
-      if (pkey === lastScreenKey && nowP - lastPeopleFetchAt < 2000) return;
+      if (pkey === lastScreenKey && nowP - lastPeopleFetchAt < SCREEN_REREAD_MS) return;
       lastScreenKey = pkey;
       lastPeopleFetchAt = nowP;
       openPeopleScreen({ limit: 80, q: q }).catch(function () {});
@@ -1057,7 +1060,7 @@
       if (!everLoaded || !month) return;
       var rkey = "rewards\0" + month;
       var nowR = Date.now();
-      if (rkey === lastScreenKey && nowR - lastRewardsFetchAt < 2000) return;
+      if (rkey === lastScreenKey && nowR - lastRewardsFetchAt < SCREEN_REREAD_MS) return;
       lastScreenKey = rkey;
       lastRewardsFetchAt = nowR;
       openRewardsMonth(month, { limit: 80 }).catch(function () {});
@@ -1069,7 +1072,7 @@
       if (!getterApms) return;
       var akey = "apms-month\0" + month;
       var nowA = Date.now();
-      if (!(akey === lastScreenKey && nowA - lastApmsMonthFetchAt < 2000)) {
+      if (!(akey === lastScreenKey && nowA - lastApmsMonthFetchAt < SCREEN_REREAD_MS)) {
         lastScreenKey = akey;
         lastApmsMonthFetchAt = nowA;
         openApmsMonth(month, { limit: 80 }).catch(function () {});
@@ -1107,7 +1110,7 @@
     if (!getter) return;
     var pkey = "apms-person\0" + m + "\0" + pid;
     var nowP = Date.now();
-    if (pkey === lastApmsPersonKey && nowP - lastApmsPersonFetchAt < 2000) return;
+    if (pkey === lastApmsPersonKey && nowP - lastApmsPersonFetchAt < SCREEN_REREAD_MS) return;
     lastApmsPersonKey = pkey;
     lastApmsPersonFetchAt = nowP;
     openApmsPerson(m, pid).catch(function () {});
@@ -1219,6 +1222,41 @@
       });
   }
 
+  /**
+   * PERF (p0as83): the live stream pushes every change; the tick is the
+   * fallback (and how an idle tab notices its session ended). The SPA's own
+   * 2.5 s tick and this one used to send two requests every 2.5 s per tab.
+   * Now one real tick per TICK_VISIBLE_MS while the tab is visible and per
+   * TICK_HIDDEN_MS while hidden; a tick asked for inside that window gets the
+   * last answer again (nothing moved, nothing to do).
+   */
+  var TICK_VISIBLE_MS = 5000;
+  var TICK_HIDDEN_MS = 30000;
+  var lastRealTickAt = 0;
+  var lastTickBody = null;
+  function tickWindow() {
+    try {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return TICK_HIDDEN_MS;
+    } catch (err) {}
+    return TICK_VISIBLE_MS;
+  }
+  function tickDue() {
+    return Date.now() - lastRealTickAt >= tickWindow() - 50;
+  }
+  function rememberTick(body) {
+    try {
+      if (body && typeof body === "object" && body.at != null) lastTickBody = JSON.stringify(body);
+    } catch (err) {}
+  }
+  if (typeof document !== "undefined" && document.addEventListener) {
+    // Back to a visible tab: catch up at once.
+    document.addEventListener("visibilitychange", function () {
+      try {
+        if (document.visibilityState === "visible") lastRealTickAt = 0;
+      } catch (err) {}
+    });
+  }
+
   function startLiveWatch() {
     if (typeof document === "undefined") return;
     if (liveWatchStarted) return;
@@ -1247,6 +1285,8 @@
     liveTickTimer = setInterval(function () {
       var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
       if (!getter) return;
+      if (!tickDue()) return;
+      lastRealTickAt = Date.now();
       getter("/api/company-tick?since=" + (lastPulledAt || lastWireAt || 0), {
         method: "GET",
         credentials: "include",
@@ -1257,7 +1297,10 @@
           return res.json();
         })
         .then(function (tick) {
-          if (tick) handleLiveEvent(tick);
+          if (tick) {
+            rememberTick(tick);
+            handleLiveEvent(tick);
+          }
         })
         .catch(function () {});
     }, 2500);
@@ -1293,6 +1336,7 @@
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     if (!getter) return Promise.resolve(null);
     var since = liveSeq;
+    pollIssuedSeq = announcedSeq;
     pollAgain = false;
     pollRefused = false;
     changesInFlight = getter("/api/changes?since=" + since + "&payload=1&limit=500", {
@@ -1311,6 +1355,37 @@
           lastChangesAt = 0;
           return null;
         }
+        var more = applyFeedBody(body, since);
+        if (more === "more") return pollChanges();
+        return body;
+      })
+      .catch(function () {
+        changesInFlight = null;
+        lastChangesAt = 0;
+        return null;
+      })
+      .then(function (body) {
+        // Refused applies rewind the cursor and wait for the next tick instead.
+        if (pollAgain && !pollRefused) {
+          pollAgain = false;
+          setTimeout(function () {
+            try {
+              pollChanges();
+            } catch (err) {}
+          }, 0);
+        }
+        return body;
+      });
+    return changesInFlight;
+  }
+
+  /**
+   * Apply one page of the change feed (a poll answer, or a page the server
+   * pushed down the live stream — p0as83) that starts at cursor `since`.
+   * Returns "more" when the page was full (the caller reads the next one).
+   */
+  function applyFeedBody(body, since) {
+    {
         var hooks = liveHooks;
         var local = hooks && typeof hooks.getSnapshot === "function" ? hooks.getSnapshot() : null;
         if (body.changes.length && !local) {
@@ -1361,27 +1436,43 @@
           lastChangesAt = 0;
           return body;
         }
-        if (body.changes.length >= 500) return pollChanges();
+        if (body.changes.length >= 500) return "more";
         return body;
-      })
-      .catch(function () {
-        changesInFlight = null;
-        lastChangesAt = 0;
-        return null;
-      })
-      .then(function (body) {
-        // Refused applies rewind the cursor and wait for the next tick instead.
-        if (pollAgain && !pollRefused) {
-          pollAgain = false;
-          setTimeout(function () {
-            try {
-              pollChanges();
-            } catch (err) {}
-          }, 0);
-        }
-        return body;
-      });
-    return changesInFlight;
+    }
+  }
+
+  /**
+   * p0as83: a feed page pushed on the live stream (`push`, `since`, `seq`,
+   * `changes`). Applied like a poll answer when it starts at or before our
+   * cursor (rows we already have are skipped); a page that starts past our
+   * cursor means we missed one: poll instead.
+   */
+  var pushWaitTimer = null;
+  var lastPushAt = 0;
+  var PUSH_LIVE_MS = 60000;
+  function feedPushLive() {
+    return !!C && lastPushAt > 0 && Date.now() - lastPushAt < PUSH_LIVE_MS;
+  }
+  function feedCarries(hint) {
+    var t = normEntityType(hint.type);
+    return !!HOT_FEED[t] || String(t).indexOf("e:") === 0;
+  }
+  function applyPushedFeed(tick) {
+    lastPushAt = Date.now();
+    var from = Number(tick.since);
+    var to = Number(tick.seq) || 0;
+    if (!C || !Number.isFinite(from) || !(to > liveSeq)) return true;
+    if (changesInFlight) return false;
+    if (from > liveSeq) return false;
+    var rows = tick.changes.filter(function (ch) {
+      return ch && (Number(ch.seq) || 0) > liveSeq;
+    });
+    var cursor = liveSeq;
+    feedLog.push({ at: Date.now(), since: cursor, n: rows.length, seq: to, pushed: true });
+    if (feedLog.length > 40) feedLog.shift();
+    var r = applyFeedBody({ ok: true, since: cursor, seq: to, changes: rows }, cursor);
+    if (r === "more") pollChanges();
+    return true;
   }
 
   /**
@@ -1465,12 +1556,34 @@
   function handleLiveEvent(tick) {
     if (!tick || typeof tick !== "object") return { queued: 0, shouldPull: false, at: 0 };
     var at = Number(tick.at || tick.notebookUpdatedAt) || 0;
-    feedLog.push({ at: Date.now(), tick: at, poll: !!(C && at > lastChangesAt) });
-    if (feedLog.length > 40) feedLog.shift();
-    if (C && at > lastChangesAt) {
-      lastChangesAt = at;
-      pollChanges();
+    // PERF (p0as83): the server says how far the change feed is (`seq`). One
+    // save moved `at` up to three times (commit, LISTEN, book mirror) and each
+    // move polled the feed; poll only when the feed has something past our
+    // cursor (and past what an in-flight poll was already sent for).
+    var tseq = Number(tick.seq) || 0;
+    if (tseq > announcedSeq) announcedSeq = tseq;
+    var needPoll = !!(C && at > lastChangesAt);
+    if (C && tick.push && Array.isArray(tick.changes)) {
+      // The rows themselves came down the live stream.
+      if (applyPushedFeed(tick)) needPoll = false;
+      else needPoll = true;
+    } else if (needPoll && tick.push && tseq > liveSeq) {
+      // This stream pushes the rows right behind its tick: wait for them;
+      // poll only if they have not arrived in PUSH_WAIT_MS.
+      needPoll = false;
+      if (!pushWaitTimer) {
+        pushWaitTimer = setTimeout(function () {
+          pushWaitTimer = null;
+          if (announcedSeq > liveSeq) pollChanges();
+        }, PUSH_WAIT_MS);
+      }
     }
+    if (needPoll && tseq && tseq <= liveSeq) needPoll = false;
+    if (needPoll && tseq && changesInFlight && tseq <= pollIssuedSeq) needPoll = false;
+    feedLog.push({ at: Date.now(), tick: at, seq: tseq, poll: needPoll });
+    if (feedLog.length > 40) feedLog.shift();
+    if (C && at > lastChangesAt) lastChangesAt = at;
+    if (needPoll) pollChanges();
     var ents = Array.isArray(tick.entities) ? tick.entities : [];
     var urls = [];
     var fresh = [];
@@ -1481,6 +1594,13 @@
       var url = entityUrl(h);
       urls.push({ hint: h, url: url });
       if (!h || !h.type || !h.id) continue;
+      // p0as83: while the live stream pushes the change feed, the row a hint
+      // names arrives in the feed itself (HOT-FEED rows and every generic row);
+      // a GET per hint per tab was one more request per save per open tab.
+      if (feedPushLive() && feedCarries(h)) {
+        seenEntityKeys[entityHintKey(h)] = 1;
+        continue;
+      }
       // Do NOT drop hat <= lastPulledAt. Live via=init: wrapFetch handleLiveEvent
       // ran before routes setLiveHooks, so scheduleLivePull no-op'd and entityGets=0.
       // GET the row now even without liveHooks.
@@ -3385,6 +3505,31 @@
     return took;
   }
 
+  /**
+   * PERF (p0as83): an open list screen re-reads its rows every SCREEN_REREAD_MS
+   * (was 2 s); the change feed already brings every row change within a
+   * second. The re-read sends the ETag it last got: an unchanged list is a 304
+   * with no body (`!res.ok` → nothing applied). An ETag is used for at most
+   * ETAG_MAX_MS, then one plain read (a screen that refused an apply gets the
+   * rows again).
+   */
+  var SCREEN_REREAD_MS = 20000;
+  var ETAG_MAX_MS = 60000;
+  var screenEtags = {};
+  function screenGet(getter, url) {
+    var init = { method: "GET", credentials: "same-origin", cache: "no-store" };
+    var hit = screenEtags[url];
+    if (hit && Date.now() - hit.at < ETAG_MAX_MS) init.headers = { "If-None-Match": hit.etag };
+    return getter(url, init).then(function (res) {
+      try {
+        var etag = res && res.ok && res.headers && res.headers.get ? res.headers.get("etag") : null;
+        if (etag) screenEtags[url] = { etag: etag, at: hit && hit.etag === etag ? hit.at : Date.now() };
+        else if (res && res.status !== 304) delete screenEtags[url];
+      } catch (err) {}
+      return res;
+    });
+  }
+
   async function openPeopleScreen(opts) {
     opts = opts || {};
     var limit = Number(opts.limit) || 80;
@@ -3395,7 +3540,7 @@
     if (sbu) url += "&sbu=" + encodeURIComponent(sbu);
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     if (!getter) return { people: [], url: url };
-    var res = await getter(url, { method: "GET", credentials: "same-origin", cache: "no-store" });
+    var res = await screenGet(getter, url);
     if (!res || !res.ok) return { people: [], url: url, status: res && res.status };
     var body = await res.json().catch(function () {
       return null;
@@ -3422,7 +3567,7 @@
     var url = "/api/reward-records/" + encodeURIComponent(month) + "?limit=" + encodeURIComponent(String(limit));
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     if (!getter || !month) return { records: [], url: url };
-    var res = await getter(url, { method: "GET", credentials: "same-origin", cache: "no-store" });
+    var res = await screenGet(getter, url);
     if (!res || !res.ok) return { records: [], url: url, status: res && res.status };
     var body = await res.json().catch(function () {
       return null;
@@ -3449,7 +3594,7 @@
     var url = "/api/month-records/" + encodeURIComponent(month) + "?limit=" + encodeURIComponent(String(limit));
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     if (!getter || !month) return { records: [], url: url };
-    var res = await getter(url, { method: "GET", credentials: "same-origin", cache: "no-store" });
+    var res = await screenGet(getter, url);
     if (!res || !res.ok) return { records: [], url: url, status: res && res.status };
     var body = await res.json().catch(function () {
       return null;
@@ -3476,7 +3621,7 @@
     var url = "/api/month-records/" + encodeURIComponent(month) + "/" + encodeURIComponent(pid);
     var getter = rawFetch || (typeof fetch === "function" ? fetch : null);
     if (!getter || !month || !pid) return { payload: null, url: url };
-    var res = await getter(url, { method: "GET", credentials: "same-origin", cache: "no-store" });
+    var res = await screenGet(getter, url);
     if (!res || !res.ok) return { payload: null, url: url, status: res && res.status };
     var body = await res.json().catch(function () {
       return null;
@@ -3790,6 +3935,15 @@
         );
       }
       var result;
+      if (method === "GET" && path === "/api/company-tick") {
+        if (lastTickBody && !tickDue()) {
+          return new Response(lastTickBody, {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8", "x-apms-tick": "cached" },
+          });
+        }
+        lastRealTickAt = Date.now();
+      }
       if (method === "GET" && isCompanyFileGet(path)) {
         var href = typeof input === "string" ? input : (input && input.url) || "";
         if (String(href).indexOf("books=") < 0 && everLoaded) {
@@ -3877,6 +4031,7 @@
         }
         if (method === "GET" && path === "/api/company-tick" && result && result.ok) {
           var tick = await result.clone().json();
+          rememberTick(tick);
           handleLiveEvent(tick);
         }
       } catch (err) {
@@ -3960,6 +4115,16 @@
     entityFieldsFromNextPull = false;
     liveSeq = 0;
     lastChangesAt = 0;
+    announcedSeq = 0;
+    pollIssuedSeq = 0;
+    lastPushAt = 0;
+    lastRealTickAt = 0;
+    lastTickBody = null;
+    screenEtags = {};
+    if (pushWaitTimer) {
+      clearTimeout(pushWaitTimer);
+      pushWaitTimer = null;
+    }
     changesInFlight = null;
     lastMergeTrace = [];
     pendingAcks = [];
