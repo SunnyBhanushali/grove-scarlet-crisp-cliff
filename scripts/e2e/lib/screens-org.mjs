@@ -981,7 +981,7 @@ export const SCREENS = [
   { module: "Org", screen: "Brands & SBUs: brand / SBU rename by double-click", saves: "brands.name / sbus.name", scenario: "org-units", reached: true, why: "unreachable with a real mouse: the first click opens the brand/SBU page (see note)" },
   { module: "Org", screen: "Brands & SBUs: Make group SBU / Ungroup buttons", saves: "sbus.isGroup (+ sbu-members)", scenario: "org-units", reached: true, why: "Make group covered; Ungroup not driven" },
   { module: "Org", screen: "Brands & SBUs: drag to nest / un-nest SBU", saves: "sbus.parentId + sbu-members rows", scenario: "org-units-drag", reached: true, why: "nest works; drag LEFT never un-nests (engine sees every row at depth 0); dropping right under the brand row does" },
-  { module: "Org", screen: "Brands & SBUs: drag to reorder SBU siblings", saves: "nothing (every drop nests into the row above; list order has no storage)", scenario: "org-units-drag", reached: true, why: "" },
+  { module: "Org", screen: "Brands & SBUs: drag to reorder SBU siblings", saves: "sbus.sortKey on the siblings (BATCH-2; before: nothing was saved)", scenario: "org-units-drag", reached: true, why: "" },
   { module: "Org", screen: "Brands & SBUs: drag brand to another company / SBU to another brand", saves: "brands.companyId / sbus.brandId", scenario: null, reached: false, why: "not driven (same engine as nest; time)" },
   { module: "Org", screen: "Brands & SBUs: Delete company / brand / SBU / group (confirm dialog)", saves: "row deleted + trash row", scenario: "org-units", reached: true, why: "SBU, group, company delete driven; brand delete not driven" },
   { module: "Org", screen: "SBU page → Edit (Name, Brand, Group SBU, Parent group) → Save", saves: "sbus row", scenario: "org-units", reached: true, why: "" },
@@ -993,7 +993,7 @@ export const SCREENS = [
   { module: "Org", screen: "Functions: row + → Role / SBU / Add to group", saves: "roles / functions", scenario: null, reached: false, why: "not driven (Role = Create role dialog, covered in org-roles)" },
   { module: "Org", screen: "Functions: rename by double-click", saves: "functions.name", scenario: "org-functions", reached: true, why: "" },
   { module: "Org", screen: "Function Edit page (Name, Description, Head, Brand, SBU) → Save", saves: "functions row (+ its sub-functions)", scenario: "org-functions", reached: true, why: "" },
-  { module: "Org", screen: "Functions: drag to move sub-function out / nest / reorder", saves: "functions.parentId", scenario: "org-functions", reached: true, why: "un-nest driven; reorder has no storage (same as SBUs/people)" },
+  { module: "Org", screen: "Functions: drag to move sub-function out / nest / reorder", saves: "functions.parentId", scenario: "org-functions", reached: true, why: "nest / un-nest driven; sibling reorder (functions.sortKey, BATCH-2) not driven here — same code path as SBUs / people, which are" },
   { module: "Org", screen: "Functions: Delete function (confirm)", saves: "row deleted + trash row", scenario: "org-functions", reached: true, why: "" },
   { module: "Org", screen: "Roles: Create role dialog (name, function, reports to, roles under)", saves: "roles row", scenario: "org-roles", reached: true, why: "" },
   { module: "Org", screen: "Roles: List / Nested / People views", saves: "nothing (view choice is session state)", scenario: "org-roles", reached: true, why: "" },
@@ -1006,7 +1006,7 @@ export const SCREENS = [
   { module: "Org", screen: "Role page: Upload KROC / Download KROC / Template", saves: "roles.kras (upload)", scenario: null, reached: false, why: "file upload not driven" },
   { module: "Org", screen: "Roles: Bulk upload dialog (Import CSV)", saves: "roles / functions / sbus", scenario: "org-roles-kroc", reached: true, why: "dialog opened/closed without writes; CSV import not driven" },
   { module: "Org", screen: "People reporting tree: drag nest / un-nest", saves: "people.managerId", scenario: "org-chart-drag", reached: true, why: "" },
-  { module: "Org", screen: "People reporting tree: drag reorder siblings", saves: "nothing is saved (order is local only)", scenario: "org-chart-drag", reached: true, why: "" },
+  { module: "Org", screen: "People reporting tree: drag reorder siblings", saves: "people.sortKey on the siblings (BATCH-2; before: nothing was saved)", scenario: "org-chart-drag", reached: true, why: "" },
   { module: "Org", screen: "People reporting tree: Reports to dialog / Add person under this / Delete", saves: "people.managerId / people row", scenario: "org-chart-drag", reached: true, why: "Add person under this + Delete used; Reports to dialog opened only" },
 ];
 

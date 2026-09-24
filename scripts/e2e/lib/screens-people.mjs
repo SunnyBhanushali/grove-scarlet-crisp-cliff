@@ -702,7 +702,7 @@ export const SCREENS = [
   { module: "Org", screen: "People → Mass update → Update dialog (role, function, extra function, brand/SBU, reporting manager, access, gate access, inherit APMS, employment, status, location, join date, CTC + rewards)", saves: "people rows (one PATCH per ticked person)", scenario: "people-mass-update", reached: true, why: "location / employment driven; the other fields go through the same apply path" },
   { module: "Org", screen: "People → Mass update → Delete", saves: "people deleted_at + trash", scenario: "people-mass-update", reached: true, why: "" },
   { module: "Org", screen: "People → Import (bulk people sheet)", saves: "people rows in bulk", scenario: null, reached: false, why: "needs a filled xlsx template upload; not driven in this pass" },
-  { module: "Org", screen: "People reporting tree drag / nest", saves: "managerId / order", scenario: null, reached: false, why: "covered by the reporting-tree agent (out of this area by the brief)" },
+  { module: "Org", screen: "People reporting tree drag / nest (also listed under Org)", saves: "managerId / sortKey", scenario: "org-chart-drag", reached: true, why: "" },
   { module: "Org", screen: "Person file → Change role (role-change case)", saves: "roleCases entity", scenario: null, reached: false, why: "multi-step promotion/transfer workflow (case, approvals); not driven in this pass" },
   { module: "Org", screen: "Person file → Edit KROC", saves: "role (KROC) entity", scenario: null, reached: false, why: "edits the job role, not the person — belongs to Org → Roles" },
   { module: "Org", screen: "Person file → Add review (quarterly review)", saves: "quarter review", scenario: null, reached: false, why: "covered by APMS apmsQuarterReview (screens-apms-eo.mjs)" },

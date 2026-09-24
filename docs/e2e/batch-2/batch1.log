@@ -1,0 +1,268 @@
+  [sign-in] check 6: PASS — no writes, no 5xx
+
+== apmsMonthList
+  [apms-month-list] check 2: PASS — DB October 2026: Nevil Prajapati, Rohan Jadhav, Siddhesh Gawde; A and B list both: true
+  [apms-month-list] check 3: PASS — C listed both 0.7 s after the adds
+  [apms-month-list] check 1: PASS — DB: September 2026 has Jay Nikam true, October 2026 has Sachin Yadav true and keeps Nevil Prajapati true; C listed both in 0.1 s
+  [apms-month-list] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [apms-month-list] check 5: PASS — lists = DB (September 2026 9, October 2026 3)
+  [apms-month-list] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-month-list] check 6: PASS — no writes on open, no banner, no 5xx
+
+== apmsPlanEditor
+  [apms-plan-open] check 2: PASS — DB weights 0.25/0.15, priority true, value off true, notes true; A and B screens show both: true
+  [apms-plan-open] check 3: PASS — C showed both 2.4 s after the edit
+  [apms-plan-open] check 1: PASS — DB: X notes true, Y notes true, X keeps A's earlier weight true; C saw X in 0.0 s
+  [apms-plan-open] check 4: PASS — deleted in DB true; B still saw it true; after B's stale save still deleted true, stale notes kept out true; rows after reload A/B/C 0/0/0
+  [apms-plan-open] check 5: PASS — DB {"w1":"25","w2":"15","bx":false,"notes":"E2E-A Fawaz Ghansar muf8a1f714"}; screens same / same / same
+  [apms-plan-open] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-plan-open] check 6: PASS — no writes on open, no banner, no 5xx
+
+== apmsLockedPlan
+  [apms-plan-locked] check 2: PASS — DB actual 7, exec score 4, value score 3, notes true; A and B screens show both: true
+  [apms-plan-locked] check 3: PASS — C showed both 2.1 s after the edit
+  [apms-plan-locked] check 1: PASS — DB: Allan 2nd actual 9, Hetal actual 5, Allan keeps 1st 7; C saw in 0.0 s
+  [apms-plan-locked] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [apms-plan-locked] check 5: PASS — DB 7|9|4|true|E2E-B locked notes muf8a1f714; screens same / same / same
+  [apms-plan-locked] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-plan-locked] check 6: PASS — no writes on open, no banner, no 5xx
+
+== apmsPlanDrag
+  [apms-plan-drag] check 2: PASS — DB order Advanced Booked by BC › Revenue By BC › Aliens Stuff, notes true; A and B show both: true
+  [apms-plan-drag] check 3: PASS — C showed both 1.0 s after the drop
+  [apms-plan-drag] check 1: PASS — DB: Fawaz July KPIs Aliens Stuff › Advanced Booked by BC › Revenue By BC; Rohan September KRAs Consultation NPS Score › Art Score › Studio Audit + Mystery Audit
+  [apms-plan-drag] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [apms-plan-drag] check 5: PASS — order on all screens = DB (Aliens Stuff › Advanced Booked by BC › Revenue By BC)
+  [apms-plan-drag] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-plan-drag] check 6: PASS — no writes on open, no banner, no 5xx
+
+== apmsSelfComments
+  [apms-self-comments] check 1: PASS — DB: Ronlind Menezes September 2026 created, Siddhesh Gawde July 2026 created
+  [apms-self-comments] check 2: PASS — DB selfNotes true, notes true; B and C screens show both: true
+  [apms-self-comments] check 3: PASS — A (idle) showed both 3.1 s after the edits
+  [apms-self-comments] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [apms-self-comments] check 5: PASS — DB: Ronlind Menezes September deleted
+  [apms-self-comments] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-self-comments] check 6: PASS — no writes on open, no banner, no 5xx
+
+== apmsEO
+  [apms-eo] check 1: PASS — DB: Test for School ongoing; Pipeline Design and … rating 3
+  [apms-eo] check 2: PASS — DB Test for Studio: status overdue, B's note true
+  [apms-eo] check 3: PASS — C's EO list: Started 2.2 s; Overdue 2.0 s
+  [apms-eo] check 4: PASS — A's trash: gone true; B still listed it true; after B's stale rating: in DB false; listed after reload A/B/C false/false/false
+  [apms-eo] check 5: PASS — EO list on A/B/C = DB (Test for Studio OVERDUE, Pipeline Design  PLANNED)
+  [apms-eo] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-eo] check 6: PASS — no writes on open, no banner, no 5xx
+
+== apmsQuarterReview
+  [apms-quarter-review] check 1: PASS — DB: Floyd Q2 self_open, Ronlind Q2 self_open
+  [apms-quarter-review] check 2: PASS — DB Floyd Q2: selfNote "Self f717", managerNote "Manager f717"
+  [apms-quarter-review] check 3: PASS — C showed both 0.9 s after
+  [apms-quarter-review] check 4: N/A — a quarterly review cannot be deleted (no delete control on the page)
+  [apms-quarter-review] check 5: PASS — Floyd's Q2 review on A/B/C = DB
+  [apms-quarter-review] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-quarter-review] check 6: PASS — no writes on open, no banner, no 5xx
+
+== apmsLockClose
+  [apms-lock-close] check 2: PASS — DB status plan_locked, notes true; A and B show both: true
+  [apms-lock-close] check 3: PASS — C showed lock + notes 1.9 s after the click
+  [apms-lock-close] check 1: PASS — DB: Pritam closed, Henson closed; C saw Pritam closed in 0.1 s
+  [apms-lock-close] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [apms-lock-close] check 5: PASS — statuses agree: Closed, Closed, Closure pending
+  [apms-lock-close] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [apms-lock-close] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsDeleteRecreate
+  [targets-delete-recreate] check 1: PASS — DB: Ahmedabad's September cell deleted true; Goa M4 1650000; reward links kept on the node: tn-m-mu29qhpk, tn-m-mu29qhpk
+  [targets-delete-recreate] check 4: PASS — B still showed Ahmedabad true; after B's stale actual: still deleted true, actual 0; on A/B after reload false/false
+  [targets-delete-recreate] note: links: before tn-m-mu29qhpk, tn-m-mu29qhpk (Nevil's page: Ahmedabad); after the delete the rows keep targetNodeId tn-m-mu29qhpk, tn-m-mu29qhpk and the page shows "Select a target…"; re-created from Brand or SBU → same node (tn-m-mu29qhpk), cell back true, links tn-m-mu29qhpk, tn-m-mu29qhpk
+  [targets-delete-recreate] check 3: PASS — C (idle on Nevil's Rewards page): target left the choice 3.2 s after the delete; showed Ahmedabad again 1.2 s after the re-create
+  [targets-delete-recreate] check 2: PASS — DB Ahmedabad M2 560000, actual 430000; A shows both true, B shows both true
+  [targets-delete-recreate] note: custom-name re-create: nodes named Ahmedabad tn-m-mu29qhpk; reward links tn-m-mu29qhpk, tn-m-mu29qhpk; Nevil's page shows "Ahmedabad"
+  [targets-delete-recreate] check 5: PASS — DB Ahmedabad live true (M1 500000); month pages and Nevil's page agree on A/B/C
+  [targets-delete-recreate] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-delete-recreate] check 6: PASS — no writes on open, no banner, no 5xx
+
+== rewardsMonthList
+  [rewards-month-list] check 2: PASS — DB August 2026: Allan Gois, Aman Vishwakarma, Bhupendra Kumar, Biri tahu, Dinesh Murkar, Fawaz Ghansar, Gaurav Mokale, Grishita Suthar, Priti Thombre, Rohan Jadhav, Sachin Yadav, Sameer Kureshi, Sunny Kumar, Vikas Kumar, Vishal Maurya; A and B list both: true
+  [rewards-month-list] check 3: PASS — C listed both 0.7 s after the adds
+  [rewards-month-list] check 1: PASS — DB: September 2026 has Jay Nikam true, August 2026 has Hetal Soni true and keeps Fawaz Ghansar true; C listed both in 0.0 s
+  [rewards-month-list] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [rewards-month-list] check 5: PASS — lists = DB (September 2026 15, August 2026 15)
+  [rewards-month-list] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [rewards-month-list] check 6: PASS — no writes on open, no banner, no 5xx
+
+== rewardsPlanOpen
+  [rewards-plan-open] check 2: PASS — DB target tn-imp-3-63t328 (picked Goa), weights 0.5/0.3, disqualifier true, notes true; A and B screens show both: true
+  [rewards-plan-open] check 3: PASS — C showed both 2.3 s after the edit
+  [rewards-plan-open] check 1: PASS — DB: Rohan notes true, Nevil notes true, Rohan keeps A's weight true; C saw Rohan in 0.0 s
+  [rewards-plan-open] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [rewards-plan-open] check 5: PASS — DB tn-imp-3-63t328|50|30|true|E2E-A Rohan Jadhav muf8a1f715; screens same / same / same
+  [rewards-plan-open] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [rewards-plan-open] check 6: PASS — no writes on open, no banner, no 5xx
+
+== rewardsMassUpdate
+  [rewards-mass-update] check 2: PASS — DB: Aman target Goa, notes true; Bhupendra target Goa; B's screen shows both: true
+  [rewards-mass-update] check 3: PASS — C showed target + notes 0.1 s after the update
+  [rewards-mass-update] check 1: PASS — DB: Biri true, Dinesh true (Pune); Gaurav true, Grishita true (Delhi); Aman still Goa true
+  [rewards-mass-update] check 4: PASS — A's delete in DB true; B still listed it true; after B's stale mass update still deleted true; listed after reload A/B/C 0/0/0
+  [rewards-mass-update] check 5: PASS — targets on screen = DB for the people checked (A, B, C)
+  [rewards-mass-update] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [rewards-mass-update] check 6: PASS — no writes on open, no banner, no 5xx
+
+== rewardsMyRewards
+  [rewards-my-rewards] check 1: PASS — DB: Ronlind Menezes September 2026 created, Siddhesh Gawde August 2026 created; C's My rewards showed September in 1.8 s
+  [rewards-my-rewards] check 2: PASS — DB selfNotes true, notes true; B and C screens show both: true
+  [rewards-my-rewards] check 3: PASS — A (idle) showed both 1.3 s after the edits
+  [rewards-my-rewards] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [rewards-my-rewards] check 5: PASS — DB: Ronlind Menezes September deleted; C's My rewards September "—"
+  [rewards-my-rewards] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [rewards-my-rewards] check 6: PASS — no writes on open, no banner, no 5xx
+
+== rewardsLockUnlock
+  [rewards-lock-close] check 2: PASS — DB status plan_locked, notes true; A and B show both: true; alert: Move this EO to trash?
+  [rewards-lock-close] check 3: PASS — C showed lock + notes 2.0 s after the click
+  [rewards-lock-close] check 1: PASS — DB: Sunny Kumar August 2026 closed actuals 4/5/6/7/8; Vikas Kumar closed actuals 85/86/87/88/89; C saw Sunny Kumar closed in 0.0 s
+  [rewards-lock-close] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit still deleted true; after reload still deleted true, listed A/B/C 0/0/0
+  [rewards-lock-close] check 5: PASS — statuses agree: Plan locked, Closed, Closed
+  [rewards-lock-close] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [rewards-lock-close] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsCells
+  [targets-cells] check 2: PASS — DB Pune M2 2800000, actual 2500000; A shows both true, B shows both true
+  [targets-cells] check 3: PASS — C showed both 1.4 s after the edits
+  [targets-cells] check 1: PASS — DB Goa 1200000, Kochi 1300000; C saw both in 0.0 s
+  [targets-cells] check 4: PASS — A's delete: off September in DB true; B still saw it true; after B's stale edit still off true, cell deleted; after reload off true, shown A/B/C 0/0/0
+  [targets-cells] check 5: PASS — actual and M2 on all screens = DB (Pune, Goa, Kochi)
+  [targets-cells] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-cells] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsGroups
+  [targets-groups] check 1: PASS — DB: 4 targets created and on September ✓✓✓✓; C listed all in 0.0 s
+  [targets-groups] note: group 1 then group 2: DB G1 = E2E A1 1f713, E2E A2 1f713; G2 = E2E B1 1f713, E2E B2 1f713; both groups top level, members nested: true; C shows 2 + 2 nested: true
+  [targets-groups] check 2: PASS — DB: G1 mode set, members E2E A1 1f713, E2E A2 1f713 removed true; A shows both true, B shows both true
+  [targets-groups] check 3: PASS — C showed both 0.8 s after
+  [targets-groups] check 4: PASS — A's delete: G2 off September true; B still saw it true; after B's stale edit of a G2 member's actual still off true; shown after reload A/B/C 0/0/0
+  [targets-groups] check 5: PASS — top-level targets and G1 members on all screens = DB (5 top level, G1 1)
+  [targets-groups] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-groups] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsDrag
+  [targets-drag] check 2: PASS — DB: Aliens Tattoo School in tn-imp-19-y8xqph, Vishal mode set; A shows both true, B shows both true
+  [targets-drag] check 3: PASS — C showed both 0.9 s after the drop
+  [targets-drag] check 1: PASS — order in Nikhil Bangalore › Chennai → Chennai › Bangalore (C same: true); DB: Gurgaon in tn-imp-19-y8xqph (Vishal true)
+  [targets-drag] check 4: PASS — A's delete: Delhi off September true; B still saw it true; after B's stale drag still off true; shown after reload A/B/C 0/0/0
+  [targets-drag] check 5: PASS — nested counts on all screens = DB (Vishal 4, Nikhil 3)
+  [targets-drag] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-drag] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsMonthList
+  [targets-month-list] note: after Duplicate A is on Targets · October 2026; after Add target B is on Targets · November 2026
+  [targets-month-list] check 1: PASS — DB: October has 21 of September's 21 targets; E2E Nov 1f716 in November true
+  [targets-month-list] check 3: PASS — C's list showed October (21) and November 4.1 s after
+  [targets-month-list] check 2: PASS — DB: both in October true (23 targets); lists A/B/C show 23: true/true/true; C's Edit opens October with both: true
+  [targets-month-list] check 4: PASS — A's delete: October gone true; B still lists it true; after B's stale Add target: October targets 0; listed after reload A/B/C false/false/false
+  [targets-month-list] check 5: PASS — lists on A/B/C = DB (April 2099:0, April 2088:0, November 2026:1, September 2026:21, August 2026:19, July 2026:19, June 2026:19, May 2026:18, April 2026:18)
+  [targets-month-list] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-month-list] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsCopyMonth
+  [targets-copy-month] note: Copy month into a month that already has a target: December has 20 (August 19); the existing target is kept
+  [targets-copy-month] check 1: PASS — DB: December 20 targets (August 19); Pune actual 2610000
+  [targets-copy-month] check 3: PASS — C showed the copied targets 1.1 s after
+  [targets-copy-month] check 2: PASS — DB Goa (December) M5 1900000, actual 1100000; A shows both true, B shows both true
+  [targets-copy-month] check 4: PASS — B still showed Kochi true; after B's stale M1: deleted true; on A/B/C after reload false/false/false
+  [targets-copy-month] check 5: PASS — December on A/B/C = DB (19 targets, Goa M5 1900000)
+  [targets-copy-month] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-copy-month] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsImport
+  [targets-import] note: import preview: 2 rows across 2027-03.
+  [targets-import] check 1: PASS — DB: March 2027 has 2 targets (Imp One f713 M1 100000); Pune M4 3340000
+  [targets-import] check 3: PASS — C's list showed March 2027 with 2 targets 0.9 s after
+  [targets-import] check 2: N/A — import replaces whole months by design (warned in the dialog); measured: A's replace landed after B's actual, DB Imp One f713 M3 125000, actual null (B typed 95000 — replaced by the file's blank); B's screen = DB true
+  [targets-import] check 4: PASS — A's delete: March 2027 gone true; after B's stale M2: 0 targets; listed after reload A/B/C false/false/false
+  [targets-import] check 5: PASS — lists on A/B/C = DB (10 months)
+  [targets-import] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-import] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsTargetTab
+  [targets-target-tab] check 1: PASS — DB Pune M1 2512000, Goa M1 1234000
+  [targets-target-tab] check 2: PASS — DB Pune M1 2530000, actual 2745000
+  [targets-target-tab] check 3: PASS — C's Target tab: two targets 1.3 s; same target (M1 + achieved) 1.1 s
+  [targets-target-tab] check 4: PASS — B still showed Kolkatta true; after B's stale actual: deleted true; September row on A/B/C's Target tab false/false/false
+  [targets-target-tab] check 5: PASS — Target tab Pune (M1 2530000, achieved 2745000) and Group tab Vishal (September row) on A/B/C = DB
+  [targets-target-tab] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-target-tab] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsMonthStatus
+  [targets-month-status] check 2: PASS — DB: September plan_open, Goa M3 1400000; A shows both true, B shows both true
+  [targets-month-status] check 3: PASS — C showed both 2.8 s after; C's change log has the unlock: true
+  [targets-month-status] check 1: PASS — DB: September plan_locked; E2E 2088 1f718 on April 2088 true; C saw the lock in 0.0 s
+  [targets-month-status] check 4: PASS — A's delete: April 2088 status gone true; B still on it true; after B's stale New target: month still gone true, stale target on it false; listed after reload A/B/C 0/0/0
+  [targets-month-status] check 5: PASS — DB Plan locked; screens Plan locked / Plan locked / Plan locked
+  [targets-month-status] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-month-status] check 6: PASS — no writes on open, no banner, no 5xx
+
+== smoke (other modules)
+  [smoke-home] note: opened: Home ok
+  [smoke-home] check 5: N/A — no edit: read-only dashboard (figures, alerts, awards won)
+  [smoke-home] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-me] note: opened: Me ok
+  [smoke-me] check 5: PASS — edit "smoke-me-a1f7" in the DB true, still there after reload true
+  [smoke-me] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-org] note: opened: Org › Overview ok; Org › Brands & SBUs ok; Org › Functions ok; Org › Roles ok; Org › People ok
+  [smoke-org] check 5: PASS — edit "smoke-org-a1f7" in the DB true, still there after reload true
+  [smoke-org] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-kpi] note: opened: KPI › KPI library ok; KPI › KPI scores ok
+  [smoke-kpi] check 5: PASS — edit "smoke-kpi-a1f7" in the DB true, still there after reload true
+  [smoke-kpi] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-awards] note: opened: Rewards › Awards ok; Rewards › Awards › Prizes ok
+  [smoke-awards] check 5: PASS — edit "smoke-awards-a1f7" in the DB true, still there after reload true
+  [smoke-awards] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-mis] note: opened: MIS › Reports ok; MIS › Create ok
+  [smoke-mis] check 5: PASS — edit "smoke-mis-a1f7" in the DB true, still there after reload true
+  [smoke-mis] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-settings] note: opened: Settings › Setup ok; Settings › Access roles ok; Settings › Assign people ok; Settings › Backup ok; Settings › Trash ok
+  [smoke-settings] check 5: PASS — edit "smoke-settings-a1f7" in the DB true, still there after reload true
+  [smoke-settings] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-improve] note: opened: Improve ok
+  [smoke-improve] check 5: PASS — edit "smoke-improve-a1f7" in the DB true, still there after reload true
+  [smoke-improve] check 6: PASS — no writes on open, no banner, no 5xx
+  [smoke-roster] check 6: N/A — not reached: the Roster link opens no page in this build
+
+module  screen                         1     2     3     4     5     6
+All     sign-in                        -     -     -     -     -     pass 
+APMS    apms-month-list                pass  pass  pass  pass  pass  pass 
+APMS    apms-plan-open                 pass  pass  pass  pass  pass  pass 
+APMS    apms-plan-locked               pass  pass  pass  pass  pass  pass 
+APMS    apms-plan-drag                 pass  pass  pass  pass  pass  pass 
+APMS    apms-self-comments             pass  pass  pass  pass  pass  pass 
+APMS    apms-eo                        pass  pass  pass  pass  pass  pass 
+APMS    apms-quarter-review            pass  pass  pass  n/a   pass  pass 
+APMS    apms-lock-close                pass  pass  pass  pass  pass  pass 
+Targets targets-delete-recreate        pass  pass  pass  pass  pass  pass 
+Rewards rewards-month-list             pass  pass  pass  pass  pass  pass 
+Rewards rewards-plan-open              pass  pass  pass  pass  pass  pass 
+Rewards rewards-mass-update            pass  pass  pass  pass  pass  pass 
+Rewards rewards-my-rewards             pass  pass  pass  pass  pass  pass 
+Rewards rewards-lock-close             pass  pass  pass  pass  pass  pass 
+Targets targets-cells                  pass  pass  pass  pass  pass  pass 
+Targets targets-groups                 pass  pass  pass  pass  pass  pass 
+Targets targets-drag                   pass  pass  pass  pass  pass  pass 
+Targets targets-month-list             pass  pass  pass  pass  pass  pass 
+Targets targets-copy-month             pass  pass  pass  pass  pass  pass 
+Targets targets-import                 pass  n/a   pass  pass  pass  pass 
+Targets targets-target-tab             pass  pass  pass  pass  pass  pass 
+Targets targets-month-status           pass  pass  pass  pass  pass  pass 
+Home    smoke-home                     -     -     -     -     n/a   pass 
+Me      smoke-me                       -     -     -     -     pass  pass 
+Org     smoke-org                      -     -     -     -     pass  pass 
+KPI     smoke-kpi                      -     -     -     -     pass  pass 
+Awards  smoke-awards                   -     -     -     -     pass  pass 
+MIS     smoke-mis                      -     -     -     -     pass  pass 
+Settings smoke-settings                 -     -     -     -     pass  pass 
+Improve smoke-improve                  -     -     -     -     pass  pass 
+Roster  smoke-roster                   -     -     -     -     -     n/a  
+
+PASS — report: /tmp/claude-0/runs/run4/batch1.json

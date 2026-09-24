@@ -1,0 +1,311 @@
+  [sign-in] check 6: PASS — no writes, no 5xx
+
+== org-overview
+  [org-overview] check 1: N/A — read-only screen: counts only, nothing to edit on Overview (edits are made on Brands & SBUs / Functions, covered there)
+  [org-overview] check 2: N/A — read-only screen: no fields to edit
+  [org-overview] check 4: N/A — read-only screen: no delete control on Overview
+  [org-overview] check 3: PASS — C showed SBUs 17→18 and functions 12→13 0.5 s after the saves
+  [org-overview] check 5: PASS — DB {"brands":3,"sbus":18,"functions":13,"roles":59,"people":176} (before the test {"brands":3,"sbus":17,"functions":12,"roles":59,"people":176}); screens A/B/C same / same / same
+  [org-overview] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-overview] check 6: PASS — no writes on open, no banner, no 5xx
+
+== org-units
+  [org-units] check 1: PASS — DB: U1 muf74tuo9 under Aliens Home true, company renamed by double-click true; A shows both true, B shows both true; C showed both 0.0 s after the saves (edits took 2.8 s)
+  [org-units] check 2: PASS — DB name "U1 renamed muf74tuo9" (A's rename kept true), isGroup true (B's group kept true); A shows renamed group true, B true; A sent PATCH /api/e/sbus/bu-1790234086867-jhop 200, PATCH /api/e/sbus/bu-1790234086867-jhop 409, PATCH /api/e/sbus/bu-1790234086867-jhop 200 · B sent PATCH /api/e/sbus/bu-1790234086867-jhop 200
+  [org-units] check 3: PASS — C (idle on Brands & SBUs) showed A's SBU + B's renamed company 0.0 s after the saves; A's rename + B's group 0.5 s after the saves
+  [org-units] note: double-click on the SBU name opened the inline rename; saved in DB true
+  [org-units] check 4: PASS — deleted in DB true; B still saw it true; B's stale save PATCH /api/e/sbus/bu-1790234085355-w5k8 409; after it still deleted true, stale name kept out true, live copies 0; shown after reload A/B/C 0/0/0; in Settings → Trash (DB true, screen true)
+  [org-units] check 5: PASS — DB U1 renamed muf74tuo9 group true, company UCo renamed muf74tuo9; screens A/B/C same / same / same
+  [org-units] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-units] check 6: PASS — no writes on open, no banner, no 5xx
+
+== org-units-drag
+  [org-units-drag] check 1: PASS — DB: D2.parentId=D1 true (members 1), D4.parentId=D3 true (members 1); A and B show both nests true; C showed both 0.9 s after the drops
+  [org-units-drag] check 2: PASS — drag LEFT out of D1: un-nested; then A drop-under-brand ‖ B rename: DB name "D2 renamed muf74tuo14" (B's rename kept true), parentId null + group rows [] (A's un-nest kept true); A and B show it renamed and out of D1 true; writes A PATCH /api/e/sbu-members/bu-1790234134900-32nb%1Fbu-1790234136116-wrbk 409, PATCH /api/e/sbus/bu-1790234136116-wrbk 200, PATCH /api/e/sbus/bu-1790234134900-32nb 200, PATCH /api/e/sbus/bu-1788157853959-6f58 200 · B PATCH /api/e/sbus/bu-1790234136116-wrbk 200
+  [org-units-drag] check 3: PASS — C (idle) showed the nests 0.9 s, the rename + un-nest 0.0 s, A's reorder (D3 above LILA; A's own screen D3 muf74tuo14 > LILA; A sent PATCH /api/e/sbus/bu-1788157820845-0q13 409, PATCH /api/e/sbus/bu-1788157842376-6lnd 409, PATCH /api/e/sbus/bu-1790234137331-s71n 200, PATCH /api/e/sbus/bu-1788157842376-6lnd 200, PATCH /api/e/sbus/bu-1788157820845-0q13 200) 0.7 s after the drops
+  [org-units-drag] check 4: PASS — deleted in DB true; B still saw it true; B's stale drag sent PATCH /api/e/sbus/bu-1790234138537-2mmd 409, PATCH /api/e/sbu-members/bu-1790234137331-s71n%1Fbu-1790234138537-2mmd 409; after it still deleted true, live group rows 0; shown after reload A/B/C 0/0/0; trash entry true
+  [org-units-drag] check 5: PASS — DB: D2 parent null; want order as A left it (D3 muf74tuo14 > LILA); screens A/B/C same / same / same
+  [org-units-drag] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-units-drag] check 6: PASS — no writes on open, no banner, no 5xx
+
+== org-sbu-members
+  [org-sbu-members] check 1: PASS — DB: M1 in ["bu-1790234199962-565n"] (want G1), M2 in ["bu-1790234200842-n18s"] (want G2), Training mapped to G1 true; A shows M1 true, B shows M2 true; C (on G1) showed M1 + Training 0.4 s after the saves
+  [org-sbu-members] check 2: PASS — DB: name "M1 renamed muf74tuo15" (B's rename kept true), parentId null, group rows [] (A's Remove kept true); A's G1 page lists it false; writes A PATCH /api/e/sbus/bu-1790234199962-565n 200, PATCH /api/e/sbus/bu-1790234200842-n18s 200, PATCH /api/e/sbu-members/bu-1790234199962-565n%1Fbu-1790234202286-g35d 200, PATCH /api/e/sbus/bu-1790234202286-g35d 200, PATCH /api/e/sbus/bu-1790234202286-g35d 200, PATCH /api/e/sbu-members/bu-1790234199962-565n%1Fbu-1790234202286-g35d 200 · B PATCH /api/e/sbus/bu-1790234203607-gvhq 200, PATCH /api/e/sbu-members/bu-1790234200842-n18s%1Fbu-1790234203607-gvhq 200, PATCH /api/e/sbus/bu-1790234202286-g35d 409, PATCH /api/e/sbus/bu-1790234202286-g35d 200
+  [org-sbu-members] check 3: PASS — C idle on G1's page: A's member + mapping 0.4 s; M1 leaving G1 0.2 s after the saves
+  [org-sbu-members] check 4: PASS — deleted in DB true; B still saw it in G2 true; B's stale Remove sent PATCH /api/e/sbus/bu-1790234203607-gvhq 409, PATCH /api/e/sbu-members/bu-1790234200842-n18s%1Fbu-1790234203607-gvhq 409; after it still deleted true, live group rows 0; shown after reload (tree + G2 page) A/B/C 0/0/0; trash entry true
+  [org-sbu-members] check 5: PASS — DB G1: 0 member(s), Training mapped true; screens A/B/C same / same / same
+  [org-sbu-members] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-sbu-members] check 6: PASS — no writes on open, no banner, no 5xx
+
+== org-functions
+  [org-functions] check 1: PASS — DB: S1 under F1 true, F2 saved true; A and B show both true; C showed both 0.7 s after the saves
+  [org-functions] check 2: PASS — DB name "F1 renamed muf74tuo13" (B's double-click rename kept true; B's double-click during A's save opened no inline input, a retry 1 s later did), description "desc A muf74tuo13" (A's edit kept true); A and B list it renamed true; writes A PATCH /api/e/functions/fn-1790234267825-aumn 200, PATCH /api/e/functions/fn-1790234267825-aumn 200 · B PATCH /api/e/functions/fn-1790234267825-aumn 409, PATCH /api/e/functions/fn-1790234267825-aumn 200
+  [org-functions] check 3: PASS — C idle on Functions: A's sub-function + B's function 0.7 s; B's rename 0.5 s; A's drag of S1 out of F1 (DB parentId null) 0.7 s after the save
+  [org-functions] check 4: PASS — deleted in DB true; B still saw it true; B's stale save sent PATCH /api/e/functions/fn-1790234269158-nup0 409; after it still deleted true, stale description kept out true; shown after reload A/B/C 0/0/0; Settings → Trash (DB true, screen true)
+  [org-functions] check 5: PASS — DB F1 renamed muf74tuo13 / S1 parent null; screens A/B/C same / same / same
+  [org-functions] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-functions] check 6: PASS — no writes on open, no banner, no 5xx
+
+== org-roles
+  [org-roles] check 1: PASS — DB: R1 in Artistry true, R2 reports to Director of Artistry true; both landed on their role page; C (Roles list) showed both 0.5 s after the saves
+  [org-roles] check 2: PASS — DB name "R1 renamed muf74tuo9" (A's rename kept true), ags {"1A":20} (B's 1A=Solid kept true); A's page shows the new title true; writes A PATCH /api/e/roles/role-1790234320908-bceq 200, PATCH /api/e/roles/role-1790234320908-bceq 200 · B PATCH /api/e/roles/role-1790234320908-bceq 200
+  [org-roles] check 3: PASS — C idle on Roles (List): the two new roles 0.5 s, A's rename 0.0 s after the saves
+  [org-roles] check 4: PASS — deleted in DB true; B still saw it true; B's stale draft save sent PATCH /api/e/roles/role-1790234322205-n9zj 409; after it still deleted true, stale KRA kept out true; listed after reload A/B/C 0/0/0; Settings → Trash (DB true, screen true)
+  [org-roles] check 5: PASS — DB R1 renamed muf74tuo9 ags {"1A":20}; screens (List / Nested / People view / AGS know-how 20) A/B/C same / same / same
+  [org-roles] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-roles] check 6: PASS — no writes on open, no banner, no 5xx
+
+== org-roles-kroc
+  [org-roles-kroc] check 1: PASS — DB: K1 KRA "KRA A muf74tuo14", K2 parents ["role-1787993772929-q2xn","head-ops"]; Roles list marks K2 MULTI REPORTING true; C (on K1's KROC) showed the KRA 0.0 s after the save
+  [org-roles-kroc] check 2: PASS — DB: competency true (A), ags {"1A":30} (B's 1A=Deep=30 kept true), earlier KRA kept true; C (idle viewer of K1, never typed) wrote K1 never; writes A PATCH /api/e/roles/role-1790234395085-h80d 409, PATCH /api/e/roles/role-1790234395085-h80d 200, PATCH /api/e/roles/role-1790234395085-h80d 200 · B PATCH /api/e/roles/role-1790234395085-h80d 200
+  [org-roles-kroc] check 3: PASS — C idle on K1's KROC tab: A's KRA name 0.0 s; B's KRA rename 0.2 s after the save
+  [org-roles-kroc] check 4: PASS — deleted in DB true; B still saw it true; B's stale competency sent PATCH /api/e/roles/role-1790234391537-5eyt 409; after it still deleted true, stale competency kept out true; listed after reload A/B/C 0/0/0
+  [org-roles-kroc] check 5: PASS — DB {"kra":"KRA A muf74tuo14 b","comp":"Comp A muf74tuo14","ags30":true}; screens A/B/C same / same / same
+  [org-roles-kroc] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-roles-kroc] check 6: PASS — no writes on open, no banner, no 5xx
+
+== org-chart-drag
+  [org-chart-drag] check 1: PASS — DB: T1 → T3 true, T2 → T3 true; A and B show both under T3 true; C showed both 0.6 s after the drops
+  [org-chart-drag] check 2: PASS — drag LEFT at the end of T3's reports: un-nested; then A drop-above-T3 ‖ B Edit→Location→Save: DB managerId Sunny (A's un-nest kept true), location "Loc muf74tuo14" (B's edit kept true); writes A PATCH /api/people/p-1790234472700-2ye3fg 200 · B PATCH /api/people/p-1790234472700-2ye3fg 200
+  [org-chart-drag] check 3: PASS — C (idle, Company view): the two nests 0.6 s; T1 back under Sunny 1.1 s; A's sibling reorder (T1muf74tuo14 Tree > T3muf74tuo14 Tree → A shows T3muf74tuo14 Tree > T1muf74tuo14 Tree; C before T1muf74tuo14 Tree > T3muf74tuo14 Tree; A sent PATCH /api/people/p-1790234482232-afzv4n 200, PATCH /api/people/p-1790234472700-2ye3fg 200, PATCH /api/company 409, PATCH /api/company 409, PATCH /api/company 200) 0.6 s
+  [org-chart-drag] check 4: PASS — deleted in DB true; B still saw it true; B's stale drag sent PATCH /api/people/p-1790234477399-b464f0 409; after it still deleted true (managerId T3); shown after reload A/B/C 0/0/0; trash entry true
+  [org-chart-drag] check 5: PASS — DB: T1/T3 managers Sunny/Sunny; want order as A left it (T3muf74tuo14 Tree > T1muf74tuo14 Tree); screens A/B/C same / same / same
+  [org-chart-drag] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [org-chart-drag] check 6: PASS — no writes on open, no banner, no 5xx
+
+== peopleViews
+  [people-views] note: views rendered: My team:ok, Company:ok, SBU:ok, Function:ok, Summary:ok, List:ok; sessionStorage keys: apms-ui-session-v1, apms-ui-people-list-v1
+  [people-views] check 3: PASS — C showed both hires 0.1 s after the saves (3.5 s after the clicks)
+  [people-views] check 1: N/A — views, filters and search are per-browser sessionStorage state (apms-ui-people-list-v1), not records; the hires used here are checked in people-hire
+  [people-views] check 2: N/A — same: nothing in a view is a record field; field edits are checked in people-edit
+  [people-views] check 4: N/A — a view has no edit control of its own; delete vs a stale edit is checked in people-hire / people-edit / people-status
+  [people-views] check 5: PASS — DB ["Vana View4tuo11","Vbob View4tuo11"]; A/B/C lists ["Vana View4tuo11","Vbob View4tuo11"] / ["Vana View4tuo11","Vbob View4tuo11"] / ["Vana View4tuo11","Vbob View4tuo11"]; C's search after reload "View4tuo11"
+  [people-views] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [people-views] check 6: PASS — no writes on open, no banner, no 5xx
+
+== peopleHire
+  [people-hire] check 3: PASS — C showed both new people 0.7 s after the saves
+  [people-hire] check 1: PASS — DB: A's hire true (p-1790234635795-etbemr), B's hire true (p-1790234635677-a74ie2), email/ID stored true, logins rows true/true; A sees B's and B sees A's true
+  [people-hire] check 2: PASS — DB location "Hloc 4tuo10", joinDate "2026-08-17"; A and B files show both true; C's file showed both 0.6 s after the saves
+  [people-hire] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit + Save still deleted true, stale Location kept out true; after reload deleted true, listed A/B/C 0/0/0
+  [people-hire] check 5: PASS — DB {"loc":"Hloc 4tuo10","email":"hana.hire4tuo10.3@e2e.test","id":"ALN7135"}; A/B/C {"loc":"Hloc 4tuo10","email":"hana.hire4tuo10.3@e2e.test","id":"ALN7135"} / {"loc":"Hloc 4tuo10","email":"hana.hire4tuo10.3@e2e.test","id":"ALN7135"} / {"loc":"Hloc 4tuo10","email":"hana.hire4tuo10.3@e2e.test","id":"ALN7135"}
+  [people-hire] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [people-hire] check 6: PASS — no writes on open, no banner, no 5xx
+
+== peopleEdit
+  [people-edit] check 2: PASS — DB A's fields (location, employment, salary, dob) true {"l":"Eloc 4tuo10","e":"contract","s":480000,"d":"1991-03-04"}; B's fields (joinDate, access, email, employeeCode) true {"j":"2026-07-01","a":"manager","m":"eda.b.4tuo10@e2e.test","c":"ALN8161"}; A and B files show both true
+  [people-edit] check 3: PASS — C showed A's and B's fields 0.6 s after the saves
+  [people-edit] check 1: PASS — X: phone true, Core role (picked ~0.6 s after the form Save) in the DB within 10 s true (Trainee Artist), earlier A+B fields kept true, M1–M5 true {"M1":1000,"M2":2000,"M3":3000,"M4":4000,"M5":5000}; Y: location+employment true
+  [people-edit] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale edit + Save still deleted true, stale Location kept out true; after reload deleted true, listed A/B/C 0/0/0
+  [people-edit] check 5: PASS — DB {"loc":"Eloc 4tuo10","email":"eda.b.4tuo10@e2e.test","id":"ALN8161","access":"manager"}; A/B/C {"loc":"Eloc 4tuo10","email":"eda.b.4tuo10@e2e.test","id":"ALN8161","access":"manager"} / {"loc":"Eloc 4tuo10","email":"eda.b.4tuo10@e2e.test","id":"ALN8161","access":"manager"} / {"loc":"Eloc 4tuo10","email":"eda.b.4tuo10@e2e.test","id":"ALN8161","access":"manager"}
+  [people-edit] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [people-edit] check 6: PASS — no writes on open, no banner, no 5xx
+
+== peopleManagers
+  [people-managers] check 2: PASS — DB managerId Avnish Chollera, dotted ["Floyd Dsilva"], location "Mloc 4tuo14"; A's picker "Avnish Chollera, Floyd Dsilva"
+  [people-managers] check 3: PASS — C showed MR on Mia Mgr4tuo14 0.1 s after the saves (3.6 s after the clicks); row: Mia Mgr4tuo14 | MR | Avnish Chollera | Floyd Dsilva | No role
+  [people-managers] check 1: PASS — Y reports to Floyd Dsilva true; Z reports to Avnish Chollera (row dialog) true (managerId p-1788346069529); single-manager rows Y/Z have no MR on C true
+  [people-managers] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale dotted-line tick still deleted true; after reload deleted true, listed A/B/C 0/0/0
+  [people-managers] check 5: PASS — DB multi-manager X true, Y false; MR on A/B/C {"X":true,"Y":false} / {"X":true,"Y":false} / {"X":true,"Y":false}
+  [people-managers] note: untick the dotted-line manager → C's MR (shown before: true) gone in 0.3 s
+  [people-managers] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [people-managers] check 6: PASS — no writes on open, no banner, no 5xx
+
+== peopleStatus
+  [people-status] check 1: PASS — DB X status paused, Y status left
+  [people-status] check 3: PASS — C's Active list dropped both 0.4 s after the saves
+  [people-status] check 2: PASS — DB Z status paused, location "Sloc 4tuo12"; C's file showed both 0.5 s after the saves
+  [people-status] check 4: PASS — A's delete in DB true; B still saw it true; after B's stale Status → Active + Save still deleted true, status left; after reload deleted true, listed A/B/C (All states) 0/0/0
+  [people-status] check 5: PASS — DB paused ["Sal Stat4tuo12","Sze Stat4tuo12"]; Paused filter on A/B/C ["Sal Stat4tuo12","Sze Stat4tuo12"] / ["Sal Stat4tuo12","Sze Stat4tuo12"] / ["Sal Stat4tuo12","Sze Stat4tuo12"]
+  [people-status] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [people-status] check 6: PASS — no writes on open, no banner, no 5xx
+
+== peopleMassUpdate
+  [people-mass-update] check 1: PASS — DB X location "MA 4tuo16", Y location "MB 4tuo16"
+  [people-mass-update] check 2: PASS — DB X {"l":"MAB 4tuo16","e":"contract"}, Y {"l":"MAB 4tuo16","e":"contract"}
+  [people-mass-update] check 3: PASS — C's file showed A's Location and B's Employment 0.4 s after the saves
+  [people-mass-update] check 4: PASS — A's mass Delete in DB true; B still saw Z true; after B's stale mass Update still deleted true, stale Location kept out true; after reload deleted true, listed A/B/C 0/0/0
+  [people-mass-update] check 5: PASS — DB {"l":"MAB 4tuo16","e":"contract"}; A/B/C {"l":"MAB 4tuo16","e":"Contract"} / {"l":"MAB 4tuo16","e":"Contract"} / {"l":"MAB 4tuo16","e":"Contract"}
+  [people-mass-update] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [people-mass-update] check 6: PASS — no writes on open, no banner, no 5xx
+
+== peopleTrashRestore
+  [people-trash-restore] check 1: PASS — DB X deleted true, Y deleted true; trash entries Tob Trash4tuo18, Tia Trash4tuo18
+  [people-trash-restore] check 3: PASS — C's list dropped both 1.5 s after the deletes
+  [people-trash-restore] note: Restore: C showed X again 0.0 s after Restore; DB live true
+  [people-trash-restore] check 2: N/A — a trashed person has no fields to edit; the trash row's only actions are Restore / Delete forever (one action per record)
+  [people-trash-restore] check 4: PASS — A's Delete forever removed the trash entry true; B still saw it true; after B's stale Restore person still deleted true; after reload deleted true, listed A/B/C 0/0/0, in Trash A/B/C 0/0/0
+  [people-trash-restore] note: after reload: DB X live true; listed on A/B/C true/true/true
+  [people-trash-restore] check 5: PASS — DB X live true; listed on A/B/C true/true/true (a restored person must be live in the DB and listed everywhere)
+  [people-trash-restore] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [people-trash-restore] check 6: PASS — no writes on open, no banner, no 5xx
+
+== homeNoticeBadge
+  [home-notice-badge] note: bell before A/B/C 8/8/9; A with the tray open 3, after 3; B/C after 8/9; A's localStorage apms-glanced-v1:p-admin; DB rows mentioning glance 0
+  [home-notice-badge] check 1: N/A — the badge is per-browser state (NOTICE-GLANCE: localStorage apms-glanced-v1:<person>), no record to edit
+  [home-notice-badge] check 2: N/A — same: nothing in the DB; marking a notice Done is checked in home-alerts
+  [home-notice-badge] check 3: N/A — another user never sees this browser's glance state by design; live notice changes are checked in home-alerts
+  [home-notice-badge] check 4: N/A — a badge has nothing to delete (Done on a notice is home-alerts check 1)
+  [home-notice-badge] check 5: PASS — after reload A 3 (was 3 after the tray), B 8 (was 8), C 9 (was 9); DB rows with glance state 0
+  [home-notice-badge] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [home-notice-badge] check 6: PASS — no writes on open, no banner, no 5xx
+
+== homeAlerts
+  [home-alerts] note: company alerts on A: People without role, People without login, People without APMS assigned, People without Rewards assigned, APMS overdue to close, Rewards overdue to close; on C: People without role, People without login, People without APMS assigned, People without Rewards assigned, APMS overdue to close, Rewards overdue to close
+  [home-alerts] check 2: PASS — DB dismissedAlertIds ["ops:People without login","ops:People without role"]; A no longer shows B's and B no longer shows A's true
+  [home-alerts] check 3: PASS — C dropped both alerts 1.5 s after the clicks
+  [home-alerts] check 1: PASS — A's notice "October 2026 Rewards — 7 days to lock" done in DB true (1 row(s)); B's "People without APMS assigned" in dismissedAlertIds true; C dropped B's alert in 0.0 s
+  [home-alerts] check 4: PASS — A's Done on "People without Rewards assigned" in DB true; B still showed it true; after B's stale Done on "APMS overdue to close" the DB keeps both true/true (["ops:People without login","ops:People without role","ops:People without APMS assigned","ops:APMS overdue to close","ops:People without Rewards assigned"]); after reload z1+z2 shown on A/B/C 0/0/0
+  [home-alerts] check 5: PASS — no dismissed alert shown on A/B/C (dismissed 5)
+  [home-alerts] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [home-alerts] check 6: PASS — no writes on open, no banner, no 5xx
+
+== mePassword
+  [me-password] note: first sign-in forced "Set a new password": old password → 401, new → 200
+  [me-password] check 1: PASS — sign-in status after the change — Nikhil old 401 / new 200; Floyd old 401 / new 200; issued_logins floyd.dsil=new, nikhil.pati=new; messages "ign in. | New password | Update | Saved." / "ign in. | New password | Update | Saved."
+  [me-password] check 2: PASS — DB location "PwLoc 4tuo10" (A via People); Nikhil's password after both saves: previous 401, new 200 (A's people PATCH must not bring the old secret back)
+  [me-password] check 3: PASS — C's file showed A's Location 2.2 s after the save; password on C's wire false
+  [me-password] check 4: N/A — a password has no delete; deleting the person while he is on Me is checked in me-profile check 4
+  [me-password] check 5: PASS — fresh UI sign-in: Nikhil current true, previous false, Floyd new true; issued_logins holds the current true; Nikhil's session survived reload true; C's file Location "PwLoc 4tuo10" = DB "PwLoc 4tuo10"
+  [me-password] note: passwords put back through Me: Floyd true ("New password | Update | Saved."), Nikhil true ("New password | Update | Saved.")
+  [me-password] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [me-password] check 6: PASS — no writes on open, no banner, no 5xx
+
+== meProfile
+  [me-profile] note: Sunny's own Me form refused to save until these were filled: Employee ID ("Employee ID is required (ALN0001).")
+  [me-profile] check 2: PASS — DB Sunny location "MeLoc 74tuo9" (A via Me), joinDate "2026-06-15" (B via People); A's Me and B's file show both true
+  [me-profile] check 3: PASS — C's file of Sunny showed A's and B's edits 0.4 s after the saves
+  [me-profile] check 1: PASS — DB Sunny location "MeA 74tuo9", Floyd location "MeB 74tuo9", B's earlier join date kept true; C's file of Sunny followed in 0.6 s
+  [me-profile] check 4: PASS — A's delete of Nikhil Patil in DB true; D (Nikhil, feed held) still saw his Me true; after his stale Me edit [] still deleted true, stale mobile kept out true; after reload deleted true, listed A/B/C 0/0/0
+  [me-profile] note: Nikhil restored from Trash: DB live true
+  [me-profile] check 5: PASS — DB Sunny "MeA 74tuo9", Floyd "MeB 74tuo9"; A's Me "MeA 74tuo9", B's Me "MeB 74tuo9", C's file of Sunny "MeA 74tuo9"
+  [me-profile] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [me-profile] check 6: PASS — no writes on open, no banner, no 5xx
+
+== settingsAccessRoles
+  [settings-access-roles] check 1: PASS — DB: E2E AR-A muf74tuo19 base manager, E2E AR-B muf74tuo19 scope company; A and B list both: true; C showed both 2.1 s after the create
+  [settings-access-roles] check 2: PASS — same time: DB note true, flag changelog true, grant KPI view true; B's dialog open while A saved note 2 (reached), B then ticked MIS view and saved: DB note is "A note 2 muf74tuo19" (want "A note 2 muf74tuo19"), MIS view true, KPI view true, flag true; A/B/C list the DB note: true/true/true
+  [settings-access-roles] check 3: PASS — C showed the two new roles 2.1 s after the create, the note 1.0 s after the save
+  [settings-access-roles] check 4: PASS — deleted in DB true; B still listed it true; after B's stale save live rows []; still listed on A/B/C 10 s after the release (before reload) false/false/false, after reload false/false/false
+  [settings-access-roles] check 5: PASS — DB E2E AR-A muf74tuo19|A note 2 muf74tuo19; screens same / same / same
+  [settings-access-roles] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [settings-access-roles] check 6: PASS — no writes on open, no banner, no 5xx
+
+== settingsAssign
+  [settings-assign] check 1: PASS — DB: Aakash Popalkar manager/manager, Abhishek Gawai function_head/function_head; A/B show both true/true; Assign in bulk marked the Access step (setupDone ["people","access"]); C showed both 1.8 s after the change
+  [settings-assign] check 2: PASS — DB: role hr, mustResetPassword true, issued password = B's new one true; sign-in with it 200; A/B/C show HR true/true/true
+  [settings-assign] check 3: PASS — C showed A's row change and B's bulk assign 1.8 s after, the same-person role change 1.3 s after
+  [settings-assign] check 4: N/A — Assign people has no delete; a person is deleted under Org → People (not this area). The stale edit of a deleted access role is check 4 of settings-access-roles
+  [settings-assign] check 5: PASS — DB HR|Function head; screens same / same / same
+  [settings-assign] note: Aakash Popalkar's login was reset by B (new temporary password, must set password) — test data
+  [settings-assign] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [settings-assign] check 6: PASS — no writes on open, no banner, no 5xx
+
+== settingsLogins
+  [settings-logins] note: before: kiran.kuma signs in with the starter 0000 → 200; aditi.lokh with 0000 → 200 (people with no issued login and an empty stored password sign in with 0000, apms-credentials.ts verifyLogin)
+  [settings-logins] check 1: PASS — A reset Kiran Kumar Nayaka: issued_logins = shown password true, mustResetPassword true, sign-in new 200 / old 0000 401. B uploaded a password for Aditi Lokhande ("Updated 1."): mustResetPassword true, sign-in with the uploaded password 200 (want 200) / old 0000 401 (want 401)
+  [settings-logins] check must-reset: PASS — Kiran Kumar Nayaka signed in with the temporary password: set a new password, app opened; DB mustResetPassword false, issued = new true; sign-in new 200 / temporary 401; C dropped "Must set password" 3.7 s after
+  [settings-logins] check 2: PASS — DB: access function_head (B's upload "Updated 1."), mustResetPassword true, issued = A's password true; sign-in 200; A/B/C show Function head true/true/true
+  [settings-logins] check 3: PASS — C showed "Must set password" on Kiran Kumar Nayaka 2.1 s after A's reset, dropped it 3.7 s after Kiran Kumar Nayaka set a password, showed B's access change + A's reset on Sarvjeet Sandhu 2.2 s after
+  [settings-logins] note: Sarvjeet Sandhu first sign-in: set a new password, app opened
+  [settings-logins] check 4: N/A — logins cannot be deleted from Settings (no delete control); Reset replaces the password
+  [settings-logins] check 5: PASS — DB Function head|false;Function head|false;Employee|true; screens same / same / same
+  [settings-logins] check special: PASS — A reset B (floyd.dsil): old password → 401 (want 401), browser sign-in with the old password → refused; new password → 200. B's open session after the reset: get-session still valid (not revoked), B's screen showed the first-sign-in 'Set a new password' screen. B then signed in with the new password → set a new password, app opened; put back Floyd-e2e-1 → 200, temporary → 401, mustResetPassword false; B's browser back in the app true
+  [settings-logins] check security: PASS — anonymous POST /api/issued-logins 401 (want 401); employee POST another person's row 403 (want 403), POST /api/provision-logins 403 (want 403), own row 200 (want 200); Kiran Kumar Nayaka's password unchanged: sign-in 200
+  [settings-logins] note: Download sheet: 176 rows, columns name|email|username|password|access; rows with a password: 1 (passwords are stripped from the wire since NO-SECRETS-WIRE, so the sheet the UI calls "it has passwords" has them only for logins issued in this session)
+  [settings-logins] note: Issue remaining: A's page took 20 s to send every person's save (done)
+  [settings-logins] check issue-remaining: PASS — Issue remaining (166): message "Issued 166 logins. The sheet downloaded — share each row privately."; CSV rows 166; issued_logins 6 → 171, CSV rows whose issued password differs 0; sample vishal.kuma signs in with its CSV password 200, with 0000 401; put back nikhil.pati (200); B/C/A/nikhil still sign in: floyd 200, ronlind 200, sunny 200, nikhil 200
+  [settings-logins] note: test data left: Kiran Kumar Nayaka, Sarvjeet Sandhu, Aditi Lokhande and the 166 people without a login now have new passwords (Kiran Kumar Nayaka Kiran-muf74tuo14-1, Sarvjeet Sandhu Sarv-muf74tuo14-1, Aditi Lokhande uploaded Upl-muf74tuo14-x); floyd.dsil is back on Floyd-e2e-1, nikhil.pati on Nikhil-e2e-1 (still must set password)
+  [settings-logins] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [settings-logins] check 6: PASS — no writes on open, no banner, no 5xx
+
+== forgotPassword
+  [forgot-password] check needHr: PASS — aaynar.kuma (@aliens.local): screen "Contact HR / Contact HR to reset this password."; request POST /api/password-reset 200 {"ok":true,"needHr":true,"message":"Contact HR to reset this password."}; password / mustReset / reset tokens unchanged true
+  [forgot-password] check public-email: PASS — ronlind.mene (public email, no mail server): screen "Contact HR / Contact HR to reset this password."; response {"ok":true,"needHr":true,"message":"Contact HR to reset this password."}; password unchanged true, Ronlind-e2e-1 still signs in 200
+  [forgot-password] note: unknown login: screen "Check your email", response {"ok":true}
+  [forgot-password] note: no person in the seed has an empty email (the @aliens.local case covers 'no public mailbox')
+  [forgot-password] check 1: N/A — anonymous single-person request on the sign-in page; it saves nothing another user edits, shares or deletes
+  [forgot-password] check 2: N/A — anonymous single-person request on the sign-in page; it saves nothing another user edits, shares or deletes
+  [forgot-password] check 4: N/A — anonymous single-person request on the sign-in page; it saves nothing another user edits, shares or deletes
+  [forgot-password] check 5: N/A — anonymous single-person request on the sign-in page; it saves nothing another user edits, shares or deletes
+  [forgot-password] check 3: N/A — nothing changes, so there is nothing for an idle admin to see
+  [forgot-password] check 6: PASS — no writes on opening the sign-in page, no 5xx; forgot password changed nothing (needHr true, public email true)
+
+== settingsSetup
+  [settings-setup] note: Functions Template download: "﻿name,parent_function,company,brands,sbus,shared,head_email,description,sub_functions"
+  [settings-setup] check 1: PASS — DB setupDone ["people","role","function"] (want role + function), function "E2E setup fn muf74tuo13" rows 1; A/B hide both steps true/true; A's pending saves ~10 s after its Done: []
+  [settings-setup] check 2: N/A — the Setup marks are one list value (settings/setupDone); the two concurrent marks in check 1 are the same row
+  [settings-setup] check 3: PASS — C hid both steps 1.4 s after the Done / import
+  [settings-setup] check 4: N/A — setup marks have no delete (only 'Show setup again', which clears the whole list; used in the clean-up)
+  [settings-setup] check 5: PASS — DB setupDone ["people","role","function"] → steps Company, brands & SBUs,Access; screens same / same / same
+  [settings-setup] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [settings-setup] check 6: PASS — no writes on open, no banner, no 5xx
+
+== settingsTrash
+  [settings-trash] check 1: PASS — DB: trash E2E trash f1 muf74tuo13 0, E2E trash f2 muf74tuo13 0 (want 0/0); function E2E trash f1 muf74tuo13 live 1 (want 1, restored), E2E trash f2 muf74tuo13 live 0; A/B trash rows gone true/true; A's Org → Functions lists the restored one true
+  [settings-trash] check 2: N/A — a trash item has no editable fields; Restore and Delete forever act on the whole item (check 1 has the two actions at once)
+  [settings-trash] check 3: PASS — C dropped both rows 1.4 s after the restore / delete
+  [settings-trash] check 4: PASS — deleted in DB true; B still listed it true; after B's stale Restore: trash rows 0, function re-created 0 (want 0/0); still listed on A/B/C 10 s after the release false/false/false, after reload false/false/false; function on A's Org list false
+  [settings-trash] check 5: PASS — DB 51 trash rows; screens same / same / same
+  [settings-trash] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [settings-trash] check 6: PASS — no writes on open, no banner, no 5xx
+
+== settingsBackup
+  [settings-backup] check 1: PASS — DB: 2 new copies ["manual/180 people","manual/180 people"]; A/B list both true/true
+  [settings-backup] check 2: N/A — a backup copy is immutable (no fields to edit)
+  [settings-backup] check 3: PASS — C listed both 1.8 s after
+  [settings-backup] check 4: N/A — copies cannot be deleted from the UI (they expire after 30 days)
+  [settings-backup] note: Download: aliens-apms-backup-2026-09-24.json, 4134 KB, 180 people
+  [settings-backup] note: Date filter 2000-01-01 → "No copies on that date." shown true
+  [settings-backup] note: file restore: C's API calls while waiting: GET /api/changes?since=675&payload=1&limit=500 200 | GET /api/company?books=org,plans,months,targets 200 | GET /api/changes?since=676&payload=1&limit=500 200; C feedLog tail [{"at":1790235819046,"tick":1790235818463,"poll":false},{"at":1790235820708,"tick":1790235818463,"poll":false},{"at":1790235821543,"tick":1790235818463,"poll":false},{"at":1790235821603,"tick":1790235818463,"poll":false}]; C acked org book still has the function: false
+  [settings-backup] check restore-file: PASS — overlay "Restored: Restored 180 people. Closed months stayed as stored. 53 month records. 49 reward records. Reload to see it." after 1.9 s (button Reload); DB: "E2E bk fn muf74tuo14" live rows 0 (want 0), people 180; B dropped it 5.3 s, C 5.2 s after the file was picked (without reload)
+  [settings-backup] check restore-empty-targets: PASS — file with targetCells {} and targetNodes []: overlay "Restored: Restored 180 people. Closed months stayed as stored. 53 month records. 49 reward records. Reload to see it."; live targets before {"cells":114,"nodes":23,"members":94} → after {"cells":114,"nodes":23,"members":94} (contract: restore proceeds, live interiors kept)
+  [settings-backup] note: full file restored again: "Restored", targets {"cells":114,"nodes":23,"members":94}
+  [settings-backup] check 5: PASS — DB 4 copies; screens same / same / same
+  [settings-backup] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [settings-backup] check 6: PASS — no writes on open, no banner, no 5xx
+
+== settingsRestore
+  [settings-restore] note: Empty trash: live trash rows 51 → 0; C (idle on Trash) showed "Trash is empty." 7.5 s after the click
+  [settings-restore] note: C's API calls in the 30 s after the restore: GET /api/changes?since=731&payload=1&limit=500 200 | GET /api/company?books=org,plans,months,targets 200 | GET /api/changes?since=732&payload=1&limit=500 200; C feedLog tail [{"at":1790235891249,"tick":1790235891238,"poll":true},{"at":1790235891339,"tick":1790235891339,"poll":true},{"at":1790235891477,"since":731,"n":1,"seq":732},{"at":1790235891648,"since":732,"n":0,"seq":732}]
+  [settings-restore] check special: PASS — restore: "Restored. A marked copy of what was live is in the list if you need to go back." after 1.8 s; C dropped the after-backup function 1.9 s after; B's open form then held "E2E B unsaved muf74tuo15", B pressed Tab + Save; B's Functions list without the function 15.6 s after the restore; DB: after-backup function live 0 (want 0), Expansion description "" (want the copy's ""; A's after-backup "E2E A after-backup muf74tuo15", B's unsaved "E2E B unsaved muf74tuo15"), trash rows 51 (copy had 51)
+  [settings-restore] check 4: PASS — after B left the field and saved: Expansion description "", after reload "" (want ""); after-backup function live 0/0, listed on A/B/C after reload false/false/false
+  [settings-restore] check 1: PASS — after the restore, A edits Expansion and B edits Training at the same time: DB {"g":"E2E A post-restore muf74tuo15","h":"E2E B post-restore muf74tuo15"}
+  [settings-restore] check 2: PASS — same function Expansion: A's description + B's name → DB name "Expansion E2E muf74tuo15", description "E2E A2 post-restore muf74tuo15" (want "E2E A2 post-restore muf74tuo15")
+  [settings-restore] check 3: PASS — C showed the restored data 1.9 s after the restore, A's post-restore description 3.4 s after, B's rename 1.2 s after
+  [settings-restore] check 5: PASS — DB 12 top functions; screens same / same / same
+  [settings-restore] note: restored the start copy again: "Restored. A marked copy of what was live is in the list if you need to go back."; Expansion "" (copy ""), Training "" (copy ""), renamed rows 0, trash 51/51
+  [settings-restore] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [settings-restore] check 6: PASS — no writes on open, no banner, no 5xx
+
+module    screen                         1     2     3     4     5     6
+All       sign-in                        -     -     -     -     -     pass 
+Org       org-overview                   n/a   n/a   pass  n/a   pass  pass 
+Org       org-units                      pass  pass  pass  pass  pass  pass 
+Org       org-units-drag                 pass  pass  pass  pass  pass  pass 
+Org       org-sbu-members                pass  pass  pass  pass  pass  pass 
+Org       org-functions                  pass  pass  pass  pass  pass  pass 
+Org       org-roles                      pass  pass  pass  pass  pass  pass 
+Org       org-roles-kroc                 pass  pass  pass  pass  pass  pass 
+Org       org-chart-drag                 pass  pass  pass  pass  pass  pass 
+Org       people-views                   n/a   n/a   pass  n/a   pass  pass 
+Org       people-hire                    pass  pass  pass  pass  pass  pass 
+Org       people-edit                    pass  pass  pass  pass  pass  pass 
+Org       people-managers                pass  pass  pass  pass  pass  pass 
+Org       people-status                  pass  pass  pass  pass  pass  pass 
+Org       people-mass-update             pass  pass  pass  pass  pass  pass 
+Org       people-trash-restore           pass  n/a   pass  pass  pass  pass 
+Home      home-notice-badge              n/a   n/a   n/a   n/a   pass  pass 
+Home      home-alerts                    pass  pass  pass  pass  pass  pass 
+Me        me-password                    pass  pass  pass  n/a   pass  pass 
+Me        me-profile                     pass  pass  pass  pass  pass  pass 
+Settings  settings-access-roles          pass  pass  pass  pass  pass  pass 
+Settings  settings-assign                pass  pass  pass  n/a   pass  pass 
+Settings  settings-logins                pass  pass  pass  n/a   pass  pass 
+Sign-in   forgot-password                n/a   n/a   n/a   n/a   n/a   pass 
+Settings  settings-setup                 pass  n/a   pass  n/a   pass  pass 
+Settings  settings-trash                 pass  n/a   pass  pass  pass  pass 
+Settings  settings-backup                pass  n/a   pass  n/a   pass  pass 
+Settings  settings-restore               pass  pass  pass  pass  pass  pass 
+
+PASS — report: /tmp/claude-0/runs/run4/batch2.json
