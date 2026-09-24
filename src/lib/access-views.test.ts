@@ -184,10 +184,10 @@ test("the person can write Self comments while the plan is open or locked", () =
   assert.match(routes, /"data-mgr-notes":`ro`/);
 });
 
-test("stamp p0as80 (on p0as78); fallbackPost still absent; G9 path kept", () => {
-  assert.match(html, /routes-e2g7y5q8-13m-p0as80\.js/);
-  assert.match(html, /apms-collections\.js\?v=p0as80/);
-  assert.match(html, /apms-sync\.js\?v=p0as80/);
+test("stamp p0as81 (on p0as80); fallbackPost still absent; G9 path kept", () => {
+  assert.match(html, /routes-e2g7y5q8-13m-p0as81\.js/);
+  assert.match(html, /apms-collections\.js\?v=p0as81/);
+  assert.match(html, /apms-sync\.js\?v=p0as81/);
   assert.match(routes, /login-view-f2j6t0x4-11a3-p0ar\.js\?v=p0as68/);
   assert.equal(login.includes("fallbackPost"), false);
   assert.equal(routes.includes("fallbackPost"), false);
@@ -228,6 +228,18 @@ test("p0as80 routes: a live-entity (feed) apply clears the dirty flag its own se
     "nothing else changed",
   );
   const index = readFileSync(new URL("../../public/assets/index-f4j9a7t3-11v-p0ar.js", import.meta.url), "utf8");
-  assert.equal(index.includes("routes-e2g7y5q8-13m-p0as80.js"), true);
+  assert.equal(index.includes("routes-e2g7y5q8-13m-p0as81.js"), true);
   assert.equal(index.includes("routes-e2g7y5q8-13m-p0as78.js"), false);
+});
+
+test("p0as81 routes (BATCH-2): restore apply, access-role Save sends only changes, setupDone saved, backup list live", async () => {
+  const { stampRoutes } = await import("../../scripts/stamp-p0as81-batch2.mjs");
+  const base = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as80.js", import.meta.url), "utf8");
+  const stamped = readFileSync(new URL("../../public/assets/routes-e2g7y5q8-13m-p0as81.js", import.meta.url), "utf8");
+  assert.equal(stamped, stampRoutes(base), "p0as81 = p0as80 + the batch-2 stamp, nothing else");
+  assert.equal(stamped.split("apply:(t,reason)=>{if(reason===`restore`){").length - 1, 3, "every live hook takes a restore");
+  assert.equal(stamped.includes("n.patchAccessRole(r.id,{name:i.trim(),base:o,note:c,scope:sc,grants:g,flags:fl})"), false, "Save no longer sends the whole role");
+  assert.equal(stamped.includes("Object.keys(d).length&&n.patchAccessRole(r.id,d)"), true);
+  assert.equal(stamped.includes("`tombstones`,`setupDone`,`companyFactor`])"), true, "setupDone triggers a save");
+  assert.equal(stamped.includes("setInterval(async()=>{try{let e=await fetch(`/api/company-backups`"), true, "backup list re-reads");
 });

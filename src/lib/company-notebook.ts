@@ -669,7 +669,7 @@ async function replaceCompanySnapshotUnlocked(
   // ROWS-V2: the restored file is now the authority for every generic row.
   try {
     const { importEntitiesFromSnapshot } = await import("./company-entity-store");
-    await importEntitiesFromSnapshot(await getSql(), toWrite, "restore", { pruneMissing: true });
+    await importEntitiesFromSnapshot(await getSql(), toWrite, "restore", { pruneMissing: true, logResync: false });
   } catch (err) {
     console.error("[entities] restore import failed; books restored, rows may lag", err);
   }
@@ -681,13 +681,22 @@ async function replaceCompanySnapshotUnlocked(
       throw new RestoreRejectedError();
     }
   }
+  invalidateCompanyWire();
+  // BATCH-2: followers resync from here — the `*` row goes in last (after the
+  // wire is invalidated) and the tick carries "now", not the file's old
+  // notebookUpdatedAt, so every idle screen polls the feed and pulls in full.
+  try {
+    const { logResync } = await import("./company-entity-store");
+    await logResync(await getSql(), "restore");
+  } catch (err) {
+    console.error("[entities] restore resync log failed", err);
+  }
   void notifyCompanyLive(
-    Number(assembled.notebookUpdatedAt) || Date.now(),
+    Math.max(Date.now(), Number(assembled.notebookUpdatedAt) || 0),
     normalizeBookGens(assembled),
   ).catch((err) =>
     console.error("[company-live] notify failed", err),
   );
-  invalidateCompanyWire();
   return { ok: true, snapshotJson: JSON.stringify(assembled) };
 }
 

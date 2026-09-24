@@ -1290,7 +1290,9 @@
           next = withAcks(feedAcks, function () { return mergeGenericRow(next, ch.kind, ch); });
         });
         if (resync) {
-          scheduleLivePull();
+          // BATCH-2: a restore replaced the company. Pull every book and let
+          // it win over whatever this screen holds (unsaved edits included).
+          restorePull();
           return body;
         }
         var applied = false;
@@ -1333,6 +1335,83 @@
         return body;
       });
     return changesInFlight;
+  }
+
+  /**
+   * BATCH-2 (restore wins): after a `*` in the change feed, pull all books and
+   * apply them as the new baseline with reason "restore" — the SPA applies it
+   * even while a field is being edited, and the edit is dropped. Row caches
+   * learned before the restore (revs, remote deletes) are reset so a restored
+   * row is neither refused as a stale re-add nor sent back as an old value.
+   */
+  var restoreInFlight = null;
+  var restoreLog = [];
+  function restorePull(attempt) {
+    if (restoreInFlight) return restoreInFlight;
+    attempt = attempt || 0;
+    restoreInFlight = (async function () {
+      var hooks = liveHooks;
+      if (!hooks || typeof hooks.getSnapshot !== "function" || typeof hooks.apply !== "function") {
+        entityFieldsFromNextPull = true;
+        scheduleLivePull();
+        return false;
+      }
+      var pulled = await pullBooks(BOOK_IDS.slice());
+      if (!pulled || !pulled.books) throw new Error("restore pull failed");
+      var local = hooks.getSnapshot();
+      if (!isPlainObject(local)) return false;
+      var merged = Object.assign({}, local);
+      BOOK_IDS.forEach(function (id) {
+        var book = pulled.books[id];
+        if (!isPlainObject(book)) return;
+        BOOK_FIELDS[id].forEach(function (field) {
+          if (field in book) merged[field] = book[field];
+        });
+      });
+      if (pulled.bookGens) merged.bookGens = Object.assign({}, pulled.bookGens);
+      merged.notebookUpdatedAt = Math.max(Number(pulled.notebookUpdatedAt) || 0, Number(local.notebookUpdatedAt) || 0, Date.now());
+      var ok = false;
+      try {
+        ok = hooks.apply(merged, "restore") !== false;
+      } catch (err) {
+        ok = false;
+      }
+      restoreLog.push({ at: Date.now(), ok: ok, attempt: attempt });
+      if (restoreLog.length > 10) restoreLog.shift();
+      if (!ok) throw new Error("restore apply refused");
+      var after = hooks.getSnapshot() || merged;
+      discardPendingAcks();
+      entityRevs = {};
+      remoteDeletedKeys = {};
+      knownRowKeys = {};
+      lastRowConflicts = [];
+      entityFieldsFromNextPull = false;
+      var books = splitSnapshot(after);
+      var gens = normalizeGens(after);
+      BOOK_IDS.forEach(function (id) {
+        lastAcked[id] = bookPayload(books[id], id);
+        lastHashes[id] = stableStringify(lastAcked[id]);
+        lastGens[id] = gens[id];
+        remoteGens[id] = gens[id];
+      });
+      rememberRows(after);
+      lastPulledAt = Math.max(lastPulledAt, lastRemoteAt, Number(pulled.notebookUpdatedAt) || 0);
+      return true;
+    })()
+      .catch(function () {
+        // Pull failed or the screen refused: try again shortly (bounded).
+        if (attempt < 20) {
+          setTimeout(function () {
+            restorePull(attempt + 1);
+          }, 500);
+        }
+        return false;
+      })
+      .then(function (ok) {
+        restoreInFlight = null;
+        return ok;
+      });
+    return restoreInFlight;
   }
 
   function handleLiveEvent(tick) {
@@ -3796,6 +3875,10 @@
       });
     },
     pollChanges: pollChanges,
+    restorePull: restorePull,
+    restoreLog: function () {
+      return restoreLog.slice();
+    },
     commitPendingAcks: commitPendingAcks,
     liveSeq: function () { return liveSeq; },
     setLiveSeq: function (n) { liveSeq = Number(n) || 0; lastChangesAt = 0; },

@@ -585,7 +585,7 @@ export async function importEntitiesFromSnapshot(
   sql: HotSql,
   snapshot: Snapshot,
   updatedBy: string,
-  opts: { pruneMissing?: boolean } = {},
+  opts: { pruneMissing?: boolean; logResync?: boolean } = {},
 ): Promise<{ upserted: number; pruned: number; skipped: Array<{ field: string; index: number }> }> {
   const skipped: Array<{ field: string; index: number }> = [];
   let upserted = 0;
@@ -634,11 +634,26 @@ export async function importEntitiesFromSnapshot(
     [META_KIND, IMPORT_FLAG, JSON.stringify({ at: new Date().toISOString(), by: updatedBy, upserted, pruned }), updatedBy],
   );
   // A restore is one logical change for followers: log a wildcard so clients resync.
-  await sql.query(
-    "insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by) values ($1, $2, null, null, 0, false, $3)",
+  if (opts.logResync !== false) await logResync(sql, updatedBy);
+  return { upserted, pruned, skipped };
+}
+
+/**
+ * Tell followers to resync (`*` in the change feed) and wake them now.
+ * BATCH-2: the restore path calls this LAST — after books, hot rows and rows
+ * are written and the wire is invalidated — so the full pull a follower makes
+ * on `*` cannot read the pre-restore copy. It used to be written without a
+ * pg_notify, so idle screens never polled the feed and kept the old data.
+ */
+export async function logResync(sql: HotSql, updatedBy: string): Promise<number> {
+  await ensureFeedSchema(sql);
+  const rows = await sql.query<{ seq: number }>(
+    "insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by) values ($1, $2, null, null, 0, false, $3) returning seq",
     ["*", "resync", updatedBy],
   );
-  return { upserted, pruned, skipped };
+  const seq = Number(rows[0]?.seq) || 0;
+  await notifyPg(sql, { kind: "*", id: "resync", seq });
+  return seq;
 }
 
 /** Bootstrap once: if the table was never filled, import from the books. */
