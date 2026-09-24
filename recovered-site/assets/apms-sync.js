@@ -3814,6 +3814,14 @@
             },
           );
         }
+        if (String(href).indexOf("books=") < 0 && !everLoaded && typeof input === "string" && /[?&]at=/.test(input)) {
+          // BATCH-3: no baseline yet (page load): ask for the whole file. An
+          // "unchanged" answer (the SPA's cached copy looked current) left the
+          // sync without a baseline, and the first save then took the screen —
+          // with the edit just made (a new hire) — as already saved: the edit
+          // was never sent. The full answer goes through noteLoaded below.
+          input = input.replace(/([?&])at=[^&]*&?/, "$1").replace(/[?&]$/, "");
+        }
         if (String(href).indexOf("books=") < 0 && lastWireAt) {
           init = Object.assign({}, init || {});
           var hdrs = Object.assign({}, init.headers || {});

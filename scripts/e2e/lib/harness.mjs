@@ -206,6 +206,12 @@ async function watchBanners(p) {
   await p.evaluate(REJECT_WATCH).catch(() => {});
 }
 
+/** Requests on `p` open for more than `ms` (method, path, seconds open). */
+export function openRequests(p, ms = 3000) {
+  const now = Date.now();
+  return [...(p.__e2eOpen || new Map()).entries()].filter(([, t]) => now - t > ms).map(([r, t]) => `${r.method()} ${new URL(r.url()).pathname} ${((now - t) / 1000).toFixed(0)}s${r.postData() ? ` ${String(r.postData()).slice(0, 160)}` : ""}`);
+}
+
 /** Unhandled rejections a page recorded since `since`. */
 export async function rejections(p, since = 0) {
   return p.evaluate((t) => (window.__e2eRejections || []).filter((x) => x.t >= t), since).catch(() => []);
@@ -214,6 +220,11 @@ export async function rejections(p, since = 0) {
 function attach(p, tag, base, net, errs) {
   if (p.__e2eAttached) return;
   p.__e2eAttached = true;
+  // Requests still open (diagnostics for a stalled save: a fetch that never settles).
+  p.__e2eOpen = new Map();
+  p.on("request", (r) => { if (r.url().includes("/api/") || r.url().includes("/_serverFn")) p.__e2eOpen.set(r, Date.now()); });
+  p.on("requestfinished", (r) => p.__e2eOpen.delete(r));
+  p.on("requestfailed", (r) => p.__e2eOpen.delete(r));
   p.on("response", async (r) => {
     const req = r.request();
     const u = r.url().replace(base, "");

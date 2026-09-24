@@ -641,6 +641,14 @@ export async function settingsSetup(ctx, run) {
   await setupStep(B, "Functions").getByRole("button", { name: "Import" }).click();
   await B.waitForTimeout(400);
   const imp = dialog(B);
+  // Timeline evidence for check 3: the two writes (A's Done, B's import) and C's feed.
+  const cFeed = [];
+  const onC = async (r) => {
+    if (!/\/api\/(changes|company-tick)/.test(r.url())) return;
+    const body = await r.text().catch(() => "");
+    if (/setupDone/.test(body)) cFeed.push(`${r.url().includes("changes") ? "changes" : "tick"} @${Date.now() - t0}ms`);
+  };
+  C.on("response", onC);
   let t0 = Date.now();
   await Promise.all([
     setupStep(A, "Roles").getByRole("button", { name: "Done", exact: true }).click(),
@@ -648,6 +656,9 @@ export async function settingsSetup(ctx, run) {
   ]);
   const c1 = await ctx.waitUntil(async () => !(await setupStepShown(C, "Roles")) && !(await setupStepShown(C, "Functions")), 5000);
   const tC1 = c1 === null ? null : Date.now() - t0;
+  C.off("response", onC);
+  const ws = ["A", "B"].flatMap((t) => ctx.net[t].filter((n) => n.t >= t0 && n.m !== "GET" && /setupDone|\/api\/e\/functions/.test(n.u)).map((n) => `${t} ${n.m} ${n.u.replace(/\?.*$/, "")} ${n.s} @${n.t - t0}ms`));
+  R.note(`timeline: ${ws.join("; ")}; C's feed carried setupDone ${cFeed.join(", ") || "never"}; C hid both ${tC1 === null ? "not within 5 s" : `@${tC1}ms`}`);
   const pendA = await A.evaluate(() => (window.__apmsSync?.pendingOps?.() || []).map((o) => o.url)).catch(() => []);
   await ctx.settled(A, 8000);
   await ctx.settled(B, 8000);

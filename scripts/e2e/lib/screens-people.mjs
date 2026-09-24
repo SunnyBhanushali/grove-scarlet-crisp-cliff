@@ -5,7 +5,7 @@
  * The seeded managers (Avnish Chollera, Floyd Dsilva) are only picked as
  * managers; their own rows are never edited.
  */
-import { ScreenResult, realWrites, brief } from "./harness.mjs";
+import { ScreenResult, realWrites, brief, openRequests } from "./harness.mjs";
 import { openWithoutWrites, endChecks } from "./screens-apms.mjs";
 import {
   personByName, personById, waitDb, openPeople, setView, search, treeRow, rowShown, rowHasMR, countLine, hire, openFile,
@@ -21,7 +21,9 @@ let seq = 0;
 export function newPerson(run, first, last) {
   const h = [...String(run)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 99991, 7);
   seq++;
-  const n = 5000 + ((h * 7 + seq * 13) % 4999);
+  // ALN8000–8999: above every seeded employee ID (ALN0002–ALN7706); the form
+  // keeps four digits, so a random code could clash with a seeded person.
+  const n = 8000 + ((h * 7 + seq * 13) % 1000);
   return {
     first,
     last,
@@ -40,12 +42,47 @@ export function tagOf(run) {
 async function hireOn(ctx, p, v) {
   watchWrites(ctx);
   await openPeople(ctx, p, "List");
+  // Diagnostics for the "hire not saved" intermittent: log every sync call the
+  // SPA makes and the first moment the hire shows up in the sync baseline.
+  await p.evaluate((name) => {
+    const s = window.__apmsSync;
+    if (!s || s.__e2eWrapped) return;
+    s.__e2eWrapped = true;
+    const log = (window.__e2eSyncLog = []);
+    const t0 = Date.now();
+    const inAck = () => (((s.lastAckedBooks().org || {}).people) || []).some((r) => r && r.name === name);
+    for (const k of ["save", "noteLoaded", "commitPendingAcks", "pullLive", "handleLiveEvent", "noteRemote"]) {
+      const f = s[k];
+      if (typeof f !== "function") continue;
+      s[k] = function (...a) {
+        const before = inAck();
+        const r = f.apply(this, a);
+        const after = () => log.push(`${Date.now() - t0}ms ${k}${before !== inAck() ? " ACKED-HIRE" : ""}`);
+        if (r && typeof r.then === "function") r.then(after, after); else after();
+        return r;
+      };
+    }
+    let seen = false;
+    const iv = setInterval(() => { if (!seen && inAck()) { seen = true; log.push(`${Date.now() - t0}ms poll: hire in baseline`); } if (Date.now() - t0 > 60000) clearInterval(iv); }, 50);
+  }, v.name).catch(() => {});
   await hire(ctx, p, v);
   const row = await waitDb(ctx, async () => {
     const r = await personByName(ctx, v.name);
     return r && !r.deleted_at ? r : null;
   }, 20000);
-  if (!row) throw new Error(`hire of ${v.name} (${v.code}) not in the DB 20 s after Create person`);
+  if (!row) {
+    // Diagnostics: is the hire still on this screen, pending, or already in the sync baseline?
+    const diag = await p.evaluate((name) => {
+      const s = window.__apmsSync;
+      if (!s) return "no sync";
+      const acked = ((s.lastAckedBooks().org || {}).people || []).filter((r) => r && r.name === name).map((r) => r.id);
+      const pend = (s.pendingOps() || []).filter((o) => o.payload && o.payload.name === name).map((o) => o.url);
+      const shown = document.body.innerText.includes(name);
+      return JSON.stringify({ acked, pend, shown, trace: s.mergeTrace().slice(-12), log: (window.__e2eSyncLog || []).slice(0, 60) });
+    }, v.name).catch((e) => `diag failed: ${e.message}`);
+    const open = openRequests(p);
+    throw new Error(`hire of ${v.name} (${v.code}) not in the DB 20 s after Create person — ${diag}; open requests: ${open.join(", ") || "none"}`);
+  }
   return row;
 }
 /** Trash our own people at the end of a scenario (A), quietly. */

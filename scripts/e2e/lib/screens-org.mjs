@@ -837,9 +837,12 @@ export async function orgChartDrag(ctx, run) {
   const m0 = await openWithoutWrites(ctx, R, "Org → People (Company view)", (p) => openPeopleTree(ctx, p, ["Sunny"]));
   // Setup (A): three people under Sunny.
   let n = 0;
+  // ALN9000–9999: the form keeps four digits and seeded IDs go up to ALN7706
+  // (a random code once hit a seeded person and the dialog refused it).
+  const base = Date.now() % 997;
   for (const t of T) {
     await openPeopleTree(ctx, A, ["Sunny"]);
-    await addPersonUnder(A, "Sunny", t.split(" ")[0], "Tree", (Date.now() % 90000) + 10000 + ++n);
+    await addPersonUnder(A, "Sunny", t.split(" ")[0], "Tree", 9000 + ((base + ++n * 331) % 1000));
   }
   const ids = {};
   for (const t of T) {
