@@ -415,13 +415,13 @@ cmd_activate() {
     adopt_live_folder
   fi
   prev="$(current_release)"
+  echo "PREVIOUS=${prev}"
   log "switching $TARGET: ${prev:-<none>} -> $id (stamp $want)"
   point_to "$id"
   if restart_app && wait_healthy "$want"; then
     [ "$(tail -n1 "$HISTORY" 2>/dev/null)" = "$id" ] || echo "$id" >>"$HISTORY"
     log "$TARGET is on $id"
     echo "ACTIVE=$id"
-    echo "PREVIOUS=${prev}"
     return 0
   fi
   if [ -n "$prev" ] && [ -d "$REL_DIR/$prev" ]; then

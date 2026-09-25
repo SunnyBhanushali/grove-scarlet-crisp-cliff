@@ -90,8 +90,10 @@ jobs:
       - name: Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
         id: activate
         run: |
-          ssh apms-vps "$APMS activate live $RELEASE_ID" | tee activate.out
+          rc=0
+          ssh apms-vps "$APMS activate live $RELEASE_ID" | tee activate.out || rc=$?
           echo "PREVIOUS=$(sed -n 's/^PREVIOUS=//p' activate.out | tail -n1)" >> "$GITHUB_ENV"
+          exit $rc
 
       - name: Health check — home 200, stamp, real sign-in
         id: health
