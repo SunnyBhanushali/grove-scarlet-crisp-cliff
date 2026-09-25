@@ -7,155 +7,149 @@
  "cores": {
   "server": "0",
   "postgres": "1",
-  "runner": "2,3"
+  "runner": "2,3",
+  "browsers": "2,3"
  },
- "at": "2026-09-24T17:16:04.551Z",
+ "at": "2026-09-25T00:31:09.656Z",
  "targets": {
   "pageOpenMs": {
-   "n": 17,
-   "avg": 7737,
-   "p50": 7623,
-   "p95": 9926,
-   "p99": 9926,
-   "max": 9926
+   "n": 20,
+   "avg": 4720,
+   "p50": 4751,
+   "p95": 8046,
+   "p99": 8046,
+   "max": 8046
   },
   "pageOpenEmployeeMs": {
-   "n": 11,
-   "avg": 7519,
-   "p50": 7457,
-   "p95": 9550,
-   "p99": 9550,
-   "max": 9550
+   "n": 12,
+   "avg": 4762,
+   "p50": 4753,
+   "p95": 6826,
+   "p99": 6826,
+   "max": 6826
   },
   "pageOpenEditorMs": {
-   "n": 6,
-   "avg": 8137,
-   "p50": 7869,
-   "p95": 9926,
-   "p99": 9926,
-   "max": 9926
+   "n": 8,
+   "avg": 4658,
+   "p50": 4044,
+   "p95": 8046,
+   "p99": 8046,
+   "max": 8046
   },
   "signInOpenMs": {
    "n": 3,
-   "avg": 14742,
-   "p50": 13983,
-   "p95": 16636,
-   "p99": 16636,
-   "max": 16636
+   "avg": 8609,
+   "p50": 8597,
+   "p95": 8705,
+   "p99": 8705,
+   "max": 8705
   },
   "companyLoadMs": {
    "n": 100,
-   "avg": 1019,
-   "p50": 1034,
-   "p95": 2053,
-   "p99": 2488,
-   "max": 2488
+   "avg": 1031,
+   "p50": 1048,
+   "p95": 2177,
+   "p99": 2860,
+   "max": 2860
   },
   "browserCompanyMs": {
-   "n": 17,
-   "avg": 290,
-   "p50": 222,
-   "p95": 788,
-   "p99": 788,
-   "max": 788
+   "n": 20,
+   "avg": 136,
+   "p50": 89,
+   "p95": 587,
+   "p99": 587,
+   "max": 587
   },
   "tickMs": {
-   "n": 13579,
-   "avg": 1794,
-   "p50": 1325,
-   "p95": 4700,
-   "p99": 8986,
-   "max": 14260
+   "n": 15158,
+   "avg": 1022,
+   "p50": 772,
+   "p95": 2600,
+   "p99": 4838,
+   "max": 7761
   },
   "saveMs": {
-   "n": 527,
-   "avg": 6032,
-   "p50": 5622,
-   "p95": 12585,
-   "p99": 14879,
-   "max": 23220
+   "n": 584,
+   "avg": 3967,
+   "p50": 3500,
+   "p95": 10311,
+   "p99": 12620,
+   "max": 16799
   },
   "othersSeeMs": {
-   "n": 3839,
-   "avg": 589,
+   "n": 4399,
+   "avg": 629,
    "p50": 0,
-   "p95": 1997,
-   "p99": 7434,
-   "max": 66470,
-   "under1s": 0.8656
+   "p95": 1357,
+   "p99": 11642,
+   "max": 163562,
+   "under1s": 0.9225
   },
   "serverCpu": {
-   "n": 168,
-   "avg": 96,
-   "p50": 97.4,
-   "p95": 99.3,
-   "p99": 99.7,
+   "n": 170,
+   "avg": 98,
+   "p50": 98.3,
+   "p95": 99.6,
+   "p99": 99.9,
    "max": 99.9
   },
   "serverLagMs": {
-   "p99Max": 595.1,
-   "max": 595.1,
-   "p50Avg": 20.4
+   "p99Max": 472.9,
+   "max": 472.9,
+   "p50Avg": 17.4
   },
   "serverRssMb": {
-   "n": 168,
-   "avg": 961,
-   "p50": 952,
-   "p95": 1062,
-   "p99": 1189,
-   "max": 1195
+   "n": 170,
+   "avg": 943,
+   "p50": 939,
+   "p95": 1063,
+   "p99": 1117,
+   "max": 1128
   },
   "postgresCpu": {
-   "n": 149,
-   "avg": 35,
-   "p50": 35,
-   "p95": 57,
-   "p99": 69,
-   "max": 78
+   "n": 172,
+   "avg": 40,
+   "p50": 41,
+   "p95": 62,
+   "p99": 72,
+   "max": 74
   },
   "pgConnections": {
    "max": 13,
-   "activeMax": 5
+   "activeMax": 6
   },
-  "errors5xxOrNetwork": 18,
+  "errors5xxOrNetwork": 13,
   "lostSaves": 0,
   "resurrectedDeletes": 0,
   "badDeleteReplies": 0,
   "readAfterWrite": {
    "row": {
-    "n": 447,
+    "n": 531,
     "bad": 0,
     "why": {}
    },
    "wire": {
-    "n": 13,
-    "bad": 0,
+    "n": 14,
+    "bad": 1,
     "why": {}
    },
    "wire+replay": {
-    "n": 13,
+    "n": 14,
     "bad": 0,
     "why": {}
-   },
-   "row-failed": {
-    "n": 9,
-    "bad": 9,
-    "why": {
-     "status 0": 9
-    }
    }
   },
-  "acknowledgedSaves": 458,
-  "runnerLoopLagMaxMs": 4492
+  "acknowledgedSaves": 531,
+  "runnerLoopLagMaxMs": 2135
  },
  "routes": {
   "signin": {
    "n": 100,
-   "avg": 6557,
-   "p50": 4576,
-   "p95": 14027,
-   "p99": 14238,
-   "max": 14238,
+   "avg": 4242,
+   "p50": 3244,
+   "p95": 9953,
+   "p99": 10475,
+   "max": 10475,
    "bytesAvg": 492,
    "status": {
     "200": 100
@@ -163,11 +157,11 @@
   },
   "html": {
    "n": 100,
-   "avg": 304,
-   "p50": 201,
-   "p95": 1031,
-   "p99": 1234,
-   "max": 1234,
+   "avg": 261,
+   "p50": 135,
+   "p95": 1019,
+   "p99": 1308,
+   "max": 1308,
    "bytesAvg": 4196,
    "status": {
     "200": 100
@@ -175,11 +169,11 @@
   },
   "static": {
    "n": 1200,
-   "avg": 1996,
-   "p50": 318,
-   "p95": 7785,
-   "p99": 8636,
-   "max": 9807,
+   "avg": 905,
+   "p50": 156,
+   "p95": 3689,
+   "p99": 4799,
+   "max": 5235,
    "bytesAvg": 136468,
    "status": {
     "200": 1200
@@ -187,11 +181,11 @@
   },
   "get-session": {
    "n": 100,
-   "avg": 2506,
-   "p50": 3070,
-   "p95": 3847,
-   "p99": 4326,
-   "max": 4326,
+   "avg": 2503,
+   "p50": 2676,
+   "p95": 4619,
+   "p99": 4730,
+   "max": 4730,
    "bytesAvg": 492,
    "status": {
     "200": 100
@@ -199,47 +193,47 @@
   },
   "company": {
    "n": 100,
-   "avg": 983,
-   "p50": 1013,
-   "p95": 2030,
-   "p99": 2451,
-   "max": 2451,
-   "bytesAvg": 348202,
+   "avg": 1001,
+   "p50": 1025,
+   "p95": 2156,
+   "p99": 2836,
+   "max": 2836,
+   "bytesAvg": 337785,
    "status": {
     "200": 100
    }
   },
   "company-load": {
    "n": 100,
-   "avg": 1019,
-   "p50": 1034,
-   "p95": 2053,
-   "p99": 2488,
-   "max": 2488,
-   "bytesAvg": 348202,
+   "avg": 1031,
+   "p50": 1048,
+   "p95": 2177,
+   "p99": 2860,
+   "max": 2860,
+   "bytesAvg": 337785,
    "status": {
     "200": 100
    }
   },
   "changes": {
-   "n": 12156,
-   "avg": 1486,
-   "p50": 1238,
-   "p95": 3304,
-   "p99": 5717,
-   "max": 13875,
-   "bytesAvg": 45116,
+   "n": 21037,
+   "avg": 875,
+   "p50": 721,
+   "p95": 1958,
+   "p99": 3033,
+   "max": 8490,
+   "bytesAvg": 29410,
    "status": {
-    "200": 12156
+    "200": 21037
    }
   },
   "page-open-http": {
    "n": 100,
-   "avg": 9591,
-   "p50": 10116,
-   "p95": 15640,
-   "p99": 18175,
-   "max": 18175,
+   "avg": 7032,
+   "p50": 8207,
+   "p95": 11818,
+   "p99": 12653,
+   "max": 12653,
    "bytesAvg": 0,
    "status": {
     "200": 100
@@ -247,207 +241,94 @@
   },
   "sse-connect": {
    "n": 100,
-   "avg": 211,
-   "p50": 112,
-   "p95": 1261,
-   "p99": 1557,
-   "max": 1557,
+   "avg": 117,
+   "p50": 34,
+   "p95": 512,
+   "p99": 1202,
+   "max": 1202,
    "bytesAvg": 0,
    "status": {
     "200": 100
    }
   },
-  "apms-month": {
-   "n": 443,
-   "avg": 1849,
-   "p50": 1402,
-   "p95": 4961,
-   "p99": 8333,
-   "max": 8983,
-   "bytesAvg": 1140195,
-   "status": {
-    "0": 1,
-    "200": 442
-   }
-  },
-  "tick": {
-   "n": 6815,
-   "avg": 1818,
-   "p50": 1332,
-   "p95": 4874,
-   "p99": 9319,
-   "max": 14040,
-   "bytesAvg": 1676,
-   "status": {
-    "0": 27,
-    "200": 6788
-   }
-  },
-  "person": {
-   "n": 52,
-   "avg": 2276,
-   "p50": 1710,
-   "p95": 7446,
-   "p99": 8789,
-   "max": 8789,
-   "bytesAvg": 1442,
-   "status": {
-    "200": 52
-   }
-  },
-  "tick-since": {
-   "n": 6764,
-   "avg": 1770,
-   "p50": 1323,
-   "p95": 4501,
-   "p99": 8802,
-   "max": 14260,
-   "bytesAvg": 355,
-   "status": {
-    "0": 22,
-    "200": 6742
-   }
-  },
-  "org-kind": {
-   "n": 50,
-   "avg": 2646,
-   "p50": 2173,
-   "p95": 7226,
-   "p99": 9647,
-   "max": 9647,
-   "bytesAvg": 29200,
-   "status": {
-    "200": 50
-   }
-  },
-  "keepalive-retry": {
-   "n": 595,
-   "avg": 0,
-   "p50": 0,
-   "p95": 0,
-   "p99": 0,
-   "max": 0,
-   "bytesAvg": 0,
-   "status": {
-    "0": 595
-   }
-  },
-  "row-read": {
-   "n": 206,
-   "avg": 2109,
-   "p50": 1554,
-   "p95": 5489,
-   "p99": 10367,
-   "max": 10487,
-   "bytesAvg": 10624,
-   "status": {
-    "200": 206
-   }
-  },
   "rewards-month": {
-   "n": 689,
-   "avg": 1489,
-   "p50": 1171,
-   "p95": 3513,
-   "p99": 5698,
-   "max": 10254,
-   "bytesAvg": 851679,
+   "n": 1001,
+   "avg": 908,
+   "p50": 712,
+   "p95": 2185,
+   "p99": 3766,
+   "max": 6989,
+   "bytesAvg": 852809,
    "status": {
-    "0": 1,
-    "200": 688
-   }
-  },
-  "hint-get": {
-   "n": 9928,
-   "avg": 2731,
-   "p50": 1932,
-   "p95": 7602,
-   "p99": 11083,
-   "max": 16143,
-   "bytesAvg": 10918,
-   "status": {
-    "0": 35,
-    "200": 9893
-   }
-  },
-  "save-month": {
-   "n": 297,
-   "avg": 5981,
-   "p50": 5637,
-   "p95": 12409,
-   "p99": 12983,
-   "max": 15520,
-   "bytesAvg": 14376,
-   "status": {
-    "0": 1,
-    "200": 289,
-    "409": 7
-   }
-  },
-  "raw-row": {
-   "n": 447,
-   "avg": 1689,
-   "p50": 1296,
-   "p95": 4627,
-   "p99": 6693,
-   "max": 10480,
-   "bytesAvg": 12356,
-   "status": {
-    "200": 447
-   }
-  },
-  "apms-person": {
-   "n": 658,
-   "avg": 1908,
-   "p50": 1362,
-   "p95": 5652,
-   "p99": 9940,
-   "max": 14525,
-   "bytesAvg": 14932,
-   "status": {
-    "200": 658
-   }
-  },
-  "save-kpi-master-shared": {
-   "n": 15,
-   "avg": 5261,
-   "p50": 5281,
-   "p95": 13387,
-   "p99": 13387,
-   "max": 13387,
-   "bytesAvg": 408,
-   "status": {
-    "200": 14,
-    "409": 1
+    "200": 1001
    }
   },
   "people-list": {
-   "n": 840,
-   "avg": 1479,
-   "p50": 1146,
-   "p95": 3265,
-   "p99": 7557,
-   "max": 10094,
-   "bytesAvg": 117253,
+   "n": 965,
+   "avg": 808,
+   "p50": 659,
+   "p95": 1987,
+   "p99": 3170,
+   "max": 6638,
+   "bytesAvg": 117128,
    "status": {
-    "200": 840
+    "0": 1,
+    "200": 964
    }
   },
-  "save-people-shared": {
-   "n": 23,
-   "avg": 5760,
-   "p50": 4412,
-   "p95": 13573,
-   "p99": 14615,
-   "max": 14615,
-   "bytesAvg": 1508,
+  "tick": {
+   "n": 7602,
+   "avg": 1028,
+   "p50": 772,
+   "p95": 2603,
+   "p99": 5024,
+   "max": 7761,
+   "bytesAvg": 1701,
    "status": {
-    "200": 16,
-    "409": 7
+    "0": 25,
+    "200": 7577
    }
   },
-  "save-409": {
-   "n": 48,
+  "apms-month": {
+   "n": 742,
+   "avg": 1036,
+   "p50": 780,
+   "p95": 3011,
+   "p99": 4769,
+   "max": 6682,
+   "bytesAvg": 1143022,
+   "status": {
+    "200": 742
+   }
+  },
+  "tick-since": {
+   "n": 7556,
+   "avg": 1016,
+   "p50": 773,
+   "p95": 2586,
+   "p99": 4643,
+   "max": 7446,
+   "bytesAvg": 252,
+   "status": {
+    "0": 25,
+    "200": 7531
+   }
+  },
+  "apms-person": {
+   "n": 950,
+   "avg": 1074,
+   "p50": 715,
+   "p95": 3255,
+   "p99": 5085,
+   "max": 6976,
+   "bytesAvg": 14233,
+   "status": {
+    "0": 1,
+    "200": 949
+   }
+  },
+  "keepalive-retry": {
+   "n": 388,
    "avg": 0,
    "p50": 0,
    "p95": 0,
@@ -455,435 +336,564 @@
    "max": 0,
    "bytesAvg": 0,
    "status": {
-    "409": 48
+    "0": 388
    }
   },
-  "save-month-shared": {
-   "n": 43,
-   "avg": 6570,
-   "p50": 6596,
-   "p95": 11650,
-   "p99": 13630,
-   "max": 13630,
-   "bytesAvg": 14487,
+  "hint-get": {
+   "n": 10968,
+   "avg": 1507,
+   "p50": 1076,
+   "p95": 4074,
+   "p99": 5889,
+   "max": 8338,
+   "bytesAvg": 11114,
    "status": {
-    "200": 27,
-    "409": 16
+    "0": 3,
+    "200": 10965
    }
   },
-  "save-reward-shared": {
-   "n": 31,
-   "avg": 8268,
-   "p50": 6258,
-   "p95": 20310,
-   "p99": 23220,
-   "max": 23220,
-   "bytesAvg": 13144,
+  "org-kind": {
+   "n": 43,
+   "avg": 1937,
+   "p50": 1532,
+   "p95": 3921,
+   "p99": 8869,
+   "max": 8869,
+   "bytesAvg": 31247,
+   "status": {
+    "200": 43
+   }
+  },
+  "person": {
+   "n": 40,
+   "avg": 1247,
+   "p50": 659,
+   "p95": 4498,
+   "p99": 7392,
+   "max": 7392,
+   "bytesAvg": 1477,
+   "status": {
+    "200": 40
+   }
+  },
+  "row-read": {
+   "n": 231,
+   "avg": 1205,
+   "p50": 841,
+   "p95": 3674,
+   "p99": 5665,
+   "max": 6342,
+   "bytesAvg": 10434,
+   "status": {
+    "200": 231
+   }
+  },
+  "save-month": {
+   "n": 357,
+   "avg": 4036,
+   "p50": 3563,
+   "p95": 10595,
+   "p99": 12502,
+   "max": 13400,
+   "bytesAvg": 14306,
+   "status": {
+    "200": 353,
+    "409": 4
+   }
+  },
+  "raw-row": {
+   "n": 531,
+   "avg": 1095,
+   "p50": 803,
+   "p95": 2826,
+   "p99": 4768,
+   "max": 6180,
+   "bytesAvg": 12406,
+   "status": {
+    "200": 531
+   }
+  },
+  "save-kpi-master-shared": {
+   "n": 21,
+   "avg": 3198,
+   "p50": 2129,
+   "p95": 9992,
+   "p99": 12448,
+   "max": 12448,
+   "bytesAvg": 420,
    "status": {
     "200": 18,
-    "409": 13
+    "409": 3
    }
   },
-  "raw-company": {
-   "n": 13,
-   "avg": 840,
-   "p50": 385,
-   "p95": 5591,
-   "p99": 5591,
-   "max": 5591,
-   "bytesAvg": 349166,
-   "status": {
-    "200": 13
-   }
-  },
-  "save-people": {
+  "save-target-history": {
    "n": 6,
-   "avg": 6881,
-   "p50": 4280,
-   "p95": 15546,
-   "p99": 15546,
-   "max": 15546,
-   "bytesAvg": 1701,
+   "avg": 3850,
+   "p50": 2743,
+   "p95": 11875,
+   "p99": 11875,
+   "max": 11875,
+   "bytesAvg": 531,
    "status": {
     "200": 6
    }
   },
-  "save-cell-shared": {
-   "n": 20,
-   "avg": 4788,
-   "p50": 5049,
-   "p95": 8572,
-   "p99": 8572,
-   "max": 8572,
-   "bytesAvg": 640,
+  "book-patch": {
+   "n": 95,
+   "avg": 7418,
+   "p50": 7874,
+   "p95": 10336,
+   "p99": 11035,
+   "max": 11035,
+   "bytesAvg": 621153,
    "status": {
-    "200": 17,
-    "409": 3
-   }
-  },
-  "save-notices": {
-   "n": 20,
-   "avg": 3951,
-   "p50": 3331,
-   "p95": 10652,
-   "p99": 10652,
-   "max": 10652,
-   "bytesAvg": 166,
-   "status": {
-    "200": 10,
-    "409": 10
+    "200": 7,
+    "409": 88
    }
   },
   "save-reward": {
-   "n": 69,
-   "avg": 6168,
-   "p50": 5859,
-   "p95": 12871,
-   "p99": 14879,
-   "max": 14879,
-   "bytesAvg": 12239,
+   "n": 74,
+   "avg": 4392,
+   "p50": 4014,
+   "p95": 10985,
+   "p99": 13629,
+   "max": 13629,
+   "bytesAvg": 12728,
    "status": {
-    "200": 68,
-    "409": 1
+    "200": 74
    }
   },
-  "save-target-history": {
-   "n": 3,
-   "avg": 3579,
-   "p50": 2589,
-   "p95": 5762,
-   "p99": 5762,
-   "max": 5762,
-   "bytesAvg": 522,
+  "save-cell-shared": {
+   "n": 19,
+   "avg": 5038,
+   "p50": 3298,
+   "p95": 16799,
+   "p99": 16799,
+   "max": 16799,
+   "bytesAvg": 618,
    "status": {
-    "200": 3
+    "200": 14,
+    "409": 5
+   }
+  },
+  "save-409": {
+   "n": 29,
+   "avg": 0,
+   "p50": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0,
+   "bytesAvg": 0,
+   "status": {
+    "409": 29
+   }
+  },
+  "save-reward-shared": {
+   "n": 21,
+   "avg": 3886,
+   "p50": 3253,
+   "p95": 7103,
+   "p99": 8545,
+   "max": 8545,
+   "bytesAvg": 13178,
+   "status": {
+    "200": 19,
+    "409": 2
+   }
+  },
+  "raw-company": {
+   "n": 14,
+   "avg": 199,
+   "p50": 161,
+   "p95": 712,
+   "p99": 712,
+   "max": 712,
+   "bytesAvg": 343362,
+   "status": {
+    "200": 14
+   }
+  },
+  "save-month-shared": {
+   "n": 31,
+   "avg": 3882,
+   "p50": 3631,
+   "p95": 7057,
+   "p99": 7398,
+   "max": 7398,
+   "bytesAvg": 14480,
+   "status": {
+    "200": 22,
+    "409": 9
+   }
+  },
+  "save-people-shared": {
+   "n": 27,
+   "avg": 3895,
+   "p50": 3685,
+   "p95": 8470,
+   "p99": 9004,
+   "max": 9004,
+   "bytesAvg": 1542,
+   "status": {
+    "200": 21,
+    "409": 6
+   }
+  },
+  "save-notices": {
+   "n": 24,
+   "avg": 1875,
+   "p50": 1352,
+   "p95": 4234,
+   "p99": 4723,
+   "max": 4723,
+   "bytesAvg": 166,
+   "status": {
+    "200": 12,
+    "409": 12
+   }
+  },
+  "save-people": {
+   "n": 4,
+   "avg": 3189,
+   "p50": 3487,
+   "p95": 5514,
+   "p99": 5514,
+   "max": 5514,
+   "bytesAvg": 1587,
+   "status": {
+    "200": 4
+   }
+  },
+  "raw-replay": {
+   "n": 1,
+   "avg": 514,
+   "p50": 514,
+   "p95": 514,
+   "p99": 514,
+   "max": 514,
+   "bytesAvg": 1542209,
+   "status": {
+    "200": 1
    }
   }
  },
  "topQueries": [
   {
-   "calls": 428,
-   "total_ms": 47685,
-   "mean_ms": 111.41,
-   "rows": 1712,
+   "calls": 538,
+   "total_ms": 54461,
+   "mean_ms": 101.23,
+   "rows": 2152,
    "query": "select book, snapshot_json, content_hash from company_books"
   },
   {
-   "calls": 419,
-   "total_ms": 29816,
-   "mean_ms": 71.16,
-   "rows": 76258,
+   "calls": 723,
+   "total_ms": 43399,
+   "mean_ms": 60.03,
+   "rows": 131586,
    "query": "select person_id, payload, rev from month_records where deleted_at is null and period = $1"
   },
   {
-   "calls": 675,
-   "total_ms": 26252,
-   "mean_ms": 38.89,
-   "rows": 89100,
+   "calls": 948,
+   "total_ms": 31333,
+   "mean_ms": 33.05,
+   "rows": 125136,
    "query": "select person_id, payload, rev from reward_records where deleted_at is null and period = $1"
   },
   {
-   "calls": 654,
-   "total_ms": 20321,
-   "mean_ms": 31.07,
-   "rows": 654,
+   "calls": 736,
+   "total_ms": 21469,
+   "mean_ms": 29.17,
+   "rows": 736,
    "query": "insert into company_notebook (id, snapshot_json, updated_at) values ($1, $2, now()) on conflict (id) do update set snapshot_json = excluded.snapshot_json, updat"
   },
   {
-   "calls": 11980,
-   "total_ms": 11144,
-   "mean_ms": 0.93,
-   "rows": 46758,
+   "calls": 20809,
+   "total_ms": 8693,
+   "mean_ms": 0.42,
+   "rows": 52441,
    "query": "with c as ( select seq, kind, id, k1, k2, rev, deleted, at, payload as log_payload from entity_log where seq > $1 order by seq asc limit $2 ), latest as ( selec"
   },
   {
-   "calls": 100,
-   "total_ms": 7977,
-   "mean_ms": 79.77,
-   "rows": 100,
+   "calls": 117,
+   "total_ms": 8312,
+   "mean_ms": 71.05,
+   "rows": 117,
    "query": "insert into company_books (book, snapshot_json, content_hash, updated_at) values ($1, $2, $3, now()) on conflict (book) do update set snapshot_json = excluded.s"
   },
   {
-   "calls": 829,
-   "total_ms": 2253,
-   "mean_ms": 2.72,
-   "rows": 149220,
+   "calls": 918,
+   "total_ms": 1843,
+   "mean_ms": 2.01,
+   "rows": 165240,
    "query": "select id, payload, rev from people where deleted_at is null"
   },
   {
-   "calls": 6294,
-   "total_ms": 1655,
-   "mean_ms": 0.26,
-   "rows": 6294,
+   "calls": 7392,
+   "total_ms": 1459,
+   "mean_ms": 0.2,
+   "rows": 7392,
    "query": "select payload, rev, deleted_at from month_records where person_id = $1 and period = $2"
   },
   {
-   "calls": 58,
-   "total_ms": 1283,
-   "mean_ms": 22.12,
-   "rows": 104233,
-   "query": "select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind <> $1 order by updated_at asc, id asc"
-  },
-  {
-   "calls": 11,
-   "total_ms": 833,
-   "mean_ms": 75.74,
-   "rows": 2640,
+   "calls": 15,
+   "total_ms": 942,
+   "mean_ms": 62.81,
+   "rows": 3600,
    "query": "select person_id, period, payload from month_records where deleted_at is null"
   },
   {
-   "calls": 4394,
-   "total_ms": 800,
-   "mean_ms": 0.18,
-   "rows": 4394,
+   "calls": 54,
+   "total_ms": 935,
+   "mean_ms": 17.32,
+   "rows": 97047,
+   "query": "select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind <> $1 order by updated_at asc, id asc"
+  },
+  {
+   "calls": 4165,
+   "total_ms": 586,
+   "mean_ms": 0.14,
+   "rows": 4165,
    "query": "select payload, rev, deleted_at from reward_records where person_id = $1 and period = $2"
   },
   {
-   "calls": 11,
-   "total_ms": 479,
-   "mean_ms": 43.5,
-   "rows": 1980,
+   "calls": 15,
+   "total_ms": 569,
+   "mean_ms": 37.93,
+   "rows": 2700,
    "query": "select person_id, period, payload from reward_records where deleted_at is null"
   },
   {
-   "calls": 22239,
-   "total_ms": 291,
-   "mean_ms": 0.01,
-   "rows": 22239,
-   "query": "select snapshot_json from company_notebook where id = $1 limit $2"
-  },
-  {
-   "calls": 452,
-   "total_ms": 282,
-   "mean_ms": 0.62,
-   "rows": 452,
+   "calls": 496,
+   "total_ms": 290,
+   "mean_ms": 0.58,
+   "rows": 496,
    "query": "insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by, payload) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning seq"
   },
   {
-   "calls": 323,
-   "total_ms": 234,
-   "mean_ms": 0.73,
-   "rows": 323,
+   "calls": 23639,
+   "total_ms": 244,
+   "mean_ms": 0.01,
+   "rows": 23639,
+   "query": "select snapshot_json from company_notebook where id = $1 limit $2"
+  },
+  {
+   "calls": 362,
+   "total_ms": 184,
+   "mean_ms": 0.51,
+   "rows": 362,
    "query": "insert into month_records (person_id, period, payload, rev, updated_at, updated_by, deleted_at) values ($1, $2, $3::jsonb, $4, now(), $5, $7) on conflict (perso"
   }
  ],
  "errorsSample": [
   {
-   "t": 1790270033331,
+   "t": 1790296254896,
    "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788173728362"
+   "detail": "0 /api/month-records/2026-04/p-1788173191423"
   },
   {
-   "t": 1790270033343,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788172646619"
-  },
-  {
-   "t": 1790270033344,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788171846710"
-  },
-  {
-   "t": 1790270033344,
-   "name": "save",
-   "detail": "0 /api/reward-records/2026-04/p-1788353125697-i2ke0d"
-  },
-  {
-   "t": 1790270033344,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788171472216"
-  },
-  {
-   "t": 1790270033344,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788171322672"
-  },
-  {
-   "t": 1790270033345,
+   "t": 1790296254897,
    "name": "save",
    "detail": "0 /api/reward-records/2026-04/p-1788194047139"
   },
   {
-   "t": 1790270033347,
+   "t": 1790296254898,
    "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788166504725"
+   "detail": "0 /api/month-records/2026-04/p-1788169185684"
   },
   {
-   "t": 1790270033347,
+   "t": 1790296254898,
    "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788165120386"
+   "detail": "0 /api/month-records/2026-04/p-1788353125731-hm4id9"
   },
   {
-   "t": 1790270033347,
+   "t": 1790296254898,
+   "name": "save",
+   "detail": "0 /api/month-records/2026-04/p-1788169042090"
+  },
+  {
+   "t": 1790296254899,
+   "name": "save",
+   "detail": "0 /api/month-records/2026-04/p-1788165549631"
+  },
+  {
+   "t": 1790296254900,
+   "name": "save",
+   "detail": "0 /api/people/p-1788350343290-pr5i2g"
+  },
+  {
+   "t": 1790296254900,
+   "name": "save",
+   "detail": "0 /api/month-records/2026-04/p-1788164109134"
+  },
+  {
+   "t": 1790296254903,
    "name": "save",
    "detail": "0 /api/reward-records/2026-04/p-1788194047139"
   },
   {
-   "t": 1790270033349,
+   "t": 1790296254903,
    "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788399015071-6yv0iu"
+   "detail": "0 /api/reward-records/2026-04/p-1788197921855"
   },
   {
-   "t": 1790270033349,
+   "t": 1790296254904,
    "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1787993146263"
+   "detail": "0 /api/people/p-1788353125597-7aas1e"
   },
   {
-   "t": 1790270033322,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788350441956-nfqvlp"
+   "t": 1790296254904,
+   "name": "delete-probe",
+   "detail": "create 0"
   },
   {
-   "t": 1790270033323,
+   "t": 1790296254905,
    "name": "save",
-   "detail": "0 /api/people/p-1788194183261"
-  },
-  {
-   "t": 1790270033325,
-   "name": "save",
-   "detail": "0 /api/reward-records/2026-04/p-1788346069553"
-  },
-  {
-   "t": 1790270033329,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788194688150"
-  },
-  {
-   "t": 1790270033331,
-   "name": "save",
-   "detail": "0 /api/reward-records/2026-04/p-1788194047139"
-  },
-  {
-   "t": 1790270033332,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788193196672"
+   "detail": "0 /api/month-records/2026-04/p-1788193537034"
   }
  ],
  "lostSample": [],
  "browserErrors": [
-  "reload ravi.kuma: page open > 60 s"
+  "reload allan.gois: page open > 60 s"
  ],
  "pageOpenSamples": [
   {
    "kind": "sign-in",
-   "ms": 13608,
-   "total": 20987,
-   "editor": true
-  },
-  {
-   "kind": "sign-in",
-   "ms": 13983,
-   "total": 25414,
+   "ms": 8526,
+   "total": 13505,
    "editor": false
   },
   {
    "kind": "sign-in",
-   "ms": 16636,
-   "total": 30991,
+   "ms": 8597,
+   "total": 10349,
    "editor": false
   },
   {
-   "kind": "reload",
-   "ms": 7457,
-   "companyMs": 202.607,
-   "editor": false
-  },
-  {
-   "kind": "reload",
-   "ms": 9926,
-   "companyMs": 62.999000000000024,
+   "kind": "sign-in",
+   "ms": 8705,
+   "total": 10364,
    "editor": true
   },
   {
    "kind": "reload",
-   "ms": 6850,
-   "companyMs": 160.554,
+   "ms": 4984,
+   "companyMs": 35.95099999999999,
    "editor": false
   },
   {
    "kind": "reload",
-   "ms": 4843,
-   "companyMs": 733.5160000000001,
+   "ms": 5907,
+   "companyMs": 45.984,
    "editor": false
   },
   {
    "kind": "reload",
-   "ms": 8976,
-   "companyMs": 340.045,
-   "editor": false
-  },
-  {
-   "kind": "reload",
-   "ms": 7592,
-   "companyMs": 71.633,
+   "ms": 4044,
+   "companyMs": 84.51299999999999,
    "editor": true
   },
   {
    "kind": "reload",
-   "ms": 8983,
-   "companyMs": 249.478,
+   "ms": 6826,
+   "companyMs": 78.461,
    "editor": false
   },
   {
    "kind": "reload",
-   "ms": 7318,
-   "companyMs": 68.235,
-   "editor": false
-  },
-  {
-   "kind": "reload",
-   "ms": 7623,
-   "companyMs": 221.858,
+   "ms": 6774,
+   "companyMs": 41.992,
    "editor": true
   },
   {
    "kind": "reload",
-   "ms": 7734,
-   "companyMs": 345.8,
+   "ms": 4753,
+   "companyMs": 587.1270000000001,
    "editor": false
   },
   {
    "kind": "reload",
-   "ms": 6728,
-   "companyMs": 183.764,
+   "ms": 3030,
+   "companyMs": 85.39500000000001,
    "editor": true
   },
   {
    "kind": "reload",
-   "ms": 8580,
-   "companyMs": 670.6120000000001,
+   "ms": 4341,
+   "companyMs": 168.807,
    "editor": false
   },
   {
    "kind": "reload",
-   "ms": 6964,
-   "companyMs": 333.48499999999996,
+   "ms": 5021,
+   "companyMs": 162.71099999999998,
    "editor": false
   },
   {
    "kind": "reload",
-   "ms": 9085,
-   "companyMs": 788.26,
+   "ms": 3460,
+   "companyMs": 515.9939999999999,
    "editor": true
   },
   {
    "kind": "reload",
-   "ms": 9550,
-   "companyMs": 233.927,
+   "ms": 4635,
+   "companyMs": 80.205,
    "editor": false
   },
   {
    "kind": "reload",
-   "ms": 7869,
-   "companyMs": 127.92599999999999,
+   "ms": 4891,
+   "companyMs": 107.10900000000001,
    "editor": true
   },
   {
    "kind": "reload",
-   "ms": 5453,
-   "companyMs": 135.32899999999998,
+   "ms": 5831,
+   "companyMs": 95.661,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3593,
+   "companyMs": 39.446999999999996,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 3405,
+   "companyMs": 88.508,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3422,
+   "companyMs": 49.361,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 4751,
+   "companyMs": 95.163,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 8046,
+   "companyMs": 213.085,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 3517,
+   "companyMs": 111.56,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3176,
+   "companyMs": 39.147,
    "editor": false
   }
  ],
- "wallSeconds": 359
+ "wallSeconds": 242
 }

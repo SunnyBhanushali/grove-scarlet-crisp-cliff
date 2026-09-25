@@ -7,394 +7,285 @@
  "cores": {
   "server": "0",
   "postgres": "1",
-  "runner": "2,3"
+  "runner": "2,3",
+  "browsers": "2,3"
  },
- "at": "2026-09-24T17:20:51.736Z",
+ "at": "2026-09-25T00:58:59.340Z",
  "targets": {
   "pageOpenMs": {
-   "n": 0
+   "n": 12,
+   "avg": 14198,
+   "p50": 11619,
+   "p95": 25974,
+   "p99": 25974,
+   "max": 25974
   },
   "pageOpenEmployeeMs": {
-   "n": 0
+   "n": 8,
+   "avg": 13976,
+   "p50": 11619,
+   "p95": 25570,
+   "p99": 25570,
+   "max": 25570
   },
   "pageOpenEditorMs": {
-   "n": 0
+   "n": 4,
+   "avg": 14644,
+   "p50": 16071,
+   "p95": 25974,
+   "p99": 25974,
+   "max": 25974
   },
   "signInOpenMs": {
-   "n": 0
+   "n": 3,
+   "avg": 51793,
+   "p50": 53206,
+   "p95": 55198,
+   "p99": 55198,
+   "max": 55198
   },
   "companyLoadMs": {
-   "n": 143,
-   "avg": 12171,
-   "p50": 8596,
-   "p95": 60000,
-   "p99": 60001,
-   "max": 60002
+   "n": 250,
+   "avg": 18325,
+   "p50": 19218,
+   "p95": 33471,
+   "p99": 48366,
+   "max": 48611
   },
   "browserCompanyMs": {
-   "n": 0
+   "n": 12,
+   "avg": 1023,
+   "p50": 123,
+   "p95": 2673,
+   "p99": 2673,
+   "max": 2673
   },
   "tickMs": {
-   "n": 18379,
-   "avg": 17551,
-   "p50": 7370,
-   "p95": 69998,
-   "p99": 80672,
-   "max": 97333
+   "n": 21128,
+   "avg": 26389,
+   "p50": 17527,
+   "p95": 72960,
+   "p99": 91311,
+   "max": 104380
   },
   "saveMs": {
-   "n": 376,
-   "avg": 22433,
-   "p50": 16369,
-   "p95": 65411,
-   "p99": 86338,
-   "max": 91205
+   "n": 333,
+   "avg": 32481,
+   "p50": 28429,
+   "p95": 60939,
+   "p99": 100994,
+   "max": 108796
   },
   "othersSeeMs": {
-   "n": 3056,
-   "avg": 4689,
-   "p50": 0,
-   "p95": 17189,
-   "p99": 92909,
-   "max": 132349,
-   "under1s": 0.6806
+   "n": 5026,
+   "avg": 6783,
+   "p50": 1000,
+   "p95": 28166,
+   "p99": 46769,
+   "max": 135616,
+   "under1s": 0.5
   },
   "serverCpu": {
-   "n": 153,
-   "avg": 97,
-   "p50": 98.5,
-   "p95": 99.7,
+   "n": 162,
+   "avg": 94,
+   "p50": 98.9,
+   "p95": 99.8,
    "p99": 99.9,
    "max": 99.9
   },
   "serverLagMs": {
-   "p99Max": 2315.3,
-   "max": 2315.3,
-   "p50Avg": 79
+   "p99Max": 1562.4,
+   "max": 1562.4,
+   "p50Avg": 26.1
   },
   "serverRssMb": {
-   "n": 153,
-   "avg": 2339,
-   "p50": 2147,
-   "p95": 3517,
-   "p99": 3767,
-   "max": 3879
+   "n": 162,
+   "avg": 1929,
+   "p50": 1713,
+   "p95": 2617,
+   "p99": 2760,
+   "max": 2835
   },
   "postgresCpu": {
-   "n": 176,
+   "n": 175,
    "avg": 23,
-   "p50": 23,
-   "p95": 48,
-   "p99": 55,
-   "max": 67
+   "p50": 24,
+   "p95": 44,
+   "p99": 49,
+   "max": 60
   },
   "pgConnections": {
    "max": 12,
-   "activeMax": 5
+   "activeMax": 4
   },
-  "errors5xxOrNetwork": 577,
+  "errors5xxOrNetwork": 161,
   "lostSaves": 0,
   "resurrectedDeletes": 0,
   "badDeleteReplies": 0,
   "readAfterWrite": {
    "row": {
-    "n": 261,
+    "n": 198,
     "bad": 0,
     "why": {}
    },
    "wire": {
-    "n": 9,
+    "n": 8,
     "bad": 0,
     "why": {}
    },
    "wire+replay": {
-    "n": 9,
+    "n": 8,
     "bad": 0,
     "why": {}
    },
    "row-failed": {
-    "n": 4,
-    "bad": 4,
+    "n": 8,
+    "bad": 8,
     "why": {
-     "status 0": 4
+     "status 0": 8
     }
    }
   },
-  "acknowledgedSaves": 271,
-  "runnerLoopLagMaxMs": 8452
+  "acknowledgedSaves": 233,
+  "runnerLoopLagMaxMs": 11702
  },
  "routes": {
   "signin": {
    "n": 250,
-   "avg": 34497,
-   "p50": 22323,
-   "p95": 60002,
-   "p99": 60006,
-   "max": 60007,
-   "bytesAvg": 283,
+   "avg": 30523,
+   "p50": 32493,
+   "p95": 49389,
+   "p99": 49987,
+   "max": 50396,
+   "bytesAvg": 496,
    "status": {
-    "0": 107,
-    "200": 143
+    "200": 250
    }
   },
   "html": {
-   "n": 143,
-   "avg": 425,
-   "p50": 236,
-   "p95": 1435,
-   "p99": 1793,
-   "max": 2600,
+   "n": 250,
+   "avg": 320,
+   "p50": 77,
+   "p95": 1708,
+   "p99": 2492,
+   "max": 2649,
    "bytesAvg": 4196,
    "status": {
-    "200": 143
+    "200": 250
    }
   },
   "static": {
-   "n": 1716,
-   "avg": 3572,
-   "p50": 511,
-   "p95": 14545,
-   "p99": 16029,
-   "max": 18017,
+   "n": 3000,
+   "avg": 761,
+   "p50": 214,
+   "p95": 3389,
+   "p99": 6433,
+   "max": 6788,
    "bytesAvg": 136468,
    "status": {
-    "200": 1716
+    "200": 3000
    }
   },
   "get-session": {
-   "n": 143,
-   "avg": 27076,
-   "p50": 13136,
-   "p95": 60001,
-   "p99": 60002,
-   "max": 60005,
-   "bytesAvg": 339,
+   "n": 250,
+   "avg": 20855,
+   "p50": 20158,
+   "p95": 34971,
+   "p99": 38635,
+   "max": 39274,
+   "bytesAvg": 496,
    "status": {
-    "0": 45,
-    "200": 98
+    "200": 250
    }
   },
   "company": {
-   "n": 143,
-   "avg": 12079,
-   "p50": 8264,
-   "p95": 60000,
-   "p99": 60001,
-   "max": 60002,
-   "bytesAvg": 328867,
+   "n": 250,
+   "avg": 18057,
+   "p50": 18834,
+   "p95": 33407,
+   "p99": 48337,
+   "max": 48419,
+   "bytesAvg": 348266,
    "status": {
-    "0": 8,
-    "200": 135
+    "200": 250
    }
   },
   "company-load": {
-   "n": 143,
-   "avg": 12171,
-   "p50": 8596,
-   "p95": 60000,
-   "p99": 60001,
-   "max": 60002,
-   "bytesAvg": 328867,
+   "n": 250,
+   "avg": 18325,
+   "p50": 19218,
+   "p95": 33471,
+   "p99": 48366,
+   "max": 48611,
+   "bytesAvg": 348266,
    "status": {
-    "0": 8,
-    "200": 135
+    "200": 250
    }
   },
   "changes": {
-   "n": 5263,
-   "avg": 4597,
-   "p50": 2218,
-   "p95": 14553,
-   "p99": 59890,
-   "max": 93891,
-   "bytesAvg": 99774,
+   "n": 2795,
+   "avg": 11720,
+   "p50": 6938,
+   "p95": 40813,
+   "p99": 71166,
+   "max": 93064,
+   "bytesAvg": 242306,
    "status": {
-    "0": 18,
-    "200": 5245
+    "0": 3,
+    "200": 2792
    }
   },
   "page-open-http": {
-   "n": 143,
-   "avg": 53407,
-   "p50": 58772,
-   "p95": 98560,
-   "p99": 103896,
-   "max": 107983,
+   "n": 250,
+   "avg": 55957,
+   "p50": 54361,
+   "p95": 93463,
+   "p99": 95579,
+   "max": 98739,
    "bytesAvg": 0,
    "status": {
-    "200": 143
+    "200": 250
    }
   },
   "sse-connect": {
-   "n": 143,
-   "avg": 2140,
-   "p50": 351,
-   "p95": 8749,
-   "p99": 35957,
-   "max": 36289,
+   "n": 250,
+   "avg": 5057,
+   "p50": 422,
+   "p95": 18524,
+   "p99": 32663,
+   "max": 33650,
    "bytesAvg": 0,
    "status": {
-    "200": 143
-   }
-  },
-  "rewards-month": {
-   "n": 486,
-   "avg": 4753,
-   "p50": 2223,
-   "p95": 15864,
-   "p99": 72839,
-   "max": 82156,
-   "bytesAvg": 850955,
-   "status": {
-    "0": 1,
-    "200": 485
+    "200": 250
    }
   },
   "tick": {
-   "n": 9231,
-   "avg": 17521,
-   "p50": 7368,
-   "p95": 69914,
-   "p99": 80699,
-   "max": 96327,
-   "bytesAvg": 1739,
+   "n": 10643,
+   "avg": 26263,
+   "p50": 17443,
+   "p95": 72783,
+   "p99": 90976,
+   "max": 104365,
+   "bytesAvg": 1654,
    "status": {
-    "0": 61,
-    "200": 9170
+    "0": 1,
+    "200": 10642
    }
   },
   "tick-since": {
-   "n": 9148,
-   "avg": 17581,
-   "p50": 7371,
-   "p95": 70089,
-   "p99": 80583,
-   "max": 97333,
-   "bytesAvg": 1122,
+   "n": 10485,
+   "avg": 26518,
+   "p50": 17609,
+   "p95": 73024,
+   "p99": 91883,
+   "max": 104380,
+   "bytesAvg": 1440,
    "status": {
-    "0": 55,
-    "200": 9093
-   }
-  },
-  "row-read": {
-   "n": 215,
-   "avg": 13500,
-   "p50": 3409,
-   "p95": 79086,
-   "p99": 89114,
-   "max": 90654,
-   "bytesAvg": 11848,
-   "status": {
-    "0": 6,
-    "200": 209
-   }
-  },
-  "save-month": {
-   "n": 210,
-   "avg": 20288,
-   "p50": 15015,
-   "p95": 62452,
-   "p99": 81833,
-   "max": 88573,
-   "bytesAvg": 13690,
-   "status": {
-    "0": 11,
-    "200": 179,
-    "409": 20
-   }
-  },
-  "raw-row": {
-   "n": 261,
-   "avg": 7566,
-   "p50": 4249,
-   "p95": 24072,
-   "p99": 36394,
-   "max": 84018,
-   "bytesAvg": 12946,
-   "status": {
-    "200": 261
-   }
-  },
-  "hint-get": {
-   "n": 13304,
-   "avg": 12254,
-   "p50": 8690,
-   "p95": 34472,
-   "p99": 71347,
-   "max": 101784,
-   "bytesAvg": 11948,
-   "status": {
-    "0": 61,
-    "200": 13243
-   }
-  },
-  "apms-person": {
-   "n": 341,
-   "avg": 10604,
-   "p50": 6667,
-   "p95": 34344,
-   "p99": 78929,
-   "max": 85156,
-   "bytesAvg": 13884,
-   "status": {
-    "0": 4,
-    "200": 337
-   }
-  },
-  "org-kind": {
-   "n": 52,
-   "avg": 14901,
-   "p50": 5413,
-   "p95": 68454,
-   "p99": 75113,
-   "max": 75113,
-   "bytesAvg": 24373,
-   "status": {
-    "200": 52
-   }
-  },
-  "people-list": {
-   "n": 504,
-   "avg": 5597,
-   "p50": 2253,
-   "p95": 21116,
-   "p99": 73468,
-   "max": 79770,
-   "bytesAvg": 116320,
-   "status": {
-    "0": 4,
-    "200": 500
-   }
-  },
-  "person": {
-   "n": 63,
-   "avg": 10478,
-   "p50": 4144,
-   "p95": 46482,
-   "p99": 70159,
-   "max": 70159,
-   "bytesAvg": 1456,
-   "status": {
-    "0": 1,
-    "200": 62
-   }
-  },
-  "save-cell-shared": {
-   "n": 16,
-   "avg": 24484,
-   "p50": 19972,
-   "p95": 69616,
-   "p99": 69616,
-   "max": 69616,
-   "bytesAvg": 518,
-   "status": {
-    "0": 2,
-    "200": 6,
-    "409": 8
+    "200": 10485
    }
   },
   "keepalive-retry": {
-   "n": 886,
+   "n": 1589,
    "avg": 0,
    "p50": 0,
    "p95": 0,
@@ -402,48 +293,150 @@
    "max": 0,
    "bytesAvg": 0,
    "status": {
-    "0": 886
+    "0": 1589
    }
   },
-  "save-reward-shared": {
-   "n": 18,
-   "avg": 25714,
-   "p50": 23610,
-   "p95": 77578,
-   "p99": 77578,
-   "max": 77578,
-   "bytesAvg": 13096,
+  "row-read": {
+   "n": 297,
+   "avg": 21174,
+   "p50": 9900,
+   "p95": 90349,
+   "p99": 105419,
+   "max": 105849,
+   "bytesAvg": 11704,
    "status": {
-    "200": 6,
-    "409": 12
+    "0": 8,
+    "200": 289
+   }
+  },
+  "save-month": {
+   "n": 202,
+   "avg": 31104,
+   "p50": 27421,
+   "p95": 58989,
+   "p99": 94786,
+   "max": 108796,
+   "bytesAvg": 14468,
+   "status": {
+    "0": 1,
+    "200": 161,
+    "409": 40
+   }
+  },
+  "hint-get": {
+   "n": 19401,
+   "avg": 27298,
+   "p50": 23018,
+   "p95": 58356,
+   "p99": 68967,
+   "max": 91198,
+   "bytesAvg": 11099,
+   "status": {
+    "0": 1,
+    "200": 19400
+   }
+  },
+  "raw-row": {
+   "n": 198,
+   "avg": 19447,
+   "p50": 15345,
+   "p95": 54631,
+   "p99": 64440,
+   "max": 68186,
+   "bytesAvg": 12611,
+   "status": {
+    "200": 198
+   }
+  },
+  "apms-person": {
+   "n": 212,
+   "avg": 20444,
+   "p50": 13742,
+   "p95": 59045,
+   "p99": 82752,
+   "max": 94990,
+   "bytesAvg": 13573,
+   "status": {
+    "0": 2,
+    "200": 210
+   }
+  },
+  "rewards-month": {
+   "n": 282,
+   "avg": 12443,
+   "p50": 7463,
+   "p95": 39219,
+   "p99": 79044,
+   "max": 93953,
+   "bytesAvg": 852758,
+   "status": {
+    "200": 282
+   }
+  },
+  "org-kind": {
+   "n": 82,
+   "avg": 18984,
+   "p50": 14488,
+   "p95": 59109,
+   "p99": 84158,
+   "max": 84158,
+   "bytesAvg": 26122,
+   "status": {
+    "200": 82
    }
   },
   "apms-month": {
-   "n": 218,
-   "avg": 10534,
-   "p50": 6203,
-   "p95": 31310,
-   "p99": 79087,
-   "max": 83006,
-   "bytesAvg": 1142342,
+   "n": 172,
+   "avg": 20068,
+   "p50": 13593,
+   "p95": 52827,
+   "p99": 81170,
+   "max": 96536,
+   "bytesAvg": 1142137,
    "status": {
-    "200": 218
+    "200": 172
    }
   },
-  "raw-company": {
-   "n": 9,
-   "avg": 1212,
-   "p50": 1481,
-   "p95": 2481,
-   "p99": 2481,
-   "max": 2481,
-   "bytesAvg": 349537,
+  "person": {
+   "n": 62,
+   "avg": 21199,
+   "p50": 11991,
+   "p95": 65452,
+   "p99": 90487,
+   "max": 90487,
+   "bytesAvg": 1488,
    "status": {
-    "200": 9
+    "0": 1,
+    "200": 61
+   }
+  },
+  "people-list": {
+   "n": 325,
+   "avg": 12256,
+   "p50": 8503,
+   "p95": 38590,
+   "p99": 76486,
+   "max": 101397,
+   "bytesAvg": 117246,
+   "status": {
+    "200": 325
+   }
+  },
+  "save-cell-shared": {
+   "n": 13,
+   "avg": 42032,
+   "p50": 40039,
+   "p95": 67828,
+   "p99": 67828,
+   "max": 67828,
+   "bytesAvg": 569,
+   "status": {
+    "200": 3,
+    "409": 10
    }
   },
   "save-409": {
-   "n": 78,
+   "n": 93,
    "avg": 0,
    "p50": 0,
    "p95": 0,
@@ -451,366 +444,491 @@
    "max": 0,
    "bytesAvg": 0,
    "status": {
-    "409": 78
+    "409": 93
    }
   },
-  "save-notices": {
-   "n": 11,
-   "avg": 15161,
-   "p50": 10977,
-   "p95": 66672,
-   "p99": 66672,
-   "max": 66672,
-   "bytesAvg": 157,
+  "save-reward-shared": {
+   "n": 15,
+   "avg": 36904,
+   "p50": 36048,
+   "p95": 65684,
+   "p99": 65684,
+   "max": 65684,
+   "bytesAvg": 13067,
    "status": {
-    "0": 1,
-    "200": 6,
-    "409": 4
-   }
-  },
-  "save-kpi-master-shared": {
-   "n": 10,
-   "avg": 23827,
-   "p50": 17961,
-   "p95": 43445,
-   "p99": 43445,
-   "max": 43445,
-   "bytesAvg": 349,
-   "status": {
-    "200": 4,
-    "409": 6
-   }
-  },
-  "save-people-shared": {
-   "n": 7,
-   "avg": 17179,
-   "p50": 16437,
-   "p95": 23416,
-   "p99": 23416,
-   "max": 23416,
-   "bytesAvg": 1492,
-   "status": {
-    "200": 6,
-    "409": 1
-   }
-  },
-  "save-people": {
-   "n": 4,
-   "avg": 20384,
-   "p50": 21072,
-   "p95": 29637,
-   "p99": 29637,
-   "max": 29637,
-   "bytesAvg": 1645,
-   "status": {
-    "200": 4
+    "200": 3,
+    "409": 12
    }
   },
   "save-month-shared": {
-   "n": 43,
-   "avg": 24053,
-   "p50": 23879,
-   "p95": 37888,
-   "p99": 91205,
-   "max": 91205,
-   "bytesAvg": 14442,
+   "n": 20,
+   "avg": 40974,
+   "p50": 37034,
+   "p95": 100994,
+   "p99": 100994,
+   "max": 100994,
+   "bytesAvg": 14428,
    "status": {
-    "200": 13,
-    "409": 30
+    "200": 7,
+    "409": 13
    }
   },
-  "save-target-history": {
+  "save-people": {
    "n": 3,
-   "avg": 7762,
-   "p50": 10127,
-   "p95": 12311,
-   "p99": 12311,
-   "max": 12311,
-   "bytesAvg": 536,
+   "avg": 29592,
+   "p50": 29303,
+   "p95": 32876,
+   "p99": 32876,
+   "max": 32876,
+   "bytesAvg": 1741,
    "status": {
     "200": 3
    }
   },
   "save-reward": {
-   "n": 54,
-   "avg": 30654,
-   "p50": 21437,
-   "p95": 80679,
-   "p99": 89857,
-   "max": 89857,
-   "bytesAvg": 12533,
+   "n": 49,
+   "avg": 31007,
+   "p50": 25705,
+   "p95": 65674,
+   "p99": 105304,
+   "max": 105304,
+   "bytesAvg": 11102,
    "status": {
-    "0": 3,
-    "200": 50,
+    "0": 1,
+    "200": 46,
+    "409": 2
+   }
+  },
+  "save-people-shared": {
+   "n": 10,
+   "avg": 35820,
+   "p50": 36359,
+   "p95": 45642,
+   "p99": 45642,
+   "max": 45642,
+   "bytesAvg": 1455,
+   "status": {
+    "200": 3,
+    "409": 7
+   }
+  },
+  "raw-company": {
+   "n": 8,
+   "avg": 13850,
+   "p50": 11409,
+   "p95": 33767,
+   "p99": 33767,
+   "max": 33767,
+   "bytesAvg": 350389,
+   "status": {
+    "200": 8
+   }
+  },
+  "book-patch": {
+   "n": 11,
+   "avg": 33401,
+   "p50": 36897,
+   "p95": 52843,
+   "p99": 52843,
+   "max": 52843,
+   "bytesAvg": 609616,
+   "status": {
+    "200": 1,
+    "409": 10
+   }
+  },
+  "save-notices": {
+   "n": 5,
+   "avg": 32726,
+   "p50": 28331,
+   "p95": 66643,
+   "p99": 66643,
+   "max": 66643,
+   "bytesAvg": 153,
+   "status": {
+    "0": 1,
+    "200": 3,
     "409": 1
+   }
+  },
+  "save-target-history": {
+   "n": 3,
+   "avg": 23040,
+   "p50": 22250,
+   "p95": 27170,
+   "p99": 27170,
+   "max": 27170,
+   "bytesAvg": 507,
+   "status": {
+    "200": 3
+   }
+  },
+  "save-kpi-master-shared": {
+   "n": 13,
+   "avg": 31890,
+   "p50": 27925,
+   "p95": 62932,
+   "p99": 62932,
+   "max": 62932,
+   "bytesAvg": 350,
+   "status": {
+    "200": 4,
+    "409": 9
    }
   }
  },
  "topQueries": [
   {
-   "calls": 286,
-   "total_ms": 38648,
-   "mean_ms": 135.13,
-   "rows": 1144,
+   "calls": 362,
+   "total_ms": 38732,
+   "mean_ms": 107,
+   "rows": 1448,
    "query": "select book, snapshot_json, content_hash from company_books"
   },
   {
-   "calls": 450,
-   "total_ms": 9181,
-   "mean_ms": 20.4,
-   "rows": 59400,
-   "query": "select person_id, payload, rev from reward_records where deleted_at is null and period = $1"
-  },
-  {
-   "calls": 4970,
-   "total_ms": 9005,
-   "mean_ms": 1.81,
-   "rows": 41005,
+   "calls": 2752,
+   "total_ms": 9893,
+   "mean_ms": 3.59,
+   "rows": 56631,
    "query": "with c as ( select seq, kind, id, k1, k2, rev, deleted, at, payload as log_payload from entity_log where seq > $1 order by seq asc limit $2 ), latest as ( selec"
   },
   {
-   "calls": 347,
-   "total_ms": 6424,
-   "mean_ms": 18.51,
-   "rows": 347,
-   "query": "insert into company_notebook (id, snapshot_json, updated_at) values ($1, $2, now()) on conflict (id) do update set snapshot_json = excluded.snapshot_json, updat"
-  },
-  {
-   "calls": 177,
-   "total_ms": 6077,
-   "mean_ms": 34.34,
-   "rows": 32214,
+   "calls": 161,
+   "total_ms": 5714,
+   "mean_ms": 35.49,
+   "rows": 29302,
    "query": "select person_id, payload, rev from month_records where deleted_at is null and period = $1"
   },
   {
-   "calls": 38,
-   "total_ms": 2521,
-   "mean_ms": 66.35,
-   "rows": 38,
-   "query": "insert into company_books (book, snapshot_json, content_hash, updated_at) values ($1, $2, $3, now()) on conflict (book) do update set snapshot_json = excluded.s"
+   "calls": 266,
+   "total_ms": 4550,
+   "mean_ms": 17.11,
+   "rows": 35112,
+   "query": "select person_id, payload, rev from reward_records where deleted_at is null and period = $1"
   },
   {
-   "calls": 6546,
-   "total_ms": 1765,
-   "mean_ms": 0.27,
-   "rows": 6546,
+   "calls": 280,
+   "total_ms": 4406,
+   "mean_ms": 15.74,
+   "rows": 280,
+   "query": "insert into company_notebook (id, snapshot_json, updated_at) values ($1, $2, now()) on conflict (id) do update set snapshot_json = excluded.snapshot_json, updat"
+  },
+  {
+   "calls": 8579,
+   "total_ms": 1778,
+   "mean_ms": 0.21,
+   "rows": 8579,
    "query": "select payload, rev, deleted_at from month_records where person_id = $1 and period = $2"
   },
   {
-   "calls": 5993,
-   "total_ms": 1363,
-   "mean_ms": 0.23,
-   "rows": 5993,
+   "calls": 9589,
+   "total_ms": 1574,
+   "mean_ms": 0.16,
+   "rows": 9589,
    "query": "select payload, rev, deleted_at from reward_records where person_id = $1 and period = $2"
   },
   {
-   "calls": 457,
-   "total_ms": 1097,
-   "mean_ms": 2.4,
-   "rows": 82260,
-   "query": "select id, payload, rev from people where deleted_at is null"
+   "calls": 27,
+   "total_ms": 1487,
+   "mean_ms": 55.07,
+   "rows": 27,
+   "query": "insert into company_books (book, snapshot_json, content_hash, updated_at) values ($1, $2, $3, now()) on conflict (book) do update set snapshot_json = excluded.s"
   },
   {
-   "calls": 54,
-   "total_ms": 737,
-   "mean_ms": 13.66,
-   "rows": 97111,
+   "calls": 81,
+   "total_ms": 807,
+   "mean_ms": 9.96,
+   "rows": 145685,
    "query": "select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind <> $1 order by updated_at asc, id asc"
   },
   {
-   "calls": 27973,
-   "total_ms": 363,
+   "calls": 324,
+   "total_ms": 632,
+   "mean_ms": 1.95,
+   "rows": 58320,
+   "query": "select id, payload, rev from people where deleted_at is null"
+  },
+  {
+   "calls": 66937,
+   "total_ms": 543,
    "mean_ms": 0.01,
-   "rows": 27973,
-   "query": "select snapshot_json from company_notebook where id = $1 limit $2"
-  },
-  {
-   "calls": 4,
-   "total_ms": 224,
-   "mean_ms": 56.09,
-   "rows": 960,
-   "query": "select person_id, period, payload from month_records where deleted_at is null"
-  },
-  {
-   "calls": 274,
-   "total_ms": 178,
-   "mean_ms": 0.65,
-   "rows": 274,
-   "query": "insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by, payload) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning seq"
-  },
-  {
-   "calls": 10244,
-   "total_ms": 177,
-   "mean_ms": 0.02,
-   "rows": 10244,
+   "rows": 16990,
    "query": "select person_id, expires_at from apms_sessions where token_hash = $1 and expires_at > now()"
   },
   {
-   "calls": 4,
-   "total_ms": 161,
-   "mean_ms": 40.35,
+   "calls": 36925,
+   "total_ms": 342,
+   "mean_ms": 0.01,
+   "rows": 36925,
+   "query": "select snapshot_json from company_notebook where id = $1 limit $2"
+  },
+  {
+   "calls": 240,
+   "total_ms": 145,
+   "mean_ms": 0.6,
+   "rows": 240,
+   "query": "insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by, payload) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning seq"
+  },
+  {
+   "calls": 191,
+   "total_ms": 122,
+   "mean_ms": 0.64,
+   "rows": 191,
+   "query": "insert into month_records (person_id, period, payload, rev, updated_at, updated_by, deleted_at) values ($1, $2, $3::jsonb, $4, now(), $5, $7) on conflict (perso"
+  },
+  {
+   "calls": 3,
+   "total_ms": 116,
+   "mean_ms": 38.55,
    "rows": 720,
-   "query": "select person_id, period, payload from reward_records where deleted_at is null"
+   "query": "select person_id, period, payload from month_records where deleted_at is null"
   }
  ],
  "errorsSample": [
   {
-   "t": 1790270268415,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
+   "t": 1790297687723,
+   "name": "row-read",
+   "detail": "GET /api/month-records/2026-04/p-1788003069418 timeout"
   },
   {
-   "t": 1790270268415,
-   "name": "signin",
-   "detail": "0 chetan.raje"
+   "t": 1790297688885,
+   "name": "apms-person",
+   "detail": "GET /api/month-records/2026-04/p-1788003110379 timeout"
   },
   {
-   "t": 1790270268663,
-   "name": "hint-get",
-   "detail": "GET /api/e/target-history/th-1789543561592-wusm timeout"
-  },
-  {
-   "t": 1790270268663,
-   "name": "hint-get",
-   "detail": "GET /api/reward-records/2026-04/p-1788194895271 timeout"
-  },
-  {
-   "t": 1790270268663,
+   "t": 1790297690836,
    "name": "changes",
-   "detail": "GET /api/changes?since=9&payload=1&limit=500 timeout"
+   "detail": "GET /api/changes?since=4&payload=1&limit=500 timeout"
   },
   {
-   "t": 1790270268890,
-   "name": "person",
-   "detail": "GET /api/people/p-1788165549631 timeout"
+   "t": 1790297691500,
+   "name": "row-read",
+   "detail": "GET /api/month-records/2026-04/p-1788224265361 timeout"
   },
   {
-   "t": 1790270269415,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
+   "t": 1790297724733,
+   "name": "sse-connect",
+   "detail": "socket hang up"
   },
   {
-   "t": 1790270269415,
-   "name": "signin",
-   "detail": "0 neehat.shei"
+   "t": 1790297724733,
+   "name": "sse-connect",
+   "detail": "socket hang up"
   },
   {
-   "t": 1790270270120,
-   "name": "save-cell-shared",
-   "detail": "PATCH /api/target-cells/tn-bu-1788158052564-bl73-os17%3A%3A2025-10 timeout"
+   "t": 1790297724733,
+   "name": "sse-connect",
+   "detail": "socket hang up"
   },
   {
-   "t": 1790270270121,
+   "t": 1790297725503,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297725503,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297725503,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297725504,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297725505,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297725505,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726127,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726131,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726131,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726131,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726131,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726131,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726132,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726132,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726132,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726132,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297726132,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297728852,
+   "name": "sse-connect",
+   "detail": "socket hang up"
+  },
+  {
+   "t": 1790297845729,
+   "name": "save",
+   "detail": "0 /api/month-records/2026-04/p-1788194688150"
+  },
+  {
+   "t": 1790297845735,
+   "name": "save",
+   "detail": "0 /api/month-records/2026-04/p-1788193537034"
+  },
+  {
+   "t": 1790297845736,
+   "name": "save",
+   "detail": "0 /api/reward-records/2026-04/p-1788194047139"
+  },
+  {
+   "t": 1790297845738,
+   "name": "save",
+   "detail": "0 /api/month-records/2026-04/p-1788173543806"
+  },
+  {
+   "t": 1790297845742,
    "name": "save",
    "detail": "0 /api/target-cells/tn-bu-1788158052564-bl73-os17%3A%3A2025-10"
-  },
-  {
-   "t": 1790270270415,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
-  },
-  {
-   "t": 1790270270415,
-   "name": "signin",
-   "detail": "0 arjun.mond"
-  },
-  {
-   "t": 1790270270980,
-   "name": "tick",
-   "detail": "GET /api/company-tick timeout"
-  },
-  {
-   "t": 1790270271415,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
-  },
-  {
-   "t": 1790270271415,
-   "name": "signin",
-   "detail": "0 fawaz.ghan"
-  },
-  {
-   "t": 1790270272414,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
-  },
-  {
-   "t": 1790270272414,
-   "name": "signin",
-   "detail": "0 kashifsanaullah.moha"
-  },
-  {
-   "t": 1790270273415,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
-  },
-  {
-   "t": 1790270273415,
-   "name": "signin",
-   "detail": "0 jaydeip.aror"
-  },
-  {
-   "t": 1790270274124,
-   "name": "save-month",
-   "detail": "PATCH /api/month-records/2026-04/p-1788159648638 timeout"
-  },
-  {
-   "t": 1790270274124,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788159648638"
-  },
-  {
-   "t": 1790270274415,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
-  },
-  {
-   "t": 1790270274415,
-   "name": "signin",
-   "detail": "0 venu.s"
-  },
-  {
-   "t": 1790270275414,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
-  },
-  {
-   "t": 1790270275414,
-   "name": "signin",
-   "detail": "0 manan.rang"
-  },
-  {
-   "t": 1790270276227,
-   "name": "save-month",
-   "detail": "PATCH /api/month-records/2026-04/p-1788164109134 timeout"
-  },
-  {
-   "t": 1790270276227,
-   "name": "save",
-   "detail": "0 /api/month-records/2026-04/p-1788164109134"
-  },
-  {
-   "t": 1790270276416,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
-  },
-  {
-   "t": 1790270276416,
-   "name": "signin",
-   "detail": "0 mohnish.raja"
-  },
-  {
-   "t": 1790270277415,
-   "name": "signin",
-   "detail": "POST /api/auth/sign-in/username timeout"
   }
  ],
  "lostSample": [],
- "browserErrors": [
-  "sign-in allan.gois: locator.waitFor: Timeout 90000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('aside, nav').first().getByText('Me', { exact: true }).first() to be visible\u001b[2",
-  "sign-in sunny.b: locator.waitFor: Timeout 90000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('aside, nav').first().getByText('Me', { exact: true }).first() to be visible\u001b[2",
-  "sign-in ravi.kuma: locator.waitFor: Timeout 90000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('aside, nav').first().getByText('Me', { exact: true }).first() to be visible\u001b[2"
+ "browserErrors": [],
+ "pageOpenSamples": [
+  {
+   "kind": "sign-in",
+   "ms": 46975,
+   "total": 52284,
+   "editor": true
+  },
+  {
+   "kind": "sign-in",
+   "ms": 53206,
+   "total": 56305,
+   "editor": false
+  },
+  {
+   "kind": "sign-in",
+   "ms": 55198,
+   "total": 62520,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 16483,
+   "companyMs": 2670.928,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 25266,
+   "companyMs": 50.508000000000266,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 25974,
+   "companyMs": 2032.0830000000005,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 8569,
+   "companyMs": 2025.476,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 6020,
+   "companyMs": 35.348000000000006,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 25570,
+   "companyMs": 123.371000000001,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 10536,
+   "companyMs": 37.291999999999916,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 16071,
+   "companyMs": 2475.496,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 11619,
+   "companyMs": 67.51800000000003,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 7277,
+   "companyMs": 33.532000000000004,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 6486,
+   "companyMs": 55.277,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 10510,
+   "companyMs": 2672.837,
+   "editor": true
+  }
  ],
- "pageOpenSamples": [],
- "wallSeconds": 287
+ "wallSeconds": 361
 }
