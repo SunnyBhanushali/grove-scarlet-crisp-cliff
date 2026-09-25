@@ -38,6 +38,7 @@ jobs:
           sha="$(git rev-parse HEAD)"
           echo "SHA=$sha" >> "$GITHUB_ENV"
           echo "RELEASE_ID=$(date -u +%Y%m%d-%H%M%S)-${sha::8}" >> "$GITHUB_ENV"
+          echo "SOURCE_REF=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._/-' '_' | cut -c1-80)" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/vps
         with:
@@ -52,7 +53,7 @@ jobs:
         run: ssh apms-vps "$APMS preflight staging"
 
       - name: Upload source (clean folder, never unzip-over)
-        run: git archive --format=tar.gz HEAD | ssh apms-vps "$APMS receive staging $RELEASE_ID $SHA ${GITHUB_REF_NAME}"
+        run: git archive --format=tar.gz HEAD | ssh apms-vps "$APMS receive staging $RELEASE_ID $SHA $SOURCE_REF"
 
       - name: Install + build on the VPS
         run: |
@@ -82,7 +83,7 @@ jobs:
         run: |
           {
             echo "### Staging: ${{ job.status }}"
-            echo "- commit \`${SHA::8}\` (${GITHUB_REF_NAME}), release \`$RELEASE_ID\`, stamp \`${STAMP:-?}\`"
+            echo "- commit \`${SHA::8}\` (${SOURCE_REF}), release \`$RELEASE_ID\`, stamp \`${STAMP:-?}\`"
             echo "- ${STAGING_URL}"
             echo "- When it looks right: **Actions → Deploy to live → Run workflow** (ref: \`staging\`)."
           } >> "$GITHUB_STEP_SUMMARY"

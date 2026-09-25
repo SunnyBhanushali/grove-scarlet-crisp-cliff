@@ -45,11 +45,15 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
 
       - name: Release id
+        env:
+          IN_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
         run: |
           sha="$(git rev-parse HEAD)"
           echo "SHA=$sha" >> "$GITHUB_ENV"
           echo "RELEASE_ID=$(date -u +%Y%m%d-%H%M%S)-${sha::8}" >> "$GITHUB_ENV"
-          echo "SOURCE_REF=${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}" >> "$GITHUB_ENV"
+          # only a plain name goes into the (remote) command line
+          ref="$(printf '%s' "$IN_REF" | tr -c 'A-Za-z0-9._/-' '_' | cut -c1-80)"
+          echo "SOURCE_REF=${ref:-manual}" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/vps
         with:

@@ -529,7 +529,8 @@ cmd_prune() {
   local cur keep_list d id
   cur="$(current_release)"
   # Failed / unfinished builds go first (never the running one)…
-  for d in $(ls -1d "$REL_DIR"/*/ 2>/dev/null); do
+  for d in "$REL_DIR"/*/; do
+    [ -d "$d" ] || continue
     id="$(basename "$d")"
     [ "$id" = "$cur" ] && continue
     if [ ! -f "$d/.apms-built" ] && [ ! -f "$d/.output/server/index.mjs" ]; then
@@ -544,17 +545,18 @@ cmd_prune() {
     [ "$id" = "$cur" ] && continue
     if printf '%s\n' "$keep_list" | grep -qxF "$id"; then continue; fi
     log "pruning $TARGET release $id"
-    rm -rf "$REL_DIR/$id"
+    rm -rf "${REL_DIR:?}/${id:?}"
   done
   # Inactive builds keep .output (self-contained: a rollback needs nothing
   # else) but drop node_modules (~430 MB each). The pre-pipeline copy of the
   # old live folder is left exactly as it was.
-  for d in $(ls -1d "$REL_DIR"/*/ 2>/dev/null); do
+  for d in "$REL_DIR"/*/; do
+    [ -d "$d" ] || continue
     id="$(basename "$d")"
     [ "$id" = "$cur" ] && continue
     case "$id" in *-pre-pipeline) continue ;; esac
     if [ -d "$d/node_modules" ] && [ -f "$d/.output/server/index.mjs" ]; then
-      rm -rf "$d/node_modules"
+      rm -rf "${d:?}node_modules"
       log "slimmed $id (node_modules removed; .output kept for rollback)"
     fi
   done
