@@ -524,7 +524,8 @@ cmd_refresh_staging() {
 
   dump="$DEPLOY_ROOT/shared/.live-for-staging.dump"
   list="$DEPLOY_ROOT/shared/.live-for-staging.list"
-  trap 'rm -f "$dump" "$list"' EXIT
+  # shellcheck disable=SC2064  # expand now: the locals are gone at EXIT
+  trap "rm -f '$dump' '$list' '$DEPLOY_ROOT/shared/.restore.err'" EXIT
   log "pg_dump of the live database (read-only)"
   pg_dump --format=custom --no-owner --no-acl --file="$dump" "$lurl"
   # Leave out the BATCH-3 plain-text password backup tables entirely.
@@ -534,7 +535,8 @@ cmd_refresh_staging() {
   log "emptying $sdb (objects owned by the staging role only)"
   [ "$(psql "$surl" -v ON_ERROR_STOP=1 -tAq -c "select current_database()")" = "$sdb" ] ||
     die "psql did not land in $sdb — refusing"
-  psql "$surl" -v ON_ERROR_STOP=1 -q -c "DROP OWNED BY CURRENT_USER CASCADE" -c "CREATE SCHEMA IF NOT EXISTS public"
+  psql "$surl" -v ON_ERROR_STOP=1 -q -c "SET client_min_messages = warning" \
+    -c "DROP OWNED BY CURRENT_USER CASCADE" -c "CREATE SCHEMA IF NOT EXISTS public"
   log "restoring into $sdb"
   pg_restore --no-owner --no-acl --no-comments --use-list="$list" --dbname="$surl" "$dump" 2>"$DEPLOY_ROOT/shared/.restore.err" || {
     grep -v -i 'extension\|must be owner' "$DEPLOY_ROOT/shared/.restore.err" | grep -q . &&

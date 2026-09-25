@@ -201,7 +201,6 @@ async function main() {
               let doc = scrubJson(parsed, hash);
               if (table === "people" && c.column_name === "payload" && !Array.isArray(doc) && doc.password !== hash) {
                 doc = { ...doc, password: hash };
-                stats.people++;
               }
               if (doc !== parsed) next = JSON.stringify(doc);
             } else if (!isJson) {
@@ -240,6 +239,7 @@ async function main() {
     if ((await q("select to_regclass('public.people') as r")).rows[0].r) {
       const r = await q(`select count(*)::int as n from people where coalesce(payload->>'password', '') <> $1`, [hash]);
       if (r.rows[0].n) throw new Error(`${r.rows[0].n} person row(s) without the staging password — nothing was changed`);
+      stats.people = (await q("select count(*)::int as n from people")).rows[0].n;
     }
     await q("commit");
   } catch (err) {
@@ -250,7 +250,7 @@ async function main() {
   }
   console.log(
     `[sanitize] ${who.db}: ${stats.tables} tables scanned, ${stats.rowsChanged} rows rewritten, ` +
-      `${stats.people} people given the staging password; emails blanked, sessions cleared`,
+      `all ${stats.people} people now sign in with the staging password only; emails blanked, sessions cleared`,
   );
 }
 
