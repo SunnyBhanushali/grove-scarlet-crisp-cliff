@@ -388,7 +388,8 @@ adopt_live_folder() {
   [ -L "$APP_DIR" ] && return 0
   [ -d "$APP_DIR" ] || die "$APP_DIR does not exist"
   local id
-  id="$(date -u +%Y%m%d-%H%M%S)-pre-pipeline"
+  # named by the folder's own last-change time so it sorts before every pipeline build
+  id="$(date -u -r "$APP_DIR" +%Y%m%d-%H%M%S)-pre-pipeline"
   log "first pipeline deploy: moving the current live folder to releases/$id (it stays a rollback target)"
   mv "$APP_DIR" "$REL_DIR/$id"
   {
