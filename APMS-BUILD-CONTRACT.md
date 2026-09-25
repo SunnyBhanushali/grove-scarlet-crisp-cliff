@@ -8,6 +8,7 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 
 - Remix / `extensions.js` **OFF**. Never re-inject `grok-app-builder`.
 - Nitro preset **`node-server`** for Contabo. Ignore `NITRO_PRESET=vercel` (Grok injects it). Real ship is `.output/server/index.mjs`.
+- **Deploy = the pipeline** (`REPORT-DEPLOY-PIPELINE.md`): staging branch → staging, then "Deploy to live". Never unzip over the live folder, never run `db:migrate` / `npm run build` (it migrates) on live, never point staging at the live DB.
 - Anon `/api/company` **and entity routes** → **401**. **BATCH-2:** the only accepted session is a token the server issued at sign-in (`apms-s.<random>`, SHA-256 in `apms_sessions`, `src/lib/apms-sessions.ts`), by bearer or the HttpOnly `better-auth.session_token` cookie. `apms-login.<personId>`, `apms-preview-sunny` and "any bearer > 8 chars" are **401** on every `/api/*` and `/_serverFn/*` route (one gate in `server/middleware/01-apms-auth.ts` plus each handler). Public: `/api/auth/*`, `/api/password-reset*`, the `companyIsEmpty` server fn, loopback backup cron.
 - **BATCH-2 admin-only (403 for a signed-in non-admin):** `POST /api/issued-logins` (except the caller's own row — own-password change) and `/api/provision-logins`; restore (`/api/company-restore`, `POST /api/company` restore, legacy `/_serverFn` save/backup); `/api/company-backups`; `access-roles` rows; other people's `logins` rows; changing anyone's access role or another person's password through `/api/people/:id`. Admin = access role base `admin` / `super_admin`.
 - `POST /api/company` → **410** unless `restore` / `allowEmpty` / `adminRestore`.
@@ -143,7 +144,11 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 
 - **PERF** — 24 Sep 2026 IST. Server **p0aw5**, sync **p0as83** (`apms-sync.js?v=p0as83`; SPA bundles unchanged), branch `perf-2` (from `batch-3`). Phase 1 (`perf`, `PERF-FINDINGS.md`): the one process was CPU-bound from ~40 users re-reading / re-writing / re-encoding the whole company (~6–7 MB) per save and sign-in, plus every tab re-reading 0.1–1.1 MB lists every 2 s and polling the feed up to 3× per save; a GET right after a save could return the pre-save wire. Fixed: wire patched on commit (read-after-write), feed pushed on the live stream, feed / list reads cached (304), books read by hash and mirrored in 5 s batches with flush-before-read, sign-in from rows, ticks / sessions from memory, fewer client ticks / re-reads. 250 simulated users on one core: server CPU p50 ≈ 40 %, save p95 < 0.4 s, others see a save < 1 s for 99.6 %, 0 lost saves, 0 resurrected deletes, read-after-write 100 %. Gate: security batch 3 / batch 2, batch 1–3 browser suites, `npm test`, typecheck. See `REPORT-PERF.md`, `docs/perf/NGINX-AND-SERVER.md`.
 
+- **DEPLOY-PIPELINE** — 25 Sep 2026. No app code changed (tree still **p0as83**), branch `deploy-pipeline` (from `perf-2`). GitHub Actions → Contabo over SSH as the site user: push `staging` → PM2 `apms-staging` on 127.0.0.1:3013 (staging.apms.alienstattoo.in, DB `aliens_apms_stage2`, own Postgres login, no mail, PIN off); push `release` / "Deploy to live" button → clean-folder build while live runs, app-folder tarball + `pg_dump` of live, atomic folder swap + `pm2 restart apms-rewrite` (env untouched), server check + public check (home 200, `apms-sync` stamp, signed-out 401, real sign-in, signed-in `/api/company` 200), auto-rollback on any failure; "Rollback live" button (known-good builds only; the pre-pipeline folder by name only); "Refresh staging data" (live dump → stage2, every password → one staging hash, every email blanked, sessions / reset tokens / plain-text password backups dropped). Last 5 builds + 5 backups kept. Never drops / migrates / restores the live DB. End-to-end on a throwaway VPS: `docs/deploy/E2E-RUN.txt`. See `REPORT-DEPLOY-PIPELINE.md`.
+
 ## OPEN
+
+- **DEPLOY-PIPELINE:** one-time `deploy/ROOT-CHECKLIST.md` (server owner) + `deploy/GITHUB-SECRETS.md` (Sunny, incl. the deploy-check login); `.github/` + `deploy/` on `main` for the Run-workflow buttons. First "Deploy to live" is the p0as82 + p0as83 cut (BATCH-3 hashes passwords: rolling back to the pre-pipeline folder after it breaks new sign-ins — REPORT-DEPLOY-PIPELINE §7).
 
 - ROWS-V2: **built (node-server) and two-browser tested on local Postgres (p0as78 / p0aw3) — `REPORT-ROWS-V2-SMOKE.md`. NOT on live.** Next: staging 3010 with `aliens_apms_test`, then live.
 - **Live [https://apms.alienstattoo.in](https://apms.alienstattoo.in) is routes p0as39 + sync p0as14.** This tree is **p0as77**. Eng cut when asked (`NITRO_PRESET=node-server`). Keep `.env` + `aliens_apms`. This sandbox has no SSH.
@@ -210,6 +215,8 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - Do not start Step 8.
 
 ## ACCEPTANCE
+
+- **DEPLOY-PIPELINE:** `deploy/test/e2e.sh` on a throwaway VPS — all checks pass (`docs/deploy/E2E-RUN.txt`): staging refresh leaves no email and one staging hash; live password and `0000` refused on staging; first live deploy adopts the old folder; crash-on-boot / broken sign-in / wrong check secret all roll back; build failure leaves live untouched; rollback button; keep 5; staging refuses the live DB and `SMTP_PASS`.
 
 | Item | tree | live p0as12 |
 |------|------|-------------|
@@ -296,4 +303,5 @@ No fake live G9 pass.
 - Stamp / host: **tree p0as83** (server p0aw5; sync `apms-sync.js?v=p0as83`; routes `routes-e2g7y5q8-13m-p0as82.js`, collections / login-view `?v=p0as82`), branch `perf-2` (from `batch-3`), pack `aliens-apms-p0as83.zip` (source; the deploy bot runs `npm install --include=dev && NITRO_PRESET=node-server npm run build:app`); **live p0as39 / LOAD-10 p0as14** https://apms.alienstattoo.in
 - What passed: `REPORT-PERF.md` §2 (load 1/10/50/100/250 before/after) and §7 (gate on the final build: security batch 3 176/176, security batch 2 43/43, batch 1, batch 2, batch 3; `npm test` + `npm run typecheck` clean). Phase 1 measurements: `PERF-FINDINGS.md` (branch `perf`).
 - What is still open: REPORT-BATCH-3 §6 (decisions for Sunny); REPORT-PERF §8; KNOWN BROKEN.
-- Exact next named job: Eng cuts p0as82 + p0as83 together when asked (one sign-in per browser; nginx per `docs/perf/NGINX-AND-SERVER.md`, HTTP/2 + gzip + unbuffered `/api/company-live`), then a live 10-user check (tick p95, CPU). Do not start Step 8.
+- DEPLOY-PIPELINE (branch `deploy-pipeline`): ships via GitHub Actions once ROOT-CHECKLIST + secrets are done — `REPORT-DEPLOY-PIPELINE.md` §6.
+- Exact next named job: Eng cuts p0as82 + p0as83 together when asked (now: "Deploy to live" after staging is checked) (one sign-in per browser; nginx per `docs/perf/NGINX-AND-SERVER.md`, HTTP/2 + gzip + unbuffered `/api/company-live`), then a live 10-user check (tick p95, CPU). Do not start Step 8.

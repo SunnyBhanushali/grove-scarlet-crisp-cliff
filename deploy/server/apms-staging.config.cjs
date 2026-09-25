@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- PM2 loads this file as CommonJS */
 /**
  * PM2 app for STAGING (staging.apms.alienstattoo.in). Used by apms-deploy.sh:
  *   pm2 startOrRestart ~/apms-deploy/bin/apms-staging.config.cjs --update-env
@@ -23,7 +24,8 @@ function readEnvFile(file) {
     const eq = line.indexOf("=");
     if (eq < 1) continue;
     let v = line.slice(eq + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+      v = v.slice(1, -1);
     out[line.slice(0, eq).trim()] = v;
   }
   return out;
@@ -38,10 +40,14 @@ try {
   /* checked below */
 }
 if (dbName !== STAGE_DB) {
-  throw new Error(`[apms-staging] DATABASE_URL in ${ENV_FILE} must point at ${STAGE_DB} (got "${dbName}"). Refusing to start.`);
+  throw new Error(
+    `[apms-staging] DATABASE_URL in ${ENV_FILE} must point at ${STAGE_DB} (got "${dbName}"). Refusing to start.`,
+  );
 }
 if (fileEnv.SMTP_PASS) {
-  throw new Error(`[apms-staging] ${ENV_FILE} sets SMTP_PASS. Staging must never send mail. Refusing to start.`);
+  throw new Error(
+    `[apms-staging] ${ENV_FILE} sets SMTP_PASS. Staging must never send mail. Refusing to start.`,
+  );
 }
 
 module.exports = {

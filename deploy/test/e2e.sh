@@ -150,9 +150,13 @@ wf "08-rollback-live-default" 0 rollback-live.yml --event workflow_dispatch --re
 check "default rollback skips the bad builds and lands on the previous good one" test "$(live_release)" = "$GOOD1"
 check "the build rolled back from is marked bad" test -f "$H/apms-deploy/live/releases/$GOOD2/.apms-bad"
 
-wf "09-rollback-live-default-again" 0 rollback-live.yml --event workflow_dispatch --ref release
-check "pressing Rollback again steps further back (pre-pipeline copy)" bash -c "live=\$(readlink -f $LIVE_DIR); case \$live in *-pre-pipeline) exit 0;; *) exit 1;; esac"
-check "the old folder still serves its own stamp" test "$(curl -s -H 'Accept: text/html' http://127.0.0.1:3003/ | grep -o 'apms-sync.js?v=[a-z0-9]*')" = "apms-sync.js?v=p0as39old"
+wf "09-rollback-live-default-again" 1 rollback-live.yml --event workflow_dispatch --ref release
+check "default rollback never picks the pre-pipeline folder (says why)" grep -q "no earlier known-good live release" "$WORK/logs/09-rollback-live-default-again.log"
+check "live unchanged by the refused rollback" test "$(live_release)" = "$GOOD1"
+PRE="$(basename "$(ls -d $H/apms-deploy/live/releases/*-pre-pipeline)")"
+wf "09b-rollback-live-named-pre-pipeline" 0 rollback-live.yml --event workflow_dispatch --ref release --input release="$PRE"
+check "named rollback to the old folder works and warns about BATCH-3 passwords" grep -q "cannot check hashed passwords" "$WORK/logs/09b-rollback-live-named-pre-pipeline.log"
+check "the old folder serves its own stamp again" test "$(curl -s -H 'Accept: text/html' http://127.0.0.1:3003/ | grep -o 'apms-sync.js?v=[a-z0-9]*')" = "apms-sync.js?v=p0as39old"
 
 wf "10-rollback-live-named" 0 rollback-live.yml --event workflow_dispatch --ref release --input release="$GOOD2"
 check "rollback to a named build works" test "$(live_release)" = "$GOOD2"

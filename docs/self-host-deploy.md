@@ -1,5 +1,7 @@
 # Self-host on the Aliens VPS
 
+> **Deploys now go through the GitHub pipeline** — see [`REPORT-DEPLOY-PIPELINE.md`](../REPORT-DEPLOY-PIPELINE.md) (staging branch → staging.apms.alienstattoo.in on :3013, then "Deploy to live" → PM2 `apms-rewrite` on :3003). The manual steps below are kept for reference; do not unzip over the live folder and do not run `deploy:migrate` on live.
+
 **Live locks:** [`GROK-BUILD-LOCK.md`](../GROK-BUILD-LOCK.md). Follow that on every zip. Never wipe `aliens_apms`. Never pack `SMTP_PASS` into the zip.
 
 This app is **not** a Vercel deploy. Production is a Node server behind nginx + PM2.

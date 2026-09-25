@@ -27,11 +27,17 @@ import { pathToFileURL } from "node:url";
 // Same format as src/lib/apms-password.ts (`scrypt$N$r$p$salt$key`).
 export function stagingHash(password) {
   const salt = randomBytes(16);
-  const key = scryptSync(String(password), salt, 32, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const key = scryptSync(String(password), salt, 32, {
+    N: 16384,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
   return `scrypt$16384$8$1$${salt.toString("base64url")}$${key.toString("base64url")}`;
 }
 
-const PASSWORD_KEY = /^(password|password_?hash|temp_?password|preview_?password|new_?password|plain_?password)$/i;
+const PASSWORD_KEY =
+  /^(password|password_?hash|temp_?password|preview_?password|new_?password|plain_?password)$/i;
 const EMAIL_KEY = /e-?mail/i;
 const EMAIL_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
 const KEEP_EMAIL = /@aliens\.local$/i;
@@ -101,7 +107,8 @@ async function main() {
 
   const who = (await q("select current_database() as db, current_user as usr")).rows[0];
   if (who.db !== wantDb) throw new Error(`connected to ${who.db}, expected ${wantDb} — refusing`);
-  if (liveUser && who.usr === liveUser) throw new Error(`staging is using the live login ${who.usr} — refusing`);
+  if (liveUser && who.usr === liveUser)
+    throw new Error(`staging is using the live login ${who.usr} — refusing`);
 
   const hash = stagingHash(password);
   const stats = { tables: 0, rowsChanged: 0, people: 0 };
@@ -112,8 +119,15 @@ async function main() {
       `select tablename from pg_tables where schemaname = 'public' and tablename ilike 'apms\\_password\\_backup\\_%'`,
     );
     for (const r of pwBackups.rows) await q(`drop table if exists ${ident(r.tablename)} cascade`);
-    for (const t of ["apms_sessions", "session", "verification", "password_resets", "apms_signin_failures"]) {
-      if ((await q("select to_regclass($1) as r", [`public.${ident(t)}`])).rows[0].r) await q(`delete from ${ident(t)}`);
+    for (const t of [
+      "apms_sessions",
+      "session",
+      "verification",
+      "password_resets",
+      "apms_signin_failures",
+    ]) {
+      if ((await q("select to_regclass($1) as r", [`public.${ident(t)}`])).rows[0].r)
+        await q(`delete from ${ident(t)}`);
     }
     if ((await q("select to_regclass('public.company_backups') as r")).rows[0].r) {
       await q(
@@ -159,15 +173,21 @@ async function main() {
             : c.nullable
               ? "null"
               : "''";
-          await q(`update ${T} set ${C} = ${blank} where ${C} is not null and ${C} <> '' and ${C} !~* '@aliens\\.local$'`);
+          await q(
+            `update ${T} set ${C} = ${blank} where ${C} is not null and ${C} <> '' and ${C} !~* '@aliens\\.local$'`,
+          );
         }
       }
       // Row-level: JSON documents and free text that mention an address.
       const scan = tcols.filter(
-        (c) => c.data_type.startsWith("json") || !(PASSWORD_KEY.test(c.column_name) || EMAIL_KEY.test(c.column_name)),
+        (c) =>
+          c.data_type.startsWith("json") ||
+          !(PASSWORD_KEY.test(c.column_name) || EMAIL_KEY.test(c.column_name)),
       );
       if (!scan.length) continue;
-      const sel = scan.map((c) => `${ident(c.column_name)}::text as ${ident(c.column_name)}`).join(", ");
+      const sel = scan
+        .map((c) => `${ident(c.column_name)}::text as ${ident(c.column_name)}`)
+        .join(", ");
       const where = scan
         .map((c) => {
           const C = `${ident(c.column_name)}::text`;
@@ -176,7 +196,9 @@ async function main() {
             : `(${C} like '%@%' or ${C} ~* '"(password|password_?hash|temp_?password|preview_?password|new_?password|plain_?password)"')`;
         })
         .join(" or ");
-      await q(`declare scan_cur no scroll cursor for select ctid::text as _ctid, ${sel} from ${T} where ${where}`);
+      await q(
+        `declare scan_cur no scroll cursor for select ctid::text as _ctid, ${sel} from ${T} where ${where}`,
+      );
       for (;;) {
         const batch = (await q("fetch 200 from scan_cur")).rows;
         if (!batch.length) break;
@@ -199,7 +221,12 @@ async function main() {
             }
             if (parsed !== undefined && parsed !== null && typeof parsed === "object") {
               let doc = scrubJson(parsed, hash);
-              if (table === "people" && c.column_name === "payload" && !Array.isArray(doc) && doc.password !== hash) {
+              if (
+                table === "people" &&
+                c.column_name === "payload" &&
+                !Array.isArray(doc) &&
+                doc.password !== hash
+              ) {
                 doc = { ...doc, password: hash };
               }
               if (doc !== parsed) next = JSON.stringify(doc);
@@ -208,12 +235,17 @@ async function main() {
             }
             if (next !== raw) {
               params.push(next);
-              sets.push(`${ident(c.column_name)} = $${params.length}::${isJson ? c.data_type : "text"}`);
+              sets.push(
+                `${ident(c.column_name)} = $${params.length}::${isJson ? c.data_type : "text"}`,
+              );
             }
           }
           if (sets.length) {
             params.push(row._ctid);
-            await q(`update ${T} set ${sets.join(", ")} where ctid = $${params.length}::tid`, params);
+            await q(
+              `update ${T} set ${sets.join(", ")} where ctid = $${params.length}::tid`,
+              params,
+            );
             stats.rowsChanged++;
           }
         }
@@ -231,14 +263,22 @@ async function main() {
         );
         if (r.rows[0].n) {
           left += r.rows[0].n;
-          console.error(`[sanitize] ${table}.${c.column_name}: ${r.rows[0].n} row(s) still mention an email address`);
+          console.error(
+            `[sanitize] ${table}.${c.column_name}: ${r.rows[0].n} row(s) still mention an email address`,
+          );
         }
       }
     }
     if (left) throw new Error(`${left} row(s) still hold an email address — nothing was changed`);
     if ((await q("select to_regclass('public.people') as r")).rows[0].r) {
-      const r = await q(`select count(*)::int as n from people where coalesce(payload->>'password', '') <> $1`, [hash]);
-      if (r.rows[0].n) throw new Error(`${r.rows[0].n} person row(s) without the staging password — nothing was changed`);
+      const r = await q(
+        `select count(*)::int as n from people where coalesce(payload->>'password', '') <> $1`,
+        [hash],
+      );
+      if (r.rows[0].n)
+        throw new Error(
+          `${r.rows[0].n} person row(s) without the staging password — nothing was changed`,
+        );
       stats.people = (await q("select count(*)::int as n from people")).rows[0].n;
     }
     await q("commit");

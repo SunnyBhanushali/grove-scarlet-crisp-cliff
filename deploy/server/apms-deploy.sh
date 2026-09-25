@@ -409,10 +409,14 @@ mark_bad() { # mark_bad <id> <reason>
 }
 
 # Newest known-good release that is not the running one and not marked bad.
+# The *-pre-pipeline copy of the old live folder is never a default target:
+# it predates BATCH-3 (it cannot check the hashed passwords the first cut
+# writes), so going back to it must be asked for by name.
 last_good() {
   local cur="$1" r
   tac "$HISTORY" 2>/dev/null | while read -r r; do
     [ -n "$r" ] && [ "$r" != "$cur" ] || continue
+    case "$r" in *-pre-pipeline) continue ;; esac
     [ -f "$REL_DIR/$r/.output/server/index.mjs" ] && [ ! -f "$REL_DIR/$r/.apms-bad" ] && { echo "$r"; break; }
   done
 }
@@ -463,6 +467,9 @@ cmd_rollback() {
   [ "$to" != "$cur" ] || die "$TARGET is already on $to"
   [ -d "$REL_DIR/$to" ] || die "release $to not found (see: apms-deploy.sh list $TARGET)"
   [ ! -f "$REL_DIR/$to/.apms-bad" ] || log "note: $to was rolled back from before ($(tail -n1 "$REL_DIR/$to/.apms-bad")) — going there because it was asked for by name"
+  case "$to" in *-pre-pipeline)
+    log "note: $to is the old live folder from before the pipeline (pre BATCH-3). After the BATCH-3 cut it cannot check hashed passwords: people already signed in keep working, new sign-ins fail. See REPORT-DEPLOY-PIPELINE.md §7." ;;
+  esac
   # The build we leave is the reason for the rollback: never a default target again.
   mark_bad "$cur" "rolled back from (${ROLLBACK_REASON:-manual rollback})"
   log "rolling $TARGET back: ${cur:-?} -> $to"
