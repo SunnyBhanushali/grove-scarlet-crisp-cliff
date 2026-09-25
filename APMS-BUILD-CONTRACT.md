@@ -273,7 +273,7 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 | PERF read-after-write: a commit is in the next `GET /api/company` (no stale wire) | **pass** (unit `perf-p0aw5` + load: wire 100 % at every level) | **fail** on p0as81 (10–30 % stale under load, "my data was lost") until cut |
 | PERF a row commit keeps the book generations (live = wire = stored); a book reader never waits a gather window | **pass** (unit `perf-p0aw5`, batch 1 targets-cells / targets-import) | untested until cut |
 | PERF change feed pushed on the live stream; tick 1 per 5 s; list re-read 20 s + 304; e2e holds cover pushes | **pass** (unit `perf-p0as83-client`, batch 1 / 2 / 3) | untested until cut |
-| PERF gate on the final build: security 176/176 + 43/43, batch 1, batch 2, batch 3 | **pass** (`docs/e2e/perf-2-gate4/`) | n/a |
+| PERF gate on the final build: security 176/176 + 43/43, batch 1, batch 2, batch 3 | **pass** (`docs/e2e/perf-2-gate5/`, build `d3617af`) | n/a |
 
 No fake live G9 pass.
 

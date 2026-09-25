@@ -116,6 +116,13 @@ async function startServer() {
   const r = spawnSync("sh", [join(root, "scripts/load/fresh-load-server.sh")], { cwd: root, env, encoding: "utf8" });
   if (r.status !== 0) throw new Error(`server start failed: ${r.stderr}${r.stdout}`);
   const pid = Number(readFileSync("/tmp/apms-load-server.pid", "utf8").trim());
+  // p0as81 splits the legacy company row into the four books after boot; a
+  // first read before the months book exists imports no APMS / Rewards rows.
+  for (let i = 0; i < 240; i++) {
+    const q = spawnSync("psql", ["-tAc", "select count(*) from company_books where book in ('org','plans','months','targets')", DATABASE_URL], { encoding: "utf8" });
+    if (Number(String(q.stdout).trim()) >= 4) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   // Warm: the first company read builds the wire and fills the hot tables from the books.
   const si = await fetch(`${BASE}/api/auth/sign-in/username`, {
     method: "POST",
@@ -180,18 +187,35 @@ async function prepareFixture(pool) {
       [p.username, p.id, PASSWORD],
     );
   }
-  // The server imports the hot tables in the background after boot (p0as81
-  // lazily); a run that started before it had no month to save to.
-  for (let i = 0; i < 240; i++) {
+  // The server imports the hot tables in the background after boot. p0as81
+  // imports once, from whichever read comes first; when that read carried the
+  // org book only, month / reward rows are never bulk-imported and each is
+  // filled from the books on its first read. Then take them from the fixture.
+  let hotMonths = false;
+  for (let i = 0; i < 60; i++) {
     const n = (await pool.query(`select (select count(*) from month_records) m, (select count(*) from reward_records) r`)).rows[0];
-    if (Number(n.m) > 0 && Number(n.r) > 0) break;
-    if (i === 239) throw new Error("hot tables never imported (month_records / reward_records empty)");
+    if (Number(n.m) > 0 && Number(n.r) > 0) {
+      hotMonths = true;
+      break;
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
-  const period = (await pool.query(`select period from month_records where deleted_at is null group by 1 order by count(*) desc limit 1`)).rows[0]?.period;
-  const rewardPeriod = (await pool.query(`select period from reward_records where deleted_at is null group by 1 order by count(*) desc limit 1`)).rows[0]?.period;
-  const monthPeople = (await pool.query(`select person_id from month_records where period = $1 and deleted_at is null order by person_id`, [period])).rows.map((r) => r.person_id);
-  const rewardPeople = new Set((await pool.query(`select person_id from reward_records where period = $1 and deleted_at is null`, [rewardPeriod])).rows.map((r) => r.person_id));
+  let period, rewardPeriod, monthPeople, rewardPeople;
+  if (hotMonths) {
+    period = (await pool.query(`select period from month_records where deleted_at is null group by 1 order by count(*) desc limit 1`)).rows[0]?.period;
+    rewardPeriod = (await pool.query(`select period from reward_records where deleted_at is null group by 1 order by count(*) desc limit 1`)).rows[0]?.period;
+    monthPeople = (await pool.query(`select person_id from month_records where period = $1 and deleted_at is null order by person_id`, [period])).rows.map((r) => r.person_id);
+    rewardPeople = new Set((await pool.query(`select person_id from reward_records where period = $1 and deleted_at is null`, [rewardPeriod])).rows.map((r) => r.person_id));
+  } else {
+    const fx = JSON.parse(readFileSync(process.env.FIXTURE || "/tmp/apms-load-fixture.json", "utf8"));
+    const busiest = (m) => Object.entries(m || {}).sort((a, b) => Object.keys(b[1] || {}).length - Object.keys(a[1] || {}).length)[0]?.[0];
+    period = busiest(fx.records);
+    rewardPeriod = busiest(fx.rewardRecords);
+    if (!period || !rewardPeriod) throw new Error("no APMS / Rewards month in the fixture");
+    monthPeople = Object.keys(fx.records[period] || {}).sort();
+    rewardPeople = new Set(Object.keys(fx.rewardRecords[rewardPeriod] || {}));
+    console.log(`[load] month rows not bulk-imported by the server; period ${period} / ${rewardPeriod} from the fixture (rows fill on first read)`);
+  }
   const ids = monthPeople.filter((id) => rewardPeople.has(id));
   const history = (await pool.query(`select id from entities where kind = 'target-history' and deleted_at is null order by id`)).rows.map((r) => r.id);
   const cell = (await pool.query(`select id from target_cells where deleted_at is null order by id limit 1`)).rows[0]?.id;

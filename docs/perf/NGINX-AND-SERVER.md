@@ -72,7 +72,7 @@ few requests each, doubled for the upstream side).
   one instance. Do **not** switch to cluster mode: live updates and the wire
   copy are per process; running several workers needs the cross-worker work
   described in REPORT-PERF.md §6 first.
-- `node --max-old-space-size=2048` (RSS stayed ≈ 1.0 GB at 250 users).
+- `node --max-old-space-size=2048` (RSS stayed below 0.9 GB at 250 users).
 - `max_memory_restart: "1800M"` as a safety net.
 
 ## 3. Postgres
