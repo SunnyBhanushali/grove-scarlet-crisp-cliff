@@ -42,6 +42,14 @@ export PATH="$NODE22:\$PATH"
 EOF
 chown "$SITE:" "$HOME_DIR/.nvm/nvm.sh"
 
+# Sandbox plumbing only (not part of the pipeline): if this container reaches
+# the internet through an egress proxy, hand it to the site user's npm.
+if [ -n "${HTTPS_PROXY:-}" ] && [ -n "${NODE_EXTRA_CA_CERTS:-}" ]; then
+  install -m 644 "$NODE_EXTRA_CA_CERTS" /usr/local/share/sim-proxy-ca.crt
+  printf 'https-proxy=%s\nproxy=%s\ncafile=/usr/local/share/sim-proxy-ca.crt\nnoproxy=localhost,127.0.0.1\n' "$HTTPS_PROXY" "$HTTPS_PROXY" >"$HOME_DIR/.npmrc"
+  chown "$SITE:" "$HOME_DIR/.npmrc"
+fi
+
 # --- "old live": today's build + a stray server.js, started by hand under PM2
 if pm2_pid=$(su - "$SITE" -c "PATH=$NODE22:\$PATH pm2 pid apms-rewrite" 2>/dev/null) && [ -n "$pm2_pid" ]; then
   su - "$SITE" -c "PATH=$NODE22:\$PATH pm2 kill" >/dev/null 2>&1 || true
