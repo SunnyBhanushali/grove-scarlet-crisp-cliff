@@ -9,7 +9,7 @@
 # anything outside ~/apms-deploy and the live app folder; need root.
 #
 # Layout (DEPLOY_ROOT, default ~/apms-deploy):
-#   bin/                      this script, sanitize-staging-db.mjs, ecosystem.staging.cjs
+#   bin/                      this script, sanitize-staging-db.mjs, apms-staging.config.cjs
 #   live/releases/<id>/       one clean folder per build (source + node_modules + .output)
 #   live/history              ids in the order they went live (last line = current)
 #   live/backups/<stamp>/     app.tar.gz + db.dump taken right before each live swap
@@ -195,7 +195,7 @@ restart_app() {
   if [ "$TARGET" = "staging" ]; then
     staging_env_check
     APMS_DEPLOY_ROOT="$DEPLOY_ROOT" STAGING_PM2="$STAGING_PM2" STAGING_PORT="$STAGING_PORT" \
-      pm2 startOrRestart "$BIN_DIR/ecosystem.staging.cjs" --update-env >/dev/null
+      pm2 startOrRestart "$BIN_DIR/apms-staging.config.cjs" --update-env >/dev/null
     pm2 save >/dev/null 2>&1 || true
   else
     # No --update-env: live keeps exactly the environment it was started with.
@@ -493,6 +493,18 @@ cmd_prune() {
     if printf '%s\n' "$keep_list" | grep -qxF "$id"; then continue; fi
     log "pruning $TARGET release $id"
     rm -rf "$REL_DIR/$id"
+  done
+  # Inactive builds keep .output (self-contained: a rollback needs nothing
+  # else) but drop node_modules (~430 MB each). The pre-pipeline copy of the
+  # old live folder is left exactly as it was.
+  for d in $(ls -1d "$REL_DIR"/*/ 2>/dev/null); do
+    id="$(basename "$d")"
+    [ "$id" = "$cur" ] && continue
+    case "$id" in *-pre-pipeline) continue ;; esac
+    if [ -d "$d/node_modules" ] && [ -f "$d/.output/server/index.mjs" ]; then
+      rm -rf "$d/node_modules"
+      log "slimmed $id (node_modules removed; .output kept for rollback)"
+    fi
   done
   # an unfinished build never counts
   find "$REL_DIR" -maxdepth 1 -name '*.partial' -mmin +60 -exec rm -rf {} + 2>/dev/null || true

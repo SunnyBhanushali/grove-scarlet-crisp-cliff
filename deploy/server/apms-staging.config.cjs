@@ -1,6 +1,6 @@
 /**
  * PM2 app for STAGING (staging.apms.alienstattoo.in). Used by apms-deploy.sh:
- *   pm2 startOrRestart ~/apms-deploy/bin/ecosystem.staging.cjs --update-env
+ *   pm2 startOrRestart ~/apms-deploy/bin/apms-staging.config.cjs --update-env
  *
  * Secrets live in ~/apms-deploy/shared/staging.env (chmod 600, never in git).
  * Loading this file THROWS — so PM2 starts nothing — when that env would let
