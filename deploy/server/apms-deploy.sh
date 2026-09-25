@@ -416,8 +416,7 @@ cmd_activate() {
   prev="$(current_release)"
   log "switching $TARGET: ${prev:-<none>} -> $id (stamp $want)"
   point_to "$id"
-  restart_app
-  if wait_healthy "$want"; then
+  if restart_app && wait_healthy "$want"; then
     [ "$(tail -n1 "$HISTORY" 2>/dev/null)" = "$id" ] || echo "$id" >>"$HISTORY"
     log "$TARGET is on $id"
     echo "ACTIVE=$id"
@@ -427,8 +426,7 @@ cmd_activate() {
   if [ -n "$prev" ] && [ -d "$REL_DIR/$prev" ]; then
     log "ROLLING BACK $TARGET to $prev"
     point_to "$prev"
-    restart_app
-    wait_healthy "$(meta "$REL_DIR/$prev" STAMP)" || die "$id failed its health check AND the rollback to $prev is not healthy. Check 'pm2 logs $PM2_NAME' on the server NOW."
+    { restart_app && wait_healthy "$(meta "$REL_DIR/$prev" STAMP)"; } || die "$id failed its health check AND the rollback to $prev is not healthy. Check 'pm2 logs $PM2_NAME' on the server NOW."
     die "$id failed its health check on the server; $TARGET was rolled back to $prev and is healthy."
   fi
   die "$id failed its health check and there is no previous release to roll back to."
@@ -450,8 +448,7 @@ cmd_rollback() {
   [ -d "$REL_DIR/$to" ] || die "release $to not found (see: apms-deploy.sh list $TARGET)"
   log "rolling $TARGET back: ${cur:-?} -> $to"
   point_to "$to"
-  restart_app
-  wait_healthy "$(meta "$REL_DIR/$to" STAMP)" || die "rollback to $to is not healthy — check 'pm2 logs $PM2_NAME'."
+  { restart_app && wait_healthy "$(meta "$REL_DIR/$to" STAMP)"; } || die "rollback to $to is not healthy — check 'pm2 logs $PM2_NAME'."
   echo "$to" >>"$HISTORY"
   echo "ACTIVE=$to"
   echo "STAMP=$(meta "$REL_DIR/$to" STAMP)"
@@ -485,7 +482,16 @@ cmd_prune() {
   target_config "$1"
   local cur keep_list d id
   cur="$(current_release)"
-  # Newest KEEP_RELEASES built releases, plus the current one, always stay.
+  # Failed / unfinished builds go first (never the running one)…
+  for d in $(ls -1d "$REL_DIR"/*/ 2>/dev/null); do
+    id="$(basename "$d")"
+    [ "$id" = "$cur" ] && continue
+    if [ ! -f "$d/.apms-built" ] && [ ! -f "$d/.output/server/index.mjs" ]; then
+      log "removing unbuilt $TARGET release $id"
+      rm -rf "$d"
+    fi
+  done
+  # …then the newest KEEP_RELEASES releases, plus the running one, stay.
   keep_list="$(ls -1d "$REL_DIR"/*/ 2>/dev/null | sort -r | head -n "$KEEP_RELEASES" | xargs -r -n1 basename)"
   for d in $(ls -1d "$REL_DIR"/*/ 2>/dev/null | sort); do
     id="$(basename "$d")"
