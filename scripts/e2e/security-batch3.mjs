@@ -483,7 +483,13 @@ async function main() {
       if (/scrypt\$|"password":"[^"]/.test(x.text)) leaks.push(`${k} ${u}`);
     }
   }
-  const bl = await call("GET", "/api/company-backups", { token: T.A });
+  let bl = await call("GET", "/api/company-backups", { token: T.A });
+  // The hourly backup only runs 09:00–03:59 IST; outside that window there may
+  // be none yet, so save a manual one to have a download to inspect.
+  if (!(bl.json?.items || []).length) {
+    await call("POST", "/api/company-backups", { token: T.A, body: { action: "save", label: "security-batch3" } });
+    bl = await call("GET", "/api/company-backups", { token: T.A });
+  }
   const bid = (bl.json?.items || [])[0]?.id;
   if (bid) {
     const bd = await call("GET", `/api/company-backups?id=${encodeURIComponent(bid)}`, { token: T.A, raw: true });

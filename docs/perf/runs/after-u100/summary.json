@@ -1,0 +1,850 @@
+{
+ "id": "after-u100",
+ "label": "after",
+ "users": 100,
+ "client": "p0as83",
+ "steadySeconds": 180,
+ "cores": {
+  "server": "0",
+  "postgres": "1",
+  "runner": "2,3",
+  "browsers": "2,3"
+ },
+ "at": "2026-09-24T23:13:33.145Z",
+ "targets": {
+  "pageOpenMs": {
+   "n": 24,
+   "avg": 2774,
+   "p50": 2527,
+   "p95": 3891,
+   "p99": 6123,
+   "max": 6123
+  },
+  "pageOpenEmployeeMs": {
+   "n": 16,
+   "avg": 2286,
+   "p50": 2233,
+   "p95": 3740,
+   "p99": 3740,
+   "max": 3740
+  },
+  "pageOpenEditorMs": {
+   "n": 8,
+   "avg": 3751,
+   "p50": 3525,
+   "p95": 6123,
+   "p99": 6123,
+   "max": 6123
+  },
+  "signInOpenMs": {
+   "n": 3,
+   "avg": 2257,
+   "p50": 2032,
+   "p95": 3131,
+   "p99": 3131,
+   "max": 3131
+  },
+  "companyLoadMs": {
+   "n": 100,
+   "avg": 46,
+   "p50": 30,
+   "p95": 151,
+   "p99": 189,
+   "max": 189
+  },
+  "browserCompanyMs": {
+   "n": 24,
+   "avg": 90,
+   "p50": 78,
+   "p95": 173,
+   "p99": 194,
+   "max": 194
+  },
+  "tickMs": {
+   "n": 4048,
+   "avg": 9,
+   "p50": 1,
+   "p95": 50,
+   "p99": 114,
+   "max": 583
+  },
+  "saveMs": {
+   "n": 717,
+   "avg": 22,
+   "p50": 10,
+   "p95": 95,
+   "p99": 244,
+   "max": 588
+  },
+  "othersSeeMs": {
+   "n": 5860,
+   "avg": 59,
+   "p50": 44,
+   "p95": 126,
+   "p99": 311,
+   "max": 697,
+   "under1s": 1
+  },
+  "serverCpu": {
+   "n": 180,
+   "avg": 20,
+   "p50": 17.8,
+   "p95": 39.9,
+   "p99": 59.2,
+   "max": 65.9
+  },
+  "serverLagMs": {
+   "p99Max": 164.2,
+   "max": 164.2,
+   "p50Avg": 10.1
+  },
+  "serverRssMb": {
+   "n": 180,
+   "avg": 635,
+   "p50": 638,
+   "p95": 713,
+   "p99": 728,
+   "max": 734
+  },
+  "postgresCpu": {
+   "n": 179,
+   "avg": 1,
+   "p50": 5,
+   "p95": 17,
+   "p99": 22,
+   "max": 25
+  },
+  "pgConnections": {
+   "max": 13,
+   "activeMax": 2
+  },
+  "errors5xxOrNetwork": 0,
+  "lostSaves": 0,
+  "resurrectedDeletes": 0,
+  "badDeleteReplies": 0,
+  "readAfterWrite": {
+   "row": {
+    "n": 662,
+    "bad": 0,
+    "why": {}
+   },
+   "wire": {
+    "n": 19,
+    "bad": 1,
+    "why": {
+     "status 0": 1
+    }
+   },
+   "wire+replay": {
+    "n": 18,
+    "bad": 0,
+    "why": {}
+   }
+  },
+  "acknowledgedSaves": 662,
+  "runnerLoopLagMaxMs": 521
+ },
+ "routes": {
+  "signin": {
+   "n": 100,
+   "avg": 15,
+   "p50": 11,
+   "p95": 34,
+   "p99": 153,
+   "max": 153,
+   "bytesAvg": 492,
+   "status": {
+    "200": 100
+   }
+  },
+  "html": {
+   "n": 100,
+   "avg": 4,
+   "p50": 2,
+   "p95": 20,
+   "p99": 26,
+   "max": 26,
+   "bytesAvg": 4196,
+   "status": {
+    "200": 100
+   }
+  },
+  "static": {
+   "n": 1200,
+   "avg": 9,
+   "p50": 5,
+   "p95": 26,
+   "p99": 122,
+   "max": 133,
+   "bytesAvg": 138782,
+   "status": {
+    "200": 1200
+   }
+  },
+  "get-session": {
+   "n": 100,
+   "avg": 3,
+   "p50": 1,
+   "p95": 8,
+   "p99": 58,
+   "max": 58,
+   "bytesAvg": 492,
+   "status": {
+    "200": 100
+   }
+  },
+  "company": {
+   "n": 100,
+   "avg": 35,
+   "p50": 23,
+   "p95": 124,
+   "p99": 163,
+   "max": 163,
+   "bytesAvg": 199821,
+   "status": {
+    "200": 100
+   }
+  },
+  "company-load": {
+   "n": 100,
+   "avg": 46,
+   "p50": 30,
+   "p95": 151,
+   "p99": 189,
+   "max": 189,
+   "bytesAvg": 199821,
+   "status": {
+    "200": 100
+   }
+  },
+  "changes": {
+   "n": 567,
+   "avg": 15,
+   "p50": 3,
+   "p95": 61,
+   "p99": 193,
+   "max": 358,
+   "bytesAvg": 3389,
+   "status": {
+    "200": 567
+   }
+  },
+  "page-open-http": {
+   "n": 100,
+   "avg": 112,
+   "p50": 81,
+   "p95": 266,
+   "p99": 308,
+   "max": 308,
+   "bytesAvg": 0,
+   "status": {
+    "200": 100
+   }
+  },
+  "sse-connect": {
+   "n": 100,
+   "avg": 2,
+   "p50": 1,
+   "p95": 6,
+   "p99": 9,
+   "max": 9,
+   "bytesAvg": 0,
+   "status": {
+    "200": 100
+   }
+  },
+  "rewards-month": {
+   "n": 141,
+   "avg": 24,
+   "p50": 18,
+   "p95": 59,
+   "p99": 123,
+   "max": 142,
+   "bytesAvg": 9124,
+   "status": {
+    "200": 141
+   }
+  },
+  "person": {
+   "n": 41,
+   "avg": 9,
+   "p50": 2,
+   "p95": 32,
+   "p99": 105,
+   "max": 105,
+   "bytesAvg": 1469,
+   "status": {
+    "200": 41
+   }
+  },
+  "org-kind": {
+   "n": 55,
+   "avg": 35,
+   "p50": 16,
+   "p95": 217,
+   "p99": 287,
+   "max": 287,
+   "bytesAvg": 26054,
+   "status": {
+    "200": 55
+   }
+  },
+  "apms-month": {
+   "n": 89,
+   "avg": 34,
+   "p50": 29,
+   "p95": 59,
+   "p99": 160,
+   "max": 160,
+   "bytesAvg": 16031,
+   "status": {
+    "200": 89
+   }
+  },
+  "tick-since": {
+   "n": 2051,
+   "avg": 9,
+   "p50": 1,
+   "p95": 50,
+   "p99": 114,
+   "max": 583,
+   "bytesAvg": 103,
+   "status": {
+    "200": 2051
+   }
+  },
+  "people-list": {
+   "n": 157,
+   "avg": 15,
+   "p50": 7,
+   "p95": 61,
+   "p99": 178,
+   "max": 279,
+   "bytesAvg": 12624,
+   "status": {
+    "200": 157
+   }
+  },
+  "apms-person": {
+   "n": 167,
+   "avg": 11,
+   "p50": 3,
+   "p95": 47,
+   "p99": 205,
+   "max": 360,
+   "bytesAvg": 14035,
+   "status": {
+    "200": 167
+   }
+  },
+  "row-read": {
+   "n": 251,
+   "avg": 12,
+   "p50": 3,
+   "p95": 62,
+   "p99": 97,
+   "max": 468,
+   "bytesAvg": 10175,
+   "status": {
+    "200": 251
+   }
+  },
+  "save-cell-shared": {
+   "n": 10,
+   "avg": 10,
+   "p50": 8,
+   "p95": 31,
+   "p99": 31,
+   "max": 31,
+   "bytesAvg": 629,
+   "status": {
+    "200": 10
+   }
+  },
+  "raw-row": {
+   "n": 662,
+   "avg": 10,
+   "p50": 2,
+   "p95": 47,
+   "p99": 107,
+   "max": 358,
+   "bytesAvg": 12210,
+   "status": {
+    "200": 662
+   }
+  },
+  "pushed-page": {
+   "n": 57272,
+   "avg": 0,
+   "p50": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0,
+   "bytesAvg": 0,
+   "status": {
+    "200": 57272
+   }
+  },
+  "hint-get": {
+   "n": 72,
+   "avg": 8,
+   "p50": 3,
+   "p95": 44,
+   "p99": 84,
+   "max": 84,
+   "bytesAvg": 1983,
+   "status": {
+    "200": 72
+   }
+  },
+  "tick": {
+   "n": 1997,
+   "avg": 9,
+   "p50": 1,
+   "p95": 50,
+   "p99": 114,
+   "max": 508,
+   "bytesAvg": 711,
+   "status": {
+    "200": 1997
+   }
+  },
+  "save-month": {
+   "n": 408,
+   "avg": 24,
+   "p50": 11,
+   "p95": 84,
+   "p99": 244,
+   "max": 588,
+   "bytesAvg": 14319,
+   "status": {
+    "200": 400,
+    "409": 8
+   }
+  },
+  "save-month-shared": {
+   "n": 41,
+   "avg": 19,
+   "p50": 10,
+   "p95": 48,
+   "p99": 167,
+   "max": 167,
+   "bytesAvg": 14527,
+   "status": {
+    "200": 41
+   }
+  },
+  "raw-company": {
+   "n": 18,
+   "avg": 89,
+   "p50": 43,
+   "p95": 322,
+   "p99": 322,
+   "max": 322,
+   "bytesAvg": 221850,
+   "status": {
+    "200": 18
+   }
+  },
+  "save-reward-shared": {
+   "n": 23,
+   "avg": 20,
+   "p50": 9,
+   "p95": 126,
+   "p99": 142,
+   "max": 142,
+   "bytesAvg": 13181,
+   "status": {
+    "200": 23
+   }
+  },
+  "save-kpi-master-shared": {
+   "n": 25,
+   "avg": 18,
+   "p50": 8,
+   "p95": 102,
+   "p99": 116,
+   "max": 116,
+   "bytesAvg": 439,
+   "status": {
+    "200": 24,
+    "409": 1
+   }
+  },
+  "book-patch": {
+   "n": 75,
+   "avg": 171,
+   "p50": 143,
+   "p95": 399,
+   "p99": 702,
+   "max": 702,
+   "bytesAvg": 170,
+   "status": {
+    "200": 75
+   }
+  },
+  "save-target-history": {
+   "n": 12,
+   "avg": 13,
+   "p50": 11,
+   "p95": 30,
+   "p99": 30,
+   "max": 30,
+   "bytesAvg": 530,
+   "status": {
+    "200": 12
+   }
+  },
+  "save-people-shared": {
+   "n": 27,
+   "avg": 24,
+   "p50": 8,
+   "p95": 58,
+   "p99": 283,
+   "max": 283,
+   "bytesAvg": 1565,
+   "status": {
+    "200": 27
+   }
+  },
+  "save-people": {
+   "n": 13,
+   "avg": 8,
+   "p50": 7,
+   "p95": 19,
+   "p99": 19,
+   "max": 19,
+   "bytesAvg": 1674,
+   "status": {
+    "200": 13
+   }
+  },
+  "save-reward": {
+   "n": 114,
+   "avg": 23,
+   "p50": 10,
+   "p95": 112,
+   "p99": 158,
+   "max": 275,
+   "bytesAvg": 12621,
+   "status": {
+    "200": 112,
+    "409": 2
+   }
+  },
+  "save-notices": {
+   "n": 44,
+   "avg": 20,
+   "p50": 8,
+   "p95": 85,
+   "p99": 284,
+   "max": 284,
+   "bytesAvg": 165,
+   "status": {
+    "200": 22,
+    "409": 22
+   }
+  },
+  "keepalive-retry": {
+   "n": 4,
+   "avg": 0,
+   "p50": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0,
+   "bytesAvg": 0,
+   "status": {
+    "0": 4
+   }
+  },
+  "save-409": {
+   "n": 11,
+   "avg": 0,
+   "p50": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0,
+   "bytesAvg": 0,
+   "status": {
+    "409": 11
+   }
+  }
+ },
+ "topQueries": [
+  {
+   "calls": 124,
+   "total_ms": 4035,
+   "mean_ms": 32.54,
+   "rows": 124,
+   "query": "insert into company_books (book, snapshot_json, content_hash, updated_at) values ($1, $2, $3, now()) on conflict (book) do update set snapshot_json = excluded.s"
+  },
+  {
+   "calls": 969,
+   "total_ms": 1987,
+   "mean_ms": 2.05,
+   "rows": 16894,
+   "query": "with c as ( select seq, kind, id, k1, k2, rev, deleted, at, payload as log_payload from entity_log where seq > $1 order by seq asc limit $2 ), latest as ( selec"
+  },
+  {
+   "calls": 71,
+   "total_ms": 1477,
+   "mean_ms": 20.8,
+   "rows": 12922,
+   "query": "select person_id, payload, rev from month_records where deleted_at is null and period = $1"
+  },
+  {
+   "calls": 114,
+   "total_ms": 1305,
+   "mean_ms": 11.44,
+   "rows": 15048,
+   "query": "select person_id, payload, rev from reward_records where deleted_at is null and period = $1"
+  },
+  {
+   "calls": 1861,
+   "total_ms": 369,
+   "mean_ms": 0.2,
+   "rows": 1861,
+   "query": "select payload, rev, deleted_at from month_records where person_id = $1 and period = $2"
+  },
+  {
+   "calls": 22,
+   "total_ms": 316,
+   "mean_ms": 14.38,
+   "rows": 22,
+   "query": "select book, snapshot_json, content_hash from company_books where book = any($1)"
+  },
+  {
+   "calls": 41,
+   "total_ms": 283,
+   "mean_ms": 6.91,
+   "rows": 73677,
+   "query": "select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind <> $1 order by updated_at asc, id asc"
+  },
+  {
+   "calls": 576,
+   "total_ms": 214,
+   "mean_ms": 0.37,
+   "rows": 576,
+   "query": "insert into entity_log (kind, id, k1, k2, rev, deleted, updated_by, payload) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) returning seq"
+  },
+  {
+   "calls": 111,
+   "total_ms": 204,
+   "mean_ms": 1.84,
+   "rows": 19980,
+   "query": "select id, jsonb_build_object( $1, id, $2, payload->$3, $4, payload->$5, $6, payload->$7, $8, payload->$9, $10, payload->$11, $12, payload->$13, $14, payload->$"
+  },
+  {
+   "calls": 111,
+   "total_ms": 176,
+   "mean_ms": 1.58,
+   "rows": 19980,
+   "query": "select id, payload, rev from people where deleted_at is null"
+  },
+  {
+   "calls": 404,
+   "total_ms": 173,
+   "mean_ms": 0.43,
+   "rows": 404,
+   "query": "insert into month_records (person_id, period, payload, rev, updated_at, updated_by, deleted_at) values ($1, $2, $3::jsonb, $4, now(), $5, $7) on conflict (perso"
+  },
+  {
+   "calls": 573,
+   "total_ms": 105,
+   "mean_ms": 0.18,
+   "rows": 573,
+   "query": "select payload, rev, deleted_at from reward_records where person_id = $1 and period = $2"
+  },
+  {
+   "calls": 65,
+   "total_ms": 79,
+   "mean_ms": 1.22,
+   "rows": 25955,
+   "query": "select kind, id, k1, k2, payload, rev, deleted_at from entities where deleted_at is null and kind = any($1::text[]) order by updated_at asc, id asc"
+  },
+  {
+   "calls": 124,
+   "total_ms": 47,
+   "mean_ms": 0.38,
+   "rows": 124,
+   "query": "insert into reward_records (person_id, period, payload, rev, updated_at, updated_by, deleted_at) values ($1, $2, $3::jsonb, $4, now(), $5, $7) on conflict (pers"
+  },
+  {
+   "calls": 721,
+   "total_ms": 39,
+   "mean_ms": 0.05,
+   "rows": 721,
+   "query": "insert into company_notebook (id, snapshot_json, updated_at) values ($1, $2, now()) on conflict (id) do update set snapshot_json = excluded.snapshot_json, updat"
+  }
+ ],
+ "errorsSample": [],
+ "lostSample": [],
+ "browserErrors": [
+  "reload allan.gois: page open > 60 s"
+ ],
+ "pageOpenSamples": [
+  {
+   "kind": "sign-in",
+   "ms": 2032,
+   "total": 3178,
+   "editor": false
+  },
+  {
+   "kind": "sign-in",
+   "ms": 1609,
+   "total": 2777,
+   "editor": false
+  },
+  {
+   "kind": "sign-in",
+   "ms": 3131,
+   "total": 4439,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 2798,
+   "companyMs": 96.269,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 2221,
+   "companyMs": 41.773,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3207,
+   "companyMs": 132.935,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 3371,
+   "companyMs": 69.608,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 2290,
+   "companyMs": 29.288,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3740,
+   "companyMs": 115.268,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 6123,
+   "companyMs": 149.718,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 2491,
+   "companyMs": 34.922000000000004,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 1788,
+   "companyMs": 42.253,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 2615,
+   "companyMs": 168.371,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 1861,
+   "companyMs": 33.643,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3525,
+   "companyMs": 160.893,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 2080,
+   "companyMs": 34.823,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3425,
+   "companyMs": 173.27800000000002,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 1793,
+   "companyMs": 27.727,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3461,
+   "companyMs": 138.16400000000002,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 1856,
+   "companyMs": 53.572,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 2233,
+   "companyMs": 70.35400000000001,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3891,
+   "companyMs": 193.935,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 2527,
+   "companyMs": 77.983,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 1634,
+   "companyMs": 32.464999999999996,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 3758,
+   "companyMs": 169.423,
+   "editor": true
+  },
+  {
+   "kind": "reload",
+   "ms": 2343,
+   "companyMs": 83.30199999999999,
+   "editor": false
+  },
+  {
+   "kind": "reload",
+   "ms": 1548,
+   "companyMs": 32.809000000000005,
+   "editor": false
+  }
+ ],
+ "wallSeconds": 238
+}
