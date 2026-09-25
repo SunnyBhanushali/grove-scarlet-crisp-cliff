@@ -4,3 +4,6 @@
 docs/perf/runs/** export-ignore
 docs/e2e/** export-ignore
 screenshots/** export-ignore
+# Rebuilt on every deploy; the committed copies are stale and must never be shipped.
+.output/** export-ignore
+dist/** export-ignore
