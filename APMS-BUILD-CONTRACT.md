@@ -143,6 +143,8 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 
 - **PERF** — 24 Sep 2026 IST. Server **p0aw5**, sync **p0as83** (`apms-sync.js?v=p0as83`; SPA bundles unchanged), branch `perf-2` (from `batch-3`). Phase 1 (`perf`, `PERF-FINDINGS.md`): the one process was CPU-bound from ~40 users re-reading / re-writing / re-encoding the whole company (~6–7 MB) per save and sign-in, plus every tab re-reading 0.1–1.1 MB lists every 2 s and polling the feed up to 3× per save; a GET right after a save could return the pre-save wire. Fixed: wire patched on commit (read-after-write), feed pushed on the live stream, feed / list reads cached (304), books read by hash and mirrored in 5 s batches with flush-before-read, sign-in from rows, ticks / sessions from memory, fewer client ticks / re-reads. 250 simulated users on one core: server CPU p50 ≈ 40 %, save p95 < 0.4 s, others see a save < 1 s for 99.6 %, 0 lost saves, 0 resurrected deletes, read-after-write 100 %. Gate: security batch 3 / batch 2, batch 1–3 browser suites, `npm test`, typecheck. See `REPORT-PERF.md`, `docs/perf/NGINX-AND-SERVER.md`.
 
+- **MCP-CONNECTOR** — 25 Sep 2026 IST. Server-only (no stamp / bundle / sync change), branch `mcp-connector` (from `perf-2`), pack `aliens-apms-p0as84-mcp.zip`. Read-only Claude connector at `/mcp` (MCP Streamable HTTP, stateless) with OAuth 2.1 sign-in by APMS login (`/.well-known/oauth-*`, `/oauth/register|authorize|token|revoke`, PKCE S256; access token = an APMS session, refresh tokens die on password change; `0000` never connects; `APMS_MCP_ALLOW` default admins; `APMS_MCP=off`). 24 tools covering every page (Home, Me, Org, Roster, KPI, APMS, Rewards, Targets, Awards, MIS, Settings, notices, raw). Reads = the per-viewer wire (`filterSnapshot`) + module scope; scores / payouts ported from the SPA bundle, 0 differences vs the shipped functions (`scripts/mcp-bundle-parity.mjs`). Runtime tables `apms_mcp_clients` / `apms_mcp_codes` / `apms_mcp_refresh`. Files `src/lib/apms-mcp/*`, `server/middleware/03-apms-mcp.ts`, `00-apms-spa.ts` (skip `/mcp`, `/oauth/`). Tests `apms-mcp.test.ts` 10/10 + production-path run on Postgres. See `REPORT-MCP-CONNECTOR.md`.
+
 ## OPEN
 
 - ROWS-V2: **built (node-server) and two-browser tested on local Postgres (p0as78 / p0aw3) — `REPORT-ROWS-V2-SMOKE.md`. NOT on live.** Next: staging 3010 with `aliens_apms_test`, then live.
@@ -207,6 +209,7 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 - BATCH-2: **done in tree** (p0as81). Open design decisions: server-side read scoping and write permissions per access role (today only the SPA enforces grants), hashing stored passwords, sign-in rate limit, revoking sessions on an admin password reset, `sunny.b`/`0000` and the `0000` default (pending Sunny). Live until Eng cuts p0as81 (every browser signs in once after the cut).
 - BATCH-3: **done in tree** (p0as82, branch `batch-3`, not merged). Open decisions for Sunny in `REPORT-BATCH-3.md` §6 (targets visible to employees, role-case writes, HR backups, SPA-only flags, `sunny.b` lock-out exemption, per-IP limit, when to switch `APMS_DEFAULT_PIN` off, git-history purge of the old dumps). Live until Eng cuts p0as82 (every browser signs in once; one-time password conversion; drop the backup table after).
 - PERF: **done in tree** (p0aw5 / p0as83, branch `perf-2`, not merged). Next client-side step (not done, data-safety code): the sync's sorted-stringify dirty baseline is ~0.7 s of an editor's page open in a slow browser; nginx HTTP/2 + gzip (`docs/perf/NGINX-AND-SERVER.md`) not verified on live.
+- MCP-CONNECTOR: **done in tree** (branch `mcp-connector`, not merged, not built here — no npm registry in that sandbox). Ships with / after p0as82 + p0as83. nginx must pass `/mcp`, `/oauth/`, `/.well-known/oauth-*`. Decision for Sunny: who may connect (`APMS_MCP_ALLOW`, default admins).
 - Do not start Step 8.
 
 ## ACCEPTANCE
@@ -274,6 +277,7 @@ Live cut as of 20 Sep 2026 morning: routes **p0as39** + sync **p0as14**. LOAD-10
 | PERF a row commit keeps the book generations (live = wire = stored); a book reader never waits a gather window | **pass** (unit `perf-p0aw5`, batch 1 targets-cells / targets-import) | untested until cut |
 | PERF change feed pushed on the live stream; tick 1 per 5 s; list re-read 20 s + 304; e2e holds cover pushes | **pass** (unit `perf-p0as83-client`, batch 1 / 2 / 3) | untested until cut |
 | PERF gate on the final build: security 176/176 + 43/43, batch 1, batch 2, batch 3 | **pass** (`docs/e2e/perf-2-gate5/`, build `d3617af`) | n/a |
+| MCP-CONNECTOR: OAuth flow, 24 tools, scoping, Postgres store (`apms-mcp.test.ts`); production path on Postgres; bundle parity 0 diffs | **pass** (unit + scripts; full build not run) | untested until cut |
 
 No fake live G9 pass.
 

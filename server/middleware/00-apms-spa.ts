@@ -32,6 +32,8 @@ export default async function apmsSpaMiddleware(
     return next();
   }
   if (path.startsWith("/auth/")) return next();
+  // Claude connector (03-apms-mcp.ts): its sign-in page and endpoints, not the SPA.
+  if (path === "/mcp" || path.startsWith("/mcp/") || path.startsWith("/oauth/")) return next();
   if (event.url.searchParams.get("install") === "1") return next();
   if (path.includes(".") && path !== "/index.html" && path !== "/apms.html") return next();
   if (!acceptsHtml(event.req.headers.get("accept"))) return next();
