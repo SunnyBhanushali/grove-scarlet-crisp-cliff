@@ -123,6 +123,18 @@ async function startServer() {
     body: JSON.stringify({ username: "sunny.b", password: "0000" }),
   }).then((r) => r.json());
   await fetch(`${BASE}/api/company`, { headers: { authorization: `Bearer ${si.token}` } }).then((r) => r.arrayBuffer());
+  // p0as81 fills the hot tables from the books on the first row read, not on a
+  // company read: read one APMS row so the run starts with them filled.
+  try {
+    const fx = JSON.parse(readFileSync(process.env.FIXTURE || "/tmp/apms-load-fixture.json", "utf8"));
+    const period = Object.keys(fx.records || {})[0];
+    const person = period ? Object.keys(fx.records[period] || {})[0] : null;
+    if (period && person) {
+      await fetch(`${BASE}/api/month-records/${encodeURIComponent(period)}/${encodeURIComponent(person)}`, { headers: { authorization: `Bearer ${si.token}` } }).then((r) => r.arrayBuffer());
+    }
+  } catch {
+    /* the wait in prepareFixture reports it */
+  }
   return { pid, elmon, profDir };
 }
 
