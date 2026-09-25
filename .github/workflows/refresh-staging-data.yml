@@ -1,0 +1,60 @@
+# Copy the live database into staging's own database (aliens_apms_stage2),
+# then reset EVERY password to the staging password (secret STAGING_PASSWORD)
+# and blank every email address. Live is only read (pg_dump).
+name: Refresh staging data
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: apms-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# bash -eo pipefail: a failing `ssh … | tee` must fail the step
+defaults:
+  run:
+    shell: bash
+
+env:
+  STAGING_URL: https://staging.apms.alienstattoo.in
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: staging
+      url: https://staging.apms.alienstattoo.in
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/vps
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          user: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          ssh_key: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+          live_app_dir: ${{ secrets.LIVE_APP_DIR }}
+
+      - name: Live dump -> staging DB, passwords reset, emails blanked
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        run: |
+          [ -n "$STAGING_PASSWORD" ] || { echo "::error::secret STAGING_PASSWORD is not set"; exit 1; }
+          # password goes over stdin, never on a command line
+          printf '%s\n' "$STAGING_PASSWORD" | ssh apms-vps "$APMS refresh-staging"
+
+      - name: Health check (sign in with the staging password)
+        env:
+          CHECK_USER: ${{ secrets.APMS_CHECK_USER }}
+          CHECK_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        run: |
+          if ssh apms-vps "$APMS status staging" | grep -q '^RELEASE=.\+'; then
+            bash deploy/ci/health-check.sh "$STAGING_URL"
+          else
+            echo "::notice::No staging build yet — push to the staging branch to start staging."
+          fi

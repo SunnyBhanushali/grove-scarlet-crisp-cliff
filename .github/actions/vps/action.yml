@@ -1,0 +1,59 @@
+name: Connect to the APMS VPS
+description: >
+  SSH key + pinned host key for the VPS, a `ssh apms-vps` alias, and the latest
+  deploy helpers (deploy/server/*) copied to ~/apms-deploy/bin on the server.
+  Exports $APMS — the remote command prefix — for later steps.
+inputs:
+  host: { description: VPS hostname or IP, required: true }
+  user: { description: site user to SSH in as, required: true }
+  port: { description: SSH port, required: false, default: "22" }
+  ssh_key: { description: private key (OpenSSH format), required: true }
+  known_hosts: { description: the VPS host key line(s) from ssh-keyscan, required: true }
+  live_app_dir: { description: folder PM2 apms-rewrite runs from, required: false, default: "" }
+runs:
+  using: composite
+  steps:
+    - name: SSH setup
+      shell: bash
+      env:
+        IN_HOST: ${{ inputs.host }}
+        IN_USER: ${{ inputs.user }}
+        IN_PORT: ${{ inputs.port }}
+        IN_KEY: ${{ inputs.ssh_key }}
+        IN_KNOWN: ${{ inputs.known_hosts }}
+        IN_APP: ${{ inputs.live_app_dir }}
+      run: |
+        set -euo pipefail
+        for v in IN_HOST IN_USER IN_KEY IN_KNOWN; do
+          if [ -z "${!v}" ]; then
+            echo "::error title=Missing GitHub secret::${v#IN_} is empty — see deploy/GITHUB-SECRETS.md"; exit 1
+          fi
+        done
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$IN_KEY" | tr -d '\r' > ~/.ssh/apms_deploy
+        chmod 600 ~/.ssh/apms_deploy
+        printf '%s\n' "$IN_KNOWN" | tr -d '\r' > ~/.ssh/known_hosts
+        cat > ~/.ssh/config <<CFG
+        Host apms-vps
+          HostName $IN_HOST
+          User $IN_USER
+          Port ${IN_PORT:-22}
+          IdentityFile ~/.ssh/apms_deploy
+          IdentitiesOnly yes
+          StrictHostKeyChecking yes
+          UserKnownHostsFile ~/.ssh/known_hosts
+          ServerAliveInterval 30
+          ServerAliveCountMax 10
+          ConnectTimeout 20
+        CFG
+        chmod 600 ~/.ssh/config
+        ssh apms-vps true || { echo "::error title=SSH failed::cannot log in to the VPS as $IN_USER (key, host key or user wrong — see deploy/GITHUB-SECRETS.md)"; exit 1; }
+        prefix="bash apms-deploy/bin/apms-deploy.sh"
+        if [ -n "$IN_APP" ]; then prefix="env LIVE_APP_DIR=$(printf '%q' "$IN_APP") $prefix"; fi
+        echo "APMS=$prefix" >> "$GITHUB_ENV"
+    - name: Upload deploy helpers
+      shell: bash
+      run: |
+        set -euo pipefail
+        tar -czf - -C "$GITHUB_WORKSPACE/deploy/server" . |
+          ssh apms-vps 'mkdir -p apms-deploy/bin && tar -xzf - -C apms-deploy/bin && chmod 755 apms-deploy/bin/apms-deploy.sh'

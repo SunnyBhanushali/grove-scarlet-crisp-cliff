@@ -1,0 +1,86 @@
+# Push to the `staging` branch -> build a clean copy on the VPS and run it as
+# PM2 `apms-staging` at https://staging.apms.alienstattoo.in (own database
+# aliens_apms_stage2; live is never touched).
+name: Deploy to staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: apms-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# bash -eo pipefail: a failing `ssh … | tee` must fail the step
+defaults:
+  run:
+    shell: bash
+
+env:
+  STAGING_URL: https://staging.apms.alienstattoo.in
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment:
+      name: staging
+      url: https://staging.apms.alienstattoo.in
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Release id
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+          echo "RELEASE_ID=$(date -u +%Y%m%d-%H%M%S)-${sha::8}" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/vps
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          user: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          ssh_key: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+          live_app_dir: ${{ secrets.LIVE_APP_DIR }}
+
+      - name: Preflight
+        run: ssh apms-vps "$APMS preflight staging"
+
+      - name: Upload source (clean folder, never unzip-over)
+        run: git archive --format=tar.gz HEAD | ssh apms-vps "$APMS receive staging $RELEASE_ID $SHA ${GITHUB_REF_NAME}"
+
+      - name: Install + build on the VPS
+        run: |
+          ssh apms-vps "$APMS build staging $RELEASE_ID" | tee build.out
+          echo "STAMP=$(sed -n 's/^STAMP=//p' build.out | tail -n1)" >> "$GITHUB_ENV"
+
+      - name: Switch staging to this build + restart apms-staging
+        run: ssh apms-vps "$APMS activate staging $RELEASE_ID"
+
+      - name: Health check (public URL)
+        env:
+          CHECK_USER: ${{ secrets.APMS_CHECK_USER }}
+          CHECK_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        run: |
+          # Before the first "Refresh staging data" there is nobody to sign in as.
+          if ssh apms-vps "$APMS status staging" | grep -q '^DATA_REFRESHED_AT='; then export ALLOW_NO_SIGNIN=0; else export ALLOW_NO_SIGNIN=1 CHECK_PASSWORD=""; fi
+          bash deploy/ci/health-check.sh "$STAGING_URL" "$STAMP"
+
+      - name: Keep the last 5 builds
+        if: success()
+        run: ssh apms-vps "$APMS prune staging"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Staging: ${{ job.status }}"
+            echo "- commit \`${SHA::8}\` (${GITHUB_REF_NAME}), release \`$RELEASE_ID\`, stamp \`${STAMP:-?}\`"
+            echo "- ${STAGING_URL}"
+            echo "- When it looks right: **Actions → Deploy to live → Run workflow** (ref: \`staging\`)."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,133 @@
+# Ship to LIVE (https://apms.alienstattoo.in, PM2 apms-rewrite).
+#   - push to the `release` branch, or
+#   - Actions -> "Deploy to live" -> Run workflow (ships the `staging` branch by default)
+# Order: build in a NEW folder while live keeps running -> back up the app
+# folder + pg_dump of the live DB -> swap folder + pm2 restart -> health checks.
+# Any failed check => automatic rollback to the previous folder + restart, and
+# this run goes red. The live database is never dropped, migrated or restored.
+name: Deploy to live
+
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to ship (default: what is on staging)"
+        required: true
+        default: staging
+
+concurrency:
+  group: apms-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# bash -eo pipefail: a failing `ssh … | tee` must fail the step
+defaults:
+  run:
+    shell: bash
+
+env:
+  LIVE_URL: https://apms.alienstattoo.in
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment:
+      name: live
+      url: https://apms.alienstattoo.in
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+
+      - name: Release id
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "SHA=$sha" >> "$GITHUB_ENV"
+          echo "RELEASE_ID=$(date -u +%Y%m%d-%H%M%S)-${sha::8}" >> "$GITHUB_ENV"
+          echo "SOURCE_REF=${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/vps
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          user: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          ssh_key: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+          live_app_dir: ${{ secrets.LIVE_APP_DIR }}
+
+      - name: Is this the commit staging runs?
+        run: |
+          on_staging="$(ssh apms-vps "$APMS status staging" | sed -n 's/^SHA=//p' || true)"
+          if [ "$on_staging" = "$SHA" ]; then
+            echo "Shipping ${SHA::8} — the same commit staging runs."
+          else
+            echo "::warning title=Not the staging build::Shipping ${SHA::8}, but staging runs '${on_staging:-nothing}'. It was not checked on staging."
+          fi
+
+      - name: Preflight (PM2, folder, disk, database access)
+        run: ssh apms-vps "$APMS preflight live"
+
+      - name: Upload source (clean folder, never unzip-over)
+        run: git archive --format=tar.gz HEAD | ssh apms-vps "$APMS receive live $RELEASE_ID $SHA $SOURCE_REF"
+
+      - name: Install + build in the new folder (live keeps running)
+        run: |
+          ssh apms-vps "$APMS build live $RELEASE_ID" | tee build.out
+          stamp="$(sed -n 's/^STAMP=//p' build.out | tail -n1)"
+          [ -n "$stamp" ] || { echo "::error::build printed no stamp"; exit 1; }
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+
+      - name: Back up app folder + live database (pg_dump)
+        run: |
+          ssh apms-vps "$APMS backup" | tee backup.out
+          echo "BACKUP=$(sed -n 's/^BACKUP=//p' backup.out | tail -n1)" >> "$GITHUB_ENV"
+
+      - name: Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+        id: activate
+        run: |
+          ssh apms-vps "$APMS activate live $RELEASE_ID" | tee activate.out
+          echo "PREVIOUS=$(sed -n 's/^PREVIOUS=//p' activate.out | tail -n1)" >> "$GITHUB_ENV"
+
+      - name: Health check — home 200, stamp, real sign-in
+        id: health
+        env:
+          CHECK_USER: ${{ secrets.APMS_CHECK_USER }}
+          CHECK_PASSWORD: ${{ secrets.APMS_CHECK_PASSWORD }}
+        run: bash deploy/ci/health-check.sh "$LIVE_URL" "$STAMP"
+
+      - name: ROLLBACK — health check failed
+        if: failure() && steps.activate.outcome == 'success'
+        env:
+          CHECK_USER: ${{ secrets.APMS_CHECK_USER }}
+          CHECK_PASSWORD: ${{ secrets.APMS_CHECK_PASSWORD }}
+        run: |
+          echo "::error title=Live deploy failed — rolling back::${SHA::8} failed the public health check. Rolling back to ${PREVIOUS:-the previous build}."
+          ssh apms-vps "$APMS rollback live ${PREVIOUS}" | tee rollback.out
+          back_stamp="$(sed -n 's/^STAMP=//p' rollback.out | tail -n1)"
+          if bash deploy/ci/health-check.sh "$LIVE_URL" "$back_stamp"; then
+            echo "::error title=Rolled back::Live is back on ${PREVIOUS:-the previous build} and healthy. Nothing was changed in the database."
+          else
+            echo "::error title=ROLLBACK ALSO UNHEALTHY::Live did not pass the health check after the rollback either. Check 'pm2 logs apms-rewrite' on the VPS now."
+          fi
+          exit 1
+
+      - name: Keep the last 5 builds
+        if: success()
+        run: ssh apms-vps "$APMS prune live"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            if [ "${{ job.status }}" = "success" ]; then echo "### ✅ Live is on \`${SHA::8}\` (stamp \`$STAMP\`)"; else echo "### ❌ Live deploy of \`${SHA::8}\` FAILED"; fi
+            echo "- source: \`$SOURCE_REF\`, release \`$RELEASE_ID\`, previous \`${PREVIOUS:-?}\`"
+            echo "- backup taken before the swap: \`${BACKUP:-none}\` (~/apms-deploy/live/backups on the VPS)"
+            if [ "${{ steps.activate.outcome }}" = "failure" ]; then echo "- the server could not start the new build and **rolled itself back**"; fi
+            if [ "${{ steps.health.outcome }}" = "failure" ]; then echo "- the public health check failed and live was **rolled back**"; fi
+            echo "- to undo a good-looking deploy later: **Actions → Rollback live → Run workflow**"
+          } >> "$GITHUB_STEP_SUMMARY"

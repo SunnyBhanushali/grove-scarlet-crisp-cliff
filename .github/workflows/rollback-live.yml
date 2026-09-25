@@ -1,0 +1,74 @@
+# Put live back on an earlier build (one of the last 5 kept on the VPS).
+# Instant: no build, just a folder swap + pm2 restart + health check.
+# The database is NOT rolled back (see REPORT-DEPLOY-PIPELINE.md).
+name: Rollback live
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Release id to go back to (leave empty = the one before the current)"
+        required: false
+        default: ""
+
+concurrency:
+  group: apms-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# bash -eo pipefail: a failing `ssh … | tee` must fail the step
+defaults:
+  run:
+    shell: bash
+
+env:
+  LIVE_URL: https://apms.alienstattoo.in
+
+jobs:
+  rollback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: live
+      url: https://apms.alienstattoo.in
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/vps
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          user: ${{ secrets.VPS_USER }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          ssh_key: ${{ secrets.VPS_SSH_KEY }}
+          known_hosts: ${{ secrets.VPS_KNOWN_HOSTS }}
+          live_app_dir: ${{ secrets.LIVE_APP_DIR }}
+
+      - name: Builds kept on the VPS (before)
+        run: ssh apms-vps "$APMS list live"
+
+      - name: Roll back
+        env:
+          TO: ${{ inputs.release }}
+        run: |
+          case "$TO" in ''|*[!A-Za-z0-9._-]*) [ -z "$TO" ] || { echo "::error::bad release id"; exit 1; } ;; esac
+          ssh apms-vps "$APMS rollback live $TO" | tee rollback.out
+          echo "STAMP=$(sed -n 's/^STAMP=//p' rollback.out | tail -n1)" >> "$GITHUB_ENV"
+          echo "ACTIVE=$(sed -n 's/^ACTIVE=//p' rollback.out | tail -n1)" >> "$GITHUB_ENV"
+
+      - name: Health check
+        env:
+          CHECK_USER: ${{ secrets.APMS_CHECK_USER }}
+          CHECK_PASSWORD: ${{ secrets.APMS_CHECK_PASSWORD }}
+        run: bash deploy/ci/health-check.sh "$LIVE_URL" "$STAMP"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Rollback: ${{ job.status }} — live is on \`${ACTIVE:-?}\` (stamp \`${STAMP:-?}\`)"
+            echo '```'
+            ssh apms-vps "$APMS list live" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
