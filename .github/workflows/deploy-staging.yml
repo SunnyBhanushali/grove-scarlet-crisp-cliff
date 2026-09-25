@@ -71,9 +71,11 @@ jobs:
           if ssh apms-vps "$APMS status staging" | grep -q '^DATA_REFRESHED_AT='; then export ALLOW_NO_SIGNIN=0; else export ALLOW_NO_SIGNIN=1 CHECK_PASSWORD=""; fi
           bash deploy/ci/health-check.sh "$STAGING_URL" "$STAMP"
 
-      - name: Keep the last 5 builds
+      - name: Record as known-good + keep the last 5 builds
         if: success()
-        run: ssh apms-vps "$APMS prune staging"
+        run: |
+          ssh apms-vps "$APMS confirm staging $RELEASE_ID"
+          ssh apms-vps "$APMS prune staging"
 
       - name: Summary
         if: always()

@@ -20,6 +20,9 @@ LIVE=$HOME_DIR/htdocs/apms.alienstattoo.in
 NODE22=/opt/node22/bin
 mkdir -p "$WORK"
 
+# --- start from nothing: stop a previous sim's PM2 (it holds DB connections)
+if id "$SITE" >/dev/null 2>&1; then su - "$SITE" -c "PATH=$NODE22:\$PATH pm2 kill" >/dev/null 2>&1 || true; fi
+
 # --- Postgres
 pg_ctlcluster 16 main start 2>/dev/null || true
 su postgres -c "psql -v ON_ERROR_STOP=1 -q" <<'SQL'
@@ -51,9 +54,6 @@ if [ -n "${HTTPS_PROXY:-}" ] && [ -n "${NODE_EXTRA_CA_CERTS:-}" ]; then
 fi
 
 # --- "old live": today's build + a stray server.js, started by hand under PM2
-if pm2_pid=$(su - "$SITE" -c "PATH=$NODE22:\$PATH pm2 pid apms-rewrite" 2>/dev/null) && [ -n "$pm2_pid" ]; then
-  su - "$SITE" -c "PATH=$NODE22:\$PATH pm2 kill" >/dev/null 2>&1 || true
-fi
 rm -rf "$HOME_DIR/apms-deploy" "$LIVE"
 cp -a "$SRC" "$LIVE"
 echo "console.log('stray leftover from an old unzip-over');" >"$LIVE/server.js"

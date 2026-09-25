@@ -104,9 +104,11 @@ def main():
     ap.add_argument("--ref", default="")
     ap.add_argument("--input", action="append", default=[])
     ap.add_argument("--env", action="append", default=[])
+    ap.add_argument("--repo", default=REPO, help="repo to clone for actions/checkout (default: this one)")
     a = ap.parse_args()
+    repo = os.path.abspath(a.repo)
 
-    wf = yaml.safe_load(open(a.workflow))
+    wf = yaml.safe_load(open(a.workflow if os.path.isabs(a.workflow) else os.path.join(repo, a.workflow)))
     on = wf.get(True) or wf.get("on")  # PyYAML reads `on:` as True
     secrets = json.load(open(a.secrets))
     inputs = {}
@@ -116,8 +118,8 @@ def main():
     for kv in a.input:
         k, v = kv.split("=", 1)
         inputs[k] = v
-    ref_name = a.ref or subprocess.check_output(["git", "-C", REPO, "rev-parse", "--abbrev-ref", "HEAD"], text=True).strip()
-    sha = subprocess.check_output(["git", "-C", REPO, "rev-parse", ref_name], text=True).strip()
+    ref_name = a.ref or subprocess.check_output(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"], text=True).strip()
+    sha = subprocess.check_output(["git", "-C", repo, "rev-parse", ref_name], text=True).strip()
 
     os.makedirs(a.work, exist_ok=True)
     run_dir = tempfile.mkdtemp(prefix="run-", dir=a.work)
@@ -161,8 +163,8 @@ def main():
                 if uses.startswith("actions/checkout"):
                     ref = ctx.expand(str((step.get("with") or {}).get("ref", sha)))
                     shutil.rmtree(ws, ignore_errors=True)
-                    subprocess.check_call(["git", "clone", "-q", "--no-local", REPO, ws])
-                    subprocess.check_call(["git", "-C", ws, "checkout", "-q", subprocess.check_output(["git", "-C", REPO, "rev-parse", ref], text=True).strip()])
+                    subprocess.check_call(["git", "clone", "-q", "--no-local", repo, ws])
+                    subprocess.check_call(["git", "-C", ws, "checkout", "-q", subprocess.check_output(["git", "-C", repo, "rev-parse", ref], text=True).strip()])
                 elif uses.startswith("./"):
                     action = yaml.safe_load(open(os.path.join(ws, uses[2:], "action.yml")))
                     with_ = {k: ctx.expand(str(v)) for k, v in (step.get("with") or {}).items()}

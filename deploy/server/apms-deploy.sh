@@ -11,7 +11,9 @@
 # Layout (DEPLOY_ROOT, default ~/apms-deploy):
 #   bin/                      this script, sanitize-staging-db.mjs, apms-staging.config.cjs
 #   live/releases/<id>/       one clean folder per build (source + node_modules + .output)
-#   live/history              ids in the order they went live (last line = current)
+#   live/history              releases that passed the full (public) check, oldest
+#                             first — the only default rollback targets
+#   live/releases/<id>/.apms-bad   marks a build that was rolled back from
 #   live/backups/<stamp>/     app.tar.gz + db.dump taken right before each live swap
 #   staging/releases/<id>/    same, for staging
 #   staging/current           symlink -> the release apms-staging runs
@@ -398,7 +400,21 @@ adopt_live_folder() {
     echo "STAMP=$(stamp_of "$REL_DIR/$id")"
   } >>"$REL_DIR/$id/.apms-release"
   ln -sfn "$REL_DIR/$id" "$APP_DIR"
-  echo "$id" >>"$HISTORY"
+  echo "$id" >>"$HISTORY" # it was live and serving: a known-good target
+}
+
+mark_bad() { # mark_bad <id> <reason>
+  [ -n "$1" ] && [ -d "$REL_DIR/$1" ] || return 0
+  printf '%s %s\n' "$(date -u +%FT%TZ)" "$2" >>"$REL_DIR/$1/.apms-bad"
+}
+
+# Newest known-good release that is not the running one and not marked bad.
+last_good() {
+  local cur="$1" r
+  tac "$HISTORY" 2>/dev/null | while read -r r; do
+    [ -n "$r" ] && [ "$r" != "$cur" ] || continue
+    [ -f "$REL_DIR/$r/.output/server/index.mjs" ] && [ ! -f "$REL_DIR/$r/.apms-bad" ] && { echo "$r"; break; }
+  done
 }
 
 cmd_activate() {
@@ -419,11 +435,11 @@ cmd_activate() {
   log "switching $TARGET: ${prev:-<none>} -> $id (stamp $want)"
   point_to "$id"
   if restart_app && wait_healthy "$want"; then
-    [ "$(tail -n1 "$HISTORY" 2>/dev/null)" = "$id" ] || echo "$id" >>"$HISTORY"
-    log "$TARGET is on $id"
+    log "$TARGET is on $id (server-side check passed; 'confirm' records it as good after the public check)"
     echo "ACTIVE=$id"
     return 0
   fi
+  mark_bad "$id" "did not come up on the server"
   if [ -n "$prev" ] && [ -d "$REL_DIR/$prev" ]; then
     log "ROLLING BACK $TARGET to $prev"
     point_to "$prev"
@@ -440,30 +456,52 @@ cmd_rollback() {
   take_lock "activate-$TARGET"
   cur="$(current_release)"
   if [ -z "$to" ]; then
-    # newest history entry that is not the current one and still exists
-    to="$(grep -vxF "${cur:-<none>}" "$HISTORY" | tac | while read -r r; do [ -f "$REL_DIR/$r/.output/server/index.mjs" ] && { echo "$r"; break; }; done || true)"
-    [ -n "$to" ] || die "no earlier $TARGET release to roll back to"
+    to="$(last_good "$cur")"
+    [ -n "$to" ] || die "no earlier known-good $TARGET release to roll back to (see: apms-deploy.sh list $TARGET)"
   fi
   valid_id "$to"
   [ "$to" != "$cur" ] || die "$TARGET is already on $to"
   [ -d "$REL_DIR/$to" ] || die "release $to not found (see: apms-deploy.sh list $TARGET)"
+  [ ! -f "$REL_DIR/$to/.apms-bad" ] || log "note: $to was rolled back from before ($(tail -n1 "$REL_DIR/$to/.apms-bad")) — going there because it was asked for by name"
+  # The build we leave is the reason for the rollback: never a default target again.
+  mark_bad "$cur" "rolled back from (${ROLLBACK_REASON:-manual rollback})"
   log "rolling $TARGET back: ${cur:-?} -> $to"
   point_to "$to"
   { restart_app && wait_healthy "$(meta "$REL_DIR/$to" STAMP)"; } || die "rollback to $to is not healthy — check 'pm2 logs $PM2_NAME'."
-  echo "$to" >>"$HISTORY"
   echo "ACTIVE=$to"
   echo "STAMP=$(meta "$REL_DIR/$to" STAMP)"
 }
 
+# The public health check passed: this release is a known-good rollback target.
+cmd_confirm() {
+  target_config "$1"
+  local id="${2:-}"
+  valid_id "$id"
+  [ "$(current_release)" = "$id" ] || die "$TARGET is not running $id — not confirming"
+  rm -f "$REL_DIR/$id/.apms-bad"
+  [ "$(tail -n1 "$HISTORY" 2>/dev/null)" = "$id" ] || echo "$id" >>"$HISTORY"
+  echo "CONFIRMED=$id"
+}
+
+cmd_mark_bad() {
+  target_config "$1"
+  valid_id "${2:-}"
+  mark_bad "$2" "${3:-marked bad}"
+}
+
 cmd_list() {
   target_config "$1"
-  local cur d id
+  local cur d id state
   cur="$(current_release)"
-  printf '%-3s %-40s %-10s %-10s %s\n' "" "RELEASE" "STAMP" "COMMIT" "BUILT"
+  printf '%-3s %-40s %-10s %-10s %-9s %s\n' "" "RELEASE" "STAMP" "COMMIT" "STATE" "BUILT"
   for d in $(ls -1d "$REL_DIR"/*/ 2>/dev/null | sort -r); do
     id="$(basename "$d")"
-    printf '%-3s %-40s %-10s %-10s %s\n' "$([ "$id" = "$cur" ] && echo '*' || echo '')" "$id" \
-      "$(meta "$d" STAMP)" "$(meta "$d" SHA | cut -c1-8)" "$(meta "$d" BUILT_AT)"
+    if [ -f "$d/.apms-bad" ]; then state="bad"
+    elif grep -qxF "$id" "$HISTORY"; then state="good"
+    elif [ -f "$d/.output/server/index.mjs" ]; then state="built"
+    else state="failed"; fi
+    printf '%-3s %-40s %-10s %-10s %-9s %s\n' "$([ "$id" = "$cur" ] && echo '*' || echo '')" "$id" \
+      "$(meta "$d" STAMP)" "$(meta "$d" SHA | cut -c1-8)" "$state" "$(meta "$d" BUILT_AT)"
   done
 }
 
@@ -585,7 +623,9 @@ apms-deploy.sh <command> …   (run as the site user; DEPLOY_ROOT defaults to ~/
   build     live|staging ID         npm install + node-server build in that clean folder
   backup                            app folder tarball + pg_dump of the live DB (read-only)
   activate  live|staging ID         swap, restart, health check; auto-rollback on failure
-  rollback  live|staging [ID]       back to ID (default: the previous release)
+  rollback  live|staging [ID]       back to ID (default: newest known-good release);
+                                    the build left behind is marked bad
+  confirm   live|staging ID         record ID as known-good (after the public check)
   list      live|staging            releases, * = running
   status    live|staging            running release / commit / stamp
   prune     live|staging            keep the newest KEEP_RELEASES (5) + the running one
@@ -606,6 +646,8 @@ main() {
     backup) cmd_backup ;;
     activate) cmd_activate "$@" ;;
     rollback) cmd_rollback "$@" ;;
+    confirm) cmd_confirm "$@" ;;
+    mark-bad) cmd_mark_bad "$@" ;;
     list) cmd_list "$@" ;;
     status) cmd_status "$@" ;;
     prune) cmd_prune "$@" ;;

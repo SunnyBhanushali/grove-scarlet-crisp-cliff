@@ -109,7 +109,7 @@ jobs:
           CHECK_PASSWORD: ${{ secrets.APMS_CHECK_PASSWORD }}
         run: |
           echo "::error title=Live deploy failed — rolling back::${SHA::8} failed the public health check. Rolling back to ${PREVIOUS:-the previous build}."
-          ssh apms-vps "$APMS rollback live ${PREVIOUS}" | tee rollback.out
+          ssh apms-vps "ROLLBACK_REASON='public health check failed' $APMS rollback live ${PREVIOUS}" | tee rollback.out
           back_stamp="$(sed -n 's/^STAMP=//p' rollback.out | tail -n1)"
           if bash deploy/ci/health-check.sh "$LIVE_URL" "$back_stamp"; then
             echo "::error title=Rolled back::Live is back on ${PREVIOUS:-the previous build} and healthy. Nothing was changed in the database."
@@ -118,9 +118,11 @@ jobs:
           fi
           exit 1
 
-      - name: Keep the last 5 builds
+      - name: Record as known-good + keep the last 5 builds
         if: success()
-        run: ssh apms-vps "$APMS prune live"
+        run: |
+          ssh apms-vps "$APMS confirm live $RELEASE_ID"
+          ssh apms-vps "$APMS prune live"
 
       - name: Summary
         if: always()

@@ -53,15 +53,20 @@ jobs:
           TO: ${{ inputs.release }}
         run: |
           case "$TO" in ''|*[!A-Za-z0-9._-]*) [ -z "$TO" ] || { echo "::error::bad release id"; exit 1; } ;; esac
-          ssh apms-vps "$APMS rollback live $TO" | tee rollback.out
+          ssh apms-vps "ROLLBACK_REASON='Rollback live button' $APMS rollback live $TO" | tee rollback.out
           echo "STAMP=$(sed -n 's/^STAMP=//p' rollback.out | tail -n1)" >> "$GITHUB_ENV"
           echo "ACTIVE=$(sed -n 's/^ACTIVE=//p' rollback.out | tail -n1)" >> "$GITHUB_ENV"
 
       - name: Health check
+        id: health
         env:
           CHECK_USER: ${{ secrets.APMS_CHECK_USER }}
           CHECK_PASSWORD: ${{ secrets.APMS_CHECK_PASSWORD }}
         run: bash deploy/ci/health-check.sh "$LIVE_URL" "$STAMP"
+
+      - name: Record as known-good
+        if: success()
+        run: ssh apms-vps "$APMS confirm live $ACTIVE"
 
       - name: Summary
         if: always()
