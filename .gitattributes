@@ -1,0 +1,6 @@
+# Deploy pipeline: `git archive` ships the tree to the VPS. These are reports,
+# old zips and test evidence the build never reads — leave them out of the upload.
+*.zip export-ignore
+docs/perf/runs/** export-ignore
+docs/e2e/** export-ignore
+screenshots/** export-ignore
