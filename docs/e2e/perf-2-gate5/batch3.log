@@ -1,0 +1,108 @@
+  [sign-in] check 6: PASS — no writes, no 5xx
+
+== signin-lockout
+  [signin-lockout] check 3: PASS — sign-in screen after 5 wrong: "Too many wrong passwords for this username."; right password while locked: refused with the lock message; C's idle Assign people showed "Locked sign-ins: hetal.soni" 2.1 s after the lock (card re-reads every 5 s)
+  [signin-lockout] note: before Unlock: DB [{"key":"u:hetal.soni","fails":0,"locked_until":"2026-09-25T00:30:02.848Z"}]; A card "Locked sign-ins Too many wrong passwords. Unlock lets the person try again now. Hetal Soni · hetal.soni · locked 15 min "; B card "Locked sign-ins Too many wrong passwords. Unlock lets the person try again now. Hetal Soni · hetal.soni · locked 15 min "
+  [signin-lockout] check 1: PASS — A and B pressed Unlock together: POST /api/login-locks A 200, B 200; DB lock rows 0
+  [signin-lockout] check 2: PASS — the card left A, B and C 3.5 s after the unlock
+  [signin-lockout] note: after the unlock the right password signs in (must-reset)
+  [signin-lockout] check 4: N/A — a sign-in lock has no edit or delete of its own; a second Unlock of an unlocked name is a no-op (check 1 has both at once)
+  [signin-lockout] check 5: PASS — after reload no Locked sign-ins card on A/B/C; DB has no lock
+  [signin-lockout] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [signin-lockout] check 6: PASS — no writes on open, no banner, no 5xx
+
+== session-ended
+  [session-ended] check 1: PASS — A reset Nikhil Patil: temporary password shown once in the dialog yes; D1 on sign-in yes, D2 yes (both within 1.2 s); D1 says "You were signed out because your password was changed or your session was ended."; old password → 401
+  [session-ended] check 3: PASS — open browsers left the app 1.2 s after the reset (limit 10 s)
+  [session-ended] check 2: PASS — own change on Me ("New password | Update | Saved."): the other browser D2 on sign-in after 1.6 s; D1 (made the change) still in the app true; issued_logins holds the new password (hash) true
+  [session-ended] check 4: N/A — a password or session has no delete; sign-out is covered by the security suite (token 401 after sign-out)
+  [session-ended] check 5: PASS — after reload D1 is still signed in true; Nikhil Patil has 1 live session(s) in apms_sessions
+  [session-ended] check 6: PASS — no writes on open, no banner, no 5xx
+
+== employee-d
+  [employee-d] check 1: PASS — D's nav: A Nikhil Patil Employee Home Me APMS Rewards Improve Something missing, broken, or a featu; from D's page: wire 179 other people, with salary 0, with dob/phone 0, other people's plans 0, trash 0; /api/people/:other salary false; feed rows with others' salary 0; /api/e/trash rows 0; backups 403; /api/org?kind=trash 403
+  [employee-d] check 2: PASS — D's writes to others refused: people 403 forbidden people title, kpi-master 403 forbidden kpi-master; D's Me save saved (mobile in DB true); fields D cannot change kept: salary, bandMidpoint, rewardsSlabs, access, accessRoleId, password, roleId, managerId, dob, employeeCode
+  [employee-d] check 3: PASS — A's Location edit on Nikhil Patil (allowed for D to see): D's idle Me showed it 0.10 s after A's save returned; C (admin) 0.13 s
+  [employee-d] check 4: PASS — A changed Komal Lakshane's salary: D received 0 feed / row responses after it, none with that salary; responses to D with a password / hash: 0
+  [employee-d] check 5: PASS — after reload D's Me Location "D-live agx10" = DB "D-live agx10"
+  [employee-d] check 6: PASS — no writes on open, no banner, no 5xx
+
+== restricted-editor
+  [restricted-editor] check 1: PASS — F's file of Soham Devasar shows the salary false; after F (Location) and A (Mobile) saved together: location "F-loc agx17", mobile "9795498003"; hidden fields kept: salary, bandMidpoint, rewardsSlabs, dob
+  [restricted-editor] check 2: PASS — A raised the salary to 785911 while F had the form open; F saved Location: DB salary 785911 (A's value kept true), location "F-loc2 agx17"
+  [restricted-editor] check 3: PASS — C (idle on the file) showed F's Location 0.0 s after the save
+  [restricted-editor] check 4: N/A — delete vs a stale edit of a person is checked in batch 2 people-edit / people-hire (same row path)
+  [restricted-editor] check 5: PASS — after reload C "F-loc2 agx17", F "F-loc2 agx17", DB "F-loc2 agx17"
+  [restricted-editor] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [restricted-editor] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsLinkGuard
+  [targets-link-guard] note: set-up: TL Link agx16 (tn-m-mug7q9ojx2ro) only in September; Rohan Jadhav and Gaurav Mokale unlock against it: tn-m-mug7q9ojx2ro, tn-m-mug7q9ojx2ro
+  [targets-link-guard] check 1: PASS — guard shown true ("Delete “TL Link agx16”? Close 2 rewards unlock against this target Deleting breaks their target link. They keep the link and show a warning until someone re-links them (or the target is re-created wit"); lists both (person · month) true; Cancel / Delete anyway true; after Cancel the cell is live true, writes none (/tmp/claude-0/shots-c/1-guard-dialog.png)
+  [targets-link-guard] check 4: PASS — Delete anyway: cell deleted true, node deleted true (only month); reward links kept tn-m-mug7q9ojx2ro, tn-m-mug7q9ojx2ro; B's page dropped it 0.0 s
+  [targets-link-guard] check 2: PASS — a target nobody unlocks against keeps the plain confirm: true ("Delete “TL Plain agx16”? Close Moves to Trash for 30 days. Other months stay. Cancel Delete")
+  [targets-link-guard] check 3: PASS — B (on the month page, not acting) dropped the deleted target 0.0 s after Delete anyway
+  [targets-link-guard] check 5: PASS — after reload A/B list TL Link agx16: false/false (DB cell deleted true); reward links in DB tn-m-mug7q9ojx2ro, tn-m-mug7q9ojx2ro
+  [targets-link-guard] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-link-guard] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsLinkBroken
+  [targets-link-broken] check 1: PASS — month list: icons on Rohan Jadhav and Gaurav Mokale true; tooltip "Target link broken — the linked target was deleted"; none on Sachin Yadav true (/tmp/claude-0/shots-c/2-month-list-icon.png)
+  [targets-link-broken] check 3: PASS — C's list showed the icons 0.2 s after opening
+  [targets-link-broken] check 2: PASS — DB rows keep the link, no stored targetLinkBroken true; banner "Target link broken This reward unlocked against “TL Link agx16”, which was deleted from September 2026. Nothing unlocks until it is re-linke" (/tmp/claude-0/shots-c/2-reward-banner.png); picker lists 19 of September's targets (/tmp/claude-0/shots-c/2-reward-relink-picker.png); Re-link → Goa: DB true, banner gone true, select shows "Goa"; saved by PATCH /api/reward-records/2026-09/p-1788353125641-e4k6ut 200; C's icon for Rohan Jadhav cleared (Gaurav Mokale still flagged) true
+  [targets-link-broken] check 5: PASS — after reload A/B/C: Gaurav Mokale flagged, Rohan Jadhav (re-linked) not
+  [targets-link-broken] check 4: N/A — the broken-link warning is computed, not a record: nothing to delete; a stale Re-link after another user's delete / relink is the same Unlock against row PATCH (batch 1 rewards-plan-open check 4, targets-delete-recreate check 4)
+  [targets-link-broken] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-link-broken] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsLinkRelink
+  [targets-link-relink] check 1: PASS — re-created "TL Link agx16": new node tn-m-mug7rghyc4xg (old tn-m-mug7q9ojx2ro); offer shown to A true: "Relink rewards? Close 1 reward was linked to a deleted target named “TL Link agx16” — relink it to “TL Link agx16”? Gaurav Mokale · September 2026 Not now Relink" (/tmp/claude-0/shots-c/3-relink-offer.png); lists Gaurav Mokale true; B/C offered 0; Not now wrote nothing, links still tn-imp-3-63t328, tn-m-mug7q9ojx2ro
+  [targets-link-relink] check 2: PASS — second re-create → offer true; Relink → 1/1 rewards on tn-m-mug7rkpt1fr2; saves PATCH /api/reward-records/2026-09/p-1788353125713-lbkxtm 200 (/tmp/claude-0/shots-c/3-relink-done.png)
+  [targets-link-relink] check 3: PASS — C's list cleared the icons 1.1 s after Relink (/tmp/claude-0/shots-c/3-list-after-relink.png)
+  [targets-link-relink] note: same-name re-create of a target with other months (Goa, 6 months): node ids after tn-imp-3-63t328 (was tn-imp-3-63t328); cell back true; relink offered false
+  [targets-link-relink] check 4: PASS — Goa re-created with the same name reuses node tn-imp-3-63t328: true; links whole, no offer true
+  [targets-link-relink] check 5: PASS — after reload A/B/C: Gaurav Mokale's page unlocks against "TL Link agx16", no banner
+  [targets-link-relink] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-link-relink] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsSecondGroup
+  [targets-second-group] check 1: PASS — DB: G1 = SG A1 gx18, SG A2 gx18; G2 = SG B1 gx18, SG B2 gx18; both top level, members nested true; G1 cell live true
+  [targets-second-group] check 3: PASS — C showed 2 + 2 nested 0.0 s after
+  [targets-second-group] check 5: PASS — after reload A/B/C: G1 2 nested, G2 2 nested = DB (/tmp/claude-0/shots-c/4-two-groups.png)
+  [targets-second-group] check 2: N/A — two groups are two records; editing the same group's fields at once is batch 1 targets-groups check 2
+  [targets-second-group] check 4: N/A — delete of a group while another user adds members is batch 1 targets-groups check 4 (same rows)
+  [targets-second-group] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-second-group] check 6: PASS — no writes on open, no banner, no 5xx
+
+== targetsImportBlank
+  [targets-import-blank] note: new month import: summary "Apply this import? 12 changed, 0 unchanged, 0 blank-kept Counts are value cells (M1–M5, actual). A blank cell keeps the current value; only a value (0 included) changes it." (/tmp/claude-0/shots-c/5-import-new-month-summary.png); IB One gx18 M1 100000, actual 90000
+  [targets-import-blank] check 3: PASS — C's list showed May 2027 (2) 0.9 s after
+  [targets-import-blank] check 1: PASS — summary "Apply this import? 2 changed, 5 unchanged, 5 blank-kept Counts are value cells (M1–M5, actual). A blank cell keeps the current value; only a value (0 included) changes it." with Cancel / Apply (/tmp/claude-0/shots-c/5-import-summary.png); Cancel wrote nothing (M3 still 120000); preview "Targets spreadsheet Close Download the template, fill months of studios and groups, then upload. Nesting is only the par…"
+  [targets-import-blank] check 2: PASS — DB after Apply: IB One gx18 ladder {"M1":100000,"M2":110000,"M3":125000,"M4":130000,"M5":140000} (blank floors kept, M3 125000), actual 95000 (B typed 95000 while the file's cell was blank → kept); IB Two gx18 actual 0 (explicit 0), M1 200000; B's page = DB true
+  [targets-import-blank] check 5: PASS — after reload A/B/C = DB (IB One gx18 M3 125000, actual 95000; IB Two gx18 actual 0)
+  [targets-import-blank] check 4: N/A — import has no delete; month delete is covered by targets-import
+  [targets-import-blank] note: Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors
+  [targets-import-blank] check 6: PASS — no writes on open, no banner, no 5xx
+
+== default-pin
+  [default-pin] check 1: PASS — off: sunny.b / 0000 → "The starter password 0000 is switched off."; ami.bhan (no password) / 0000 → same message; floyd.dsil with a real password → app
+  [default-pin] check 2: PASS — switched back on: sunny.b / 0000 → app (never locked out)
+  [default-pin] check 3: PASS — A/B/C sessions after two restarts: A B C
+  [default-pin] check 4: N/A — a server switch has no record to delete
+  [default-pin] check 5: N/A — nothing saved
+  [default-pin] check 6: PASS — no writes on open, no banner, no 5xx
+
+module    screen                         1     2     3     4     5     6
+All       sign-in                        -     -     -     -     -     pass 
+Sign-in   signin-lockout                 pass  pass  pass  n/a   pass  pass 
+Settings  session-ended                  pass  pass  pass  n/a   pass  pass 
+All       employee-d                     pass  pass  pass  pass  pass  pass 
+Org       restricted-editor              pass  pass  pass  n/a   pass  pass 
+Targets   targets-link-guard             pass  pass  pass  pass  pass  pass 
+Rewards   targets-link-broken            pass  pass  pass  n/a   pass  pass 
+Targets   targets-link-relink            pass  pass  pass  pass  pass  pass 
+Targets   targets-second-group           pass  n/a   pass  n/a   pass  pass 
+Targets   targets-import-blank           pass  pass  pass  n/a   pass  pass 
+Sign-in   default-pin                    pass  pass  pass  n/a   n/a   pass 
+
+PASS — report: docs/e2e/perf-2-gate5/e2e-batch3.json

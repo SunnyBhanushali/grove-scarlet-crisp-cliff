@@ -1,0 +1,1323 @@
+{
+ "base": "http://127.0.0.1:3016",
+ "at": "2026-09-25T00:21:40.758Z",
+ "screens": [
+  {
+   "module": "Sign-in",
+   "screen": "Sign in: 5 wrong passwords → lock message; right password refused while locked",
+   "saves": "apms_signin_failures",
+   "scenario": "signin-lockout",
+   "reached": true
+  },
+  {
+   "module": "Settings",
+   "screen": "Assign people → Locked sign-ins card → Unlock",
+   "saves": "apms_signin_failures (row removed)",
+   "scenario": "signin-lockout",
+   "reached": true
+  },
+  {
+   "module": "Settings",
+   "screen": "Assign people → Reset login (one-time password dialog)",
+   "saves": "issued_logins, people password (hash) + mustResetPassword; ends the person's sessions",
+   "scenario": "session-ended",
+   "reached": true
+  },
+  {
+   "module": "Sign-in",
+   "screen": "Signed out because the password was changed (notice)",
+   "saves": "nothing",
+   "scenario": "session-ended",
+   "reached": true
+  },
+  {
+   "module": "Sign-in",
+   "screen": "First sign-in: Set a new password (after a reset)",
+   "saves": "issued_logins (hash), mustResetPassword=false",
+   "scenario": "session-ended",
+   "reached": true
+  },
+  {
+   "module": "Me",
+   "screen": "Me → Password → Update (ends the person's other browsers)",
+   "saves": "issued_logins + people password (hash)",
+   "scenario": "session-ended",
+   "reached": true
+  },
+  {
+   "module": "Me",
+   "screen": "Me → Edit → Save (employee; was a TDZ crash)",
+   "saves": "own people row",
+   "scenario": "employee-d",
+   "reached": true
+  },
+  {
+   "module": "Sign-in",
+   "screen": "APMS_DEFAULT_PIN=off: 0000 refused with a message",
+   "saves": "nothing",
+   "scenario": "default-pin",
+   "reached": true
+  },
+  {
+   "module": "Org",
+   "screen": "Person file edit by a function head (no pay / personal)",
+   "saves": "people row (hidden fields kept)",
+   "scenario": "restricted-editor",
+   "reached": true
+  },
+  {
+   "module": "All",
+   "screen": "Employee D: My APMS, My rewards, Home, Me + API reads/writes from D's page",
+   "saves": "own people row",
+   "scenario": "employee-d",
+   "reached": true
+  },
+  {
+   "module": "Targets",
+   "screen": "targetsLinkGuard",
+   "scenario": "targetsLinkGuard",
+   "reached": true
+  },
+  {
+   "module": "Targets",
+   "screen": "targetsLinkBroken",
+   "scenario": "targetsLinkBroken",
+   "reached": true
+  },
+  {
+   "module": "Targets",
+   "screen": "targetsLinkRelink",
+   "scenario": "targetsLinkRelink",
+   "reached": true
+  },
+  {
+   "module": "Targets",
+   "screen": "targetsSecondGroup",
+   "scenario": "targetsSecondGroup",
+   "reached": true
+  },
+  {
+   "module": "Targets",
+   "screen": "targetsImportBlank",
+   "scenario": "targetsImportBlank",
+   "reached": true
+  }
+ ],
+ "results": [
+  {
+   "module": "All",
+   "id": "sign-in",
+   "title": "Sign in (three admins at once)",
+   "checks": {
+    "6": {
+     "status": "pass",
+     "detail": "no writes, no 5xx"
+    }
+   },
+   "notes": []
+  },
+  {
+   "module": "Sign-in",
+   "id": "signin-lockout",
+   "title": "Sign-in lock-out message · Settings → Assign people → Locked sign-ins → Unlock",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "A and B pressed Unlock together: POST /api/login-locks A 200, B 200; DB lock rows 0"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "the card left A, B and C 3.5 s after the unlock"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "sign-in screen after 5 wrong: \"Too many wrong passwords for this username.\"; right password while locked: refused with the lock message; C's idle Assign people showed \"Locked sign-ins: hetal.soni\" 2.1 s after the lock (card re-reads every 5 s)"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "a sign-in lock has no edit or delete of its own; a second Unlock of an unlocked name is a no-op (check 1 has both at once)"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload no Locked sign-ins card on A/B/C; DB has no lock"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "before Unlock: DB [{\"key\":\"u:hetal.soni\",\"fails\":0,\"locked_until\":\"2026-09-25T00:30:02.848Z\"}]; A card \"Locked sign-ins Too many wrong passwords. Unlock lets the person try again now. Hetal Soni · hetal.soni · locked 15 min \"; B card \"Locked sign-ins Too many wrong passwords. Unlock lets the person try again now. Hetal Soni · hetal.soni · locked 15 min \"",
+    "after the unlock the right password signs in (must-reset)",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Settings",
+   "id": "session-ended",
+   "title": "Assign people → Reset login / Me → Password: the person's other browsers land on sign-in",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "A reset Nikhil Patil: temporary password shown once in the dialog yes; D1 on sign-in yes, D2 yes (both within 1.2 s); D1 says \"You were signed out because your password was changed or your session was ended.\"; old password → 401"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "own change on Me (\"New password | Update | Saved.\"): the other browser D2 on sign-in after 1.6 s; D1 (made the change) still in the app true; issued_logins holds the new password (hash) true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "open browsers left the app 1.2 s after the reset (limit 10 s)"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "a password or session has no delete; sign-out is covered by the security suite (token 401 after sign-out)"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload D1 is still signed in true; Nikhil Patil has 1 live session(s) in apms_sessions"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": []
+  },
+  {
+   "module": "All",
+   "id": "employee-d",
+   "title": "Fourth browser D (employee): reads, writes, own saves, live updates",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "D's nav: A Nikhil Patil Employee Home Me APMS Rewards Improve Something missing, broken, or a featu; from D's page: wire 179 other people, with salary 0, with dob/phone 0, other people's plans 0, trash 0; /api/people/:other salary false; feed rows with others' salary 0; /api/e/trash rows 0; backups 403; /api/org?kind=trash 403"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "D's writes to others refused: people 403 forbidden people title, kpi-master 403 forbidden kpi-master; D's Me save saved (mobile in DB true); fields D cannot change kept: salary, bandMidpoint, rewardsSlabs, access, accessRoleId, password, roleId, managerId, dob, employeeCode"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "A's Location edit on Nikhil Patil (allowed for D to see): D's idle Me showed it 0.10 s after A's save returned; C (admin) 0.13 s"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "A changed Komal Lakshane's salary: D received 0 feed / row responses after it, none with that salary; responses to D with a password / hash: 0"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload D's Me Location \"D-live agx10\" = DB \"D-live agx10\""
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": []
+  },
+  {
+   "module": "Org",
+   "id": "restricted-editor",
+   "title": "Function head edits a member's file: salary / slabs / personal fields not shown, kept on save",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "F's file of Soham Devasar shows the salary false; after F (Location) and A (Mobile) saved together: location \"F-loc agx17\", mobile \"9795498003\"; hidden fields kept: salary, bandMidpoint, rewardsSlabs, dob"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "A raised the salary to 785911 while F had the form open; F saved Location: DB salary 785911 (A's value kept true), location \"F-loc2 agx17\""
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C (idle on the file) showed F's Location 0.0 s after the save"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "delete vs a stale edit of a person is checked in batch 2 people-edit / people-hire (same row path)"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload C \"F-loc2 agx17\", F \"F-loc2 agx17\", DB \"F-loc2 agx17\""
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-link-guard",
+   "title": "Delete a target rewards unlock against: guard (Cancel / Delete anyway)",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "guard shown true (\"Delete “TL Link agx16”? Close 2 rewards unlock against this target Deleting breaks their target link. They keep the link and show a warning until someone re-links them (or the target is re-created wit\"); lists both (person · month) true; Cancel / Delete anyway true; after Cancel the cell is live true, writes none (/tmp/claude-0/shots-c/1-guard-dialog.png)"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "a target nobody unlocks against keeps the plain confirm: true (\"Delete “TL Plain agx16”? Close Moves to Trash for 30 days. Other months stay. Cancel Delete\")"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "B (on the month page, not acting) dropped the deleted target 0.0 s after Delete anyway"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "Delete anyway: cell deleted true, node deleted true (only month); reward links kept tn-m-mug7q9ojx2ro, tn-m-mug7q9ojx2ro; B's page dropped it 0.0 s"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload A/B list TL Link agx16: false/false (DB cell deleted true); reward links in DB tn-m-mug7q9ojx2ro, tn-m-mug7q9ojx2ro"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "set-up: TL Link agx16 (tn-m-mug7q9ojx2ro) only in September; Rohan Jadhav and Gaurav Mokale unlock against it: tn-m-mug7q9ojx2ro, tn-m-mug7q9ojx2ro",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Rewards",
+   "id": "targets-link-broken",
+   "title": "Broken link: month-list icon (tooltip) · reward-page banner · Re-link",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "month list: icons on Rohan Jadhav and Gaurav Mokale true; tooltip \"Target link broken — the linked target was deleted\"; none on Sachin Yadav true (/tmp/claude-0/shots-c/2-month-list-icon.png)"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB rows keep the link, no stored targetLinkBroken true; banner \"Target link broken This reward unlocked against “TL Link agx16”, which was deleted from September 2026. Nothing unlocks until it is re-linke\" (/tmp/claude-0/shots-c/2-reward-banner.png); picker lists 19 of September's targets (/tmp/claude-0/shots-c/2-reward-relink-picker.png); Re-link → Goa: DB true, banner gone true, select shows \"Goa\"; saved by PATCH /api/reward-records/2026-09/p-1788353125641-e4k6ut 200; C's icon for Rohan Jadhav cleared (Gaurav Mokale still flagged) true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C's list showed the icons 0.2 s after opening"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "the broken-link warning is computed, not a record: nothing to delete; a stale Re-link after another user's delete / relink is the same Unlock against row PATCH (batch 1 rewards-plan-open check 4, targets-delete-recreate check 4)"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload A/B/C: Gaurav Mokale flagged, Rohan Jadhav (re-linked) not"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-link-relink",
+   "title": "Re-create with the same name: new id → Relink / Not now; same id → links whole",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "re-created \"TL Link agx16\": new node tn-m-mug7rghyc4xg (old tn-m-mug7q9ojx2ro); offer shown to A true: \"Relink rewards? Close 1 reward was linked to a deleted target named “TL Link agx16” — relink it to “TL Link agx16”? Gaurav Mokale · September 2026 Not now Relink\" (/tmp/claude-0/shots-c/3-relink-offer.png); lists Gaurav Mokale true; B/C offered 0; Not now wrote nothing, links still tn-imp-3-63t328, tn-m-mug7q9ojx2ro"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "second re-create → offer true; Relink → 1/1 rewards on tn-m-mug7rkpt1fr2; saves PATCH /api/reward-records/2026-09/p-1788353125713-lbkxtm 200 (/tmp/claude-0/shots-c/3-relink-done.png)"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C's list cleared the icons 1.1 s after Relink (/tmp/claude-0/shots-c/3-list-after-relink.png)"
+    },
+    "4": {
+     "status": "pass",
+     "detail": "Goa re-created with the same name reuses node tn-imp-3-63t328: true; links whole, no offer true"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload A/B/C: Gaurav Mokale's page unlocks against \"TL Link agx16\", no banner"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "same-name re-create of a target with other months (Goa, 6 months): node ids after tn-imp-3-63t328 (was tn-imp-3-63t328); cell back true; relink offered false",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-second-group",
+   "title": "Two groups added to one month at once: the first stays intact",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "DB: G1 = SG A1 gx18, SG A2 gx18; G2 = SG B1 gx18, SG B2 gx18; both top level, members nested true; G1 cell live true"
+    },
+    "2": {
+     "status": "n/a",
+     "detail": "two groups are two records; editing the same group's fields at once is batch 1 targets-groups check 2"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C showed 2 + 2 nested 0.0 s after"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "delete of a group while another user adds members is batch 1 targets-groups check 4 (same rows)"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload A/B/C: G1 2 nested, G2 2 nested = DB (/tmp/claude-0/shots-c/4-two-groups.png)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Targets",
+   "id": "targets-import-blank",
+   "title": "Import: blank cell keeps · summary (changed / unchanged / blank-kept) · Apply / Cancel",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "summary \"Apply this import? 2 changed, 5 unchanged, 5 blank-kept Counts are value cells (M1–M5, actual). A blank cell keeps the current value; only a value (0 included) changes it.\" with Cancel / Apply (/tmp/claude-0/shots-c/5-import-summary.png); Cancel wrote nothing (M3 still 120000); preview \"Targets spreadsheet Close Download the template, fill months of studios and groups, then upload. Nesting is only the par…\""
+    },
+    "2": {
+     "status": "pass",
+     "detail": "DB after Apply: IB One gx18 ladder {\"M1\":100000,\"M2\":110000,\"M3\":125000,\"M4\":130000,\"M5\":140000} (blank floors kept, M3 125000), actual 95000 (B typed 95000 while the file's cell was blank → kept); IB Two gx18 actual 0 (explicit 0), M1 200000; B's page = DB true"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "C's list showed May 2027 (2) 0.9 s after"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "import has no delete; month delete is covered by targets-import"
+    },
+    "5": {
+     "status": "pass",
+     "detail": "after reload A/B/C = DB (IB One gx18 M3 125000, actual 95000; IB Two gx18 actual 0)"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": [
+    "new month import: summary \"Apply this import? 12 changed, 0 unchanged, 0 blank-kept Counts are value cells (M1–M5, actual). A blank cell keeps the current value; only a value (0 included) changes it.\" (/tmp/claude-0/shots-c/5-import-new-month-summary.png); IB One gx18 M1 100000, actual 90000",
+    "Google Fonts stylesheet unreachable from the test sandbox (no internet); no other page errors"
+   ]
+  },
+  {
+   "module": "Sign-in",
+   "id": "default-pin",
+   "title": "APMS_DEFAULT_PIN=off: sign-in refuses 0000 with a message; on again: sunny.b / 0000 works",
+   "checks": {
+    "1": {
+     "status": "pass",
+     "detail": "off: sunny.b / 0000 → \"The starter password 0000 is switched off.\"; ami.bhan (no password) / 0000 → same message; floyd.dsil with a real password → app"
+    },
+    "2": {
+     "status": "pass",
+     "detail": "switched back on: sunny.b / 0000 → app (never locked out)"
+    },
+    "3": {
+     "status": "pass",
+     "detail": "A/B/C sessions after two restarts: A B C"
+    },
+    "4": {
+     "status": "n/a",
+     "detail": "a server switch has no record to delete"
+    },
+    "5": {
+     "status": "n/a",
+     "detail": "nothing saved"
+    },
+    "6": {
+     "status": "pass",
+     "detail": "no writes on open, no banner, no 5xx"
+    }
+   },
+   "notes": []
+  }
+ ],
+ "net": {
+  "A": [
+   {
+    "t": 1790295283426,
+    "m": "POST",
+    "u": "/api/auth/sign-in/username",
+    "s": 200,
+    "req": "{\"username\":\"sunny.b\",\"password\":\"0000\"}",
+    "body": "{\"session\":{\"id\":\"sess-p-admin\",\"token\":\"apms-s.z1VL1dqeBf7qtBn0j6sBQs40WoHhL-5qToAslVeVXXA\",\"userId\":\"p-admin\",\"expiresAt\":\"2026-10-25T00:14:43.419Z\"},\"user\":{\"id\":\"p-admin\",\"name\":\"Sunny\",\"email\":\"sunny@alienstattoos.com\",\"username\":\"sunny.b\",\"emailVerified\":true,\"mustResetPassword\":false,\"createdAt\":\"2026-09-25T00:14:43.419Z\",\"updatedAt\":\"2026-09-25T00:14:43.419Z\"},\"token\":\"apms-s.z1VL1dqeBf7qt"
+   },
+   {
+    "t": 1790295283448,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 401,
+    "req": "{\"bootstrap\":true}",
+    "body": ""
+   },
+   {
+    "t": 1790295283448,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 401,
+    "req": "{\"bootstrap\":true}",
+    "body": ""
+   },
+   {
+    "t": 1790295313679,
+    "m": "POST",
+    "u": "/api/login-locks",
+    "s": 200,
+    "req": "{\"username\":\"hetal.soni\"}",
+    "body": ""
+   },
+   {
+    "t": 1790295343347,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 200,
+    "req": "{\"rows\":[{\"email\":\"adminteam@alienstattoos.com\",\"username\":\"nikhil.pati\",\"password\":\"Jga24FKmmf\",\"name\":\"Nikhil Patil\",\"personId\":\"p-1789386088551-ht5648\"}]}",
+    "body": "{\"ok\":true,\"added\":1,\"sent\":0,\"failed\":[]}"
+   },
+   {
+    "t": 1790295343387,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 200,
+    "req": "{\"rows\":[{\"email\":\"adminteam@alienstattoos.com\",\"username\":\"nikhil.pati\",\"password\":\"Jga24FKmmf\",\"name\":\"Nikhil Patil\",\"personId\":\"p-1789386088551-ht5648\"}]}",
+    "body": "{\"ok\":true,\"added\":1,\"sent\":0,\"failed\":[]}"
+   },
+   {
+    "t": 1790295343397,
+    "m": "POST",
+    "u": "/_serverFn/648bbfb05f1bbf10f407af1e178c50150506c8dfc1e32dd9164bb4017204d6ad",
+    "s": 200,
+    "req": "{\"t\":{\"t\":10,\"i\":0,\"p\":{\"k\":[\"data\",\"context\"],\"v\":[{\"t\":10,\"i\":1,\"p\":{\"k\":[\"rows\",\"origin\"],\"v\":[{\"t\":9,\"i\":2,\"a\":[{\"t\":10,\"i\":3,\"p\":{\"k\":[\"name\",\"email\",\"username\",\"password\"],\"v\":[{\"t\":1,\"s\":\"Nikhil Patil\"},{\"t\":1,\"s\":\"adminteam@alienstattoos.com\"},{\"t\":1,\"s\":\"nikhil.pati\"},{\"t\":1,\"s\":\"Jga24FKmmf\"}]},\"o\":0}],\"o\":0},{\"t\":1,\"s\":\"http://127.0.0.1:3016\"}]},\"o\":0},{\"t\":11,\"i\":4,\"p\":{\"k\":[\"bearerToken\"],\"v\":[{\"t\":2,\"s\":1}]},\"o\":0}]},\"o\":0},\"f\":127,\"m\":[]}",
+    "body": "{\"ok\":true}"
+   },
+   {
+    "t": 1790295344122,
+    "m": "PATCH",
+    "u": "/api/e/logins/nikhil.pati",
+    "s": 200,
+    "req": "{\"payload\":{\"personId\":\"p-1789386088551-ht5648\",\"password\":\"Jga24FKmmf\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7mgbi-wmp602\"}",
+    "body": "{\"ok\":true,\"kind\":\"logins\",\"id\":\"nikhil.pati\",\"k1\":\"nikhil.pati\",\"k2\":null,\"payload\":{\"personId\":\"p-1789386088551-ht5648\"},\"rev\":2,\"deleted\":false,\"seq\":9,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295344195,
+    "m": "PATCH",
+    "u": "/api/people/p-1789386088551-ht5648",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"p-1789386088551-ht5648\",\"dob\":\"1993-10-27\",\"buId\":\"\",\"name\":\"Nikhil Patil\",\"buIds\":[],\"email\":\"adminteam@alienstattoos.com\",\"phone\":\"9867431420\",\"title\":\"Admin Manager\",\"access\":\"employee\",\"roleId\":\"role-1789386121957-8dje\",\"salary\":0,\"status\":\"active\",\"brandId\":\"\",\"brandIds\":[],\"lastName\":\"Patil\",\"username\":\"nikhil.pati\",\"companyId\":\"co-1788157763300\",\"createdAt\":\"2026-09-14T11:41:28.551Z\",\"firstName\":\"Nikhil\",\"managerId\":\"p-1788346069529\",\"updatedAt\":1790295343190,\"apmsPlanId\":null,\"dottedLine\":[],\"functionId\":\"fn-1788346069526-imno\",\"gateUnitId\":\"\",\"companyWide\":false,\"rol",
+    "body": "{\"ok\":true,\"table\":\"people\",\"id\":\"p-1789386088551-ht5648\",\"payload\":{\"id\":\"p-1789386088551-ht5648\",\"dob\":\"1993-10-27\",\"buId\":\"\",\"name\":\"Nikhil Patil\",\"buIds\":[],\"email\":\"adminteam@alienstattoos.com\",\"phone\":\"9867431420\",\"title\":\"Admin Manager\",\"access\":\"employee\",\"roleId\":\"role-1789386121957-8dje\",\"salary\":0,\"status\":\"active\",\"brandId\":\"\",\"brandIds\":[],\"lastName\":\"Patil\",\"username\":\"nikhil.pati\",\""
+   },
+   {
+    "t": 1790295344379,
+    "m": "PATCH",
+    "u": "/api/company",
+    "s": 200,
+    "req": "{\"books\":{\"org\":{\"companies\":[{\"id\":\"co-1788157763300\",\"name\":\"Aliens\"}],\"brands\":[{\"id\":\"br-1788157805529-kyim\",\"name\":\"Aliens Tattoo School\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157792728-9704\",\"name\":\"Aliens Home\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157786313-vyun\",\"name\":\"Aliens Tattoo\",\"companyId\":\"co-1788157763300\"}],\"businessUnits\":[{\"id\":\"bu-1788157820845-0q13\",\"kind\":\"network\",\"name\":\"LILA\",\"brandId\":\"br-1788157805529-kyim\",\"isGroup\":false,\"parentId\":null},{\"id\":\"bu-1788157842376-6lnd\",\"kind\":\"network\",\"name\":\"Aliens Tattoo School\",\"brandId\":\"br-1788157805529-kyim\",",
+    "body": "{\"ok\":true,\"applied\":[\"org\"],\"conflict\":[],\"skipped\":[\"plans\",\"months\",\"targets\"],\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"notebookUpdatedAt\":1790295344243}"
+   },
+   {
+    "t": 1790295454843,
+    "m": "PATCH",
+    "u": "/api/people/p-1789386088551-ht5648",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"p-1789386088551-ht5648\",\"dob\":\"1993-10-27\",\"buId\":\"\",\"name\":\"Nikhil Patil\",\"buIds\":[],\"email\":\"adminteam@alienstattoos.com\",\"phone\":\"9895442145\",\"title\":\"Admin Manager\",\"access\":\"employee\",\"roleId\":\"role-1789386121957-8dje\",\"salary\":0,\"status\":\"active\",\"brandId\":\"\",\"brandIds\":[],\"lastName\":\"Patil\",\"username\":\"nikhil.pati\",\"companyId\":\"co-1788157763300\",\"createdAt\":\"2026-09-14T11:41:28.551Z\",\"firstName\":\"Nikhil\",\"managerId\":\"p-1788346069529\",\"updatedAt\":1790295454038,\"apmsPlanId\":null,\"dottedLine\":[],\"functionId\":\"fn-1788346069526-imno\",\"gateUnitId\":\"\",\"companyWide\":false,\"rol",
+    "body": "{\"ok\":true,\"table\":\"people\",\"id\":\"p-1789386088551-ht5648\",\"payload\":{\"id\":\"p-1789386088551-ht5648\",\"dob\":\"1993-10-27\",\"buId\":\"\",\"name\":\"Nikhil Patil\",\"buIds\":[],\"email\":\"adminteam@alienstattoos.com\",\"phone\":\"9895442145\",\"title\":\"Admin Manager\",\"access\":\"employee\",\"roleId\":\"role-1789386121957-8dje\",\"salary\":0,\"status\":\"active\",\"brandId\":\"\",\"brandIds\":[],\"lastName\":\"Patil\",\"username\":\"nikhil.pati\",\""
+   },
+   {
+    "t": 1790295454935,
+    "m": "PATCH",
+    "u": "/api/company",
+    "s": 200,
+    "req": "{\"books\":{\"org\":{\"companies\":[{\"id\":\"co-1788157763300\",\"name\":\"Aliens\"}],\"brands\":[{\"id\":\"br-1788157805529-kyim\",\"name\":\"Aliens Tattoo School\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157792728-9704\",\"name\":\"Aliens Home\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157786313-vyun\",\"name\":\"Aliens Tattoo\",\"companyId\":\"co-1788157763300\"}],\"businessUnits\":[{\"id\":\"bu-1788157820845-0q13\",\"kind\":\"network\",\"name\":\"LILA\",\"brandId\":\"br-1788157805529-kyim\",\"isGroup\":false,\"parentId\":null},{\"id\":\"bu-1788157842376-6lnd\",\"kind\":\"network\",\"name\":\"Aliens Tattoo School\",\"brandId\":\"br-1788157805529-kyim\",",
+    "body": "{\"ok\":true,\"applied\":[\"org\"],\"conflict\":[],\"skipped\":[\"plans\",\"months\",\"targets\"],\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"notebookUpdatedAt\":1790295454838}"
+   },
+   {
+    "t": 1790295498854,
+    "m": "PATCH",
+    "u": "/api/people/p-1788170412177",
+    "s": 409,
+    "req": "{\"payload\":{\"id\":\"p-1788170412177\",\"dob\":\"1995-04-26\",\"buId\":\"bu-1788158738241-88op\",\"name\":\"Soham Devasar\",\"buIds\":[\"bu-1788158738241-88op\"],\"email\":\"soham.aliens@gmail.com\",\"phone\":\"9795498003\",\"title\":\"Sr Creative Executive\",\"access\":\"employee\",\"roleId\":\"role-1788169884042-8vbf\",\"salary\":784800,\"status\":\"active\",\"brandId\":\"br-1788157786313-vyun\",\"brandIds\":[\"br-1788157786313-vyun\"],\"joinDate\":\"1995-04-26\",\"lastName\":\"Devasar\",\"location\":\"Mumbai\",\"username\":\"soham.deva\",\"companyId\":\"co-1788157763300\",\"createdAt\":\"2026-08-31T10:00:12.177Z\",\"firstName\":\"Soham\",\"managerId\":\"p-1788170605272\",\"up",
+    "body": "{\"ok\":false,\"table\":\"people\",\"id\":\"p-1788170412177\",\"payload\":{\"id\":\"p-1788170412177\",\"dob\":\"1995-04-26\",\"buId\":\"bu-1788158738241-88op\",\"name\":\"Soham Devasar\",\"buIds\":[\"bu-1788158738241-88op\"],\"email\":\"soham.aliens@gmail.com\",\"phone\":\"9833812102\",\"title\":\"Sr Creative Executive\",\"access\":\"employee\",\"roleId\":\"role-1788169884042-8vbf\",\"salary\":784800,\"status\":\"active\",\"brandId\":\"br-1788157786313-vyun"
+   },
+   {
+    "t": 1790295498945,
+    "m": "PATCH",
+    "u": "/api/people/p-1788170412177",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"p-1788170412177\",\"dob\":\"1995-04-26\",\"buId\":\"bu-1788158738241-88op\",\"name\":\"Soham Devasar\",\"buIds\":[\"bu-1788158738241-88op\"],\"email\":\"soham.aliens@gmail.com\",\"phone\":\"9795498003\",\"title\":\"Sr Creative Executive\",\"access\":\"employee\",\"roleId\":\"role-1788169884042-8vbf\",\"salary\":784800,\"status\":\"active\",\"brandId\":\"br-1788157786313-vyun\",\"brandIds\":[\"br-1788157786313-vyun\"],\"joinDate\":\"1995-04-26\",\"lastName\":\"Devasar\",\"location\":\"F-loc agx17\",\"username\":\"soham.deva\",\"companyId\":\"co-1788157763300\",\"createdAt\":\"2026-08-31T10:00:12.177Z\",\"firstName\":\"Soham\",\"managerId\":\"p-1788170605272",
+    "body": "{\"ok\":true,\"table\":\"people\",\"id\":\"p-1788170412177\",\"payload\":{\"id\":\"p-1788170412177\",\"dob\":\"1995-04-26\",\"buId\":\"bu-1788158738241-88op\",\"name\":\"Soham Devasar\",\"buIds\":[\"bu-1788158738241-88op\"],\"email\":\"soham.aliens@gmail.com\",\"phone\":\"9795498003\",\"title\":\"Sr Creative Executive\",\"access\":\"employee\",\"roleId\":\"role-1788169884042-8vbf\",\"salary\":784800,\"status\":\"active\",\"brandId\":\"br-1788157786313-vyun\""
+   },
+   {
+    "t": 1790295499070,
+    "m": "PATCH",
+    "u": "/api/company",
+    "s": 200,
+    "req": "{\"books\":{\"org\":{\"companies\":[{\"id\":\"co-1788157763300\",\"name\":\"Aliens\"}],\"brands\":[{\"id\":\"br-1788157805529-kyim\",\"name\":\"Aliens Tattoo School\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157792728-9704\",\"name\":\"Aliens Home\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157786313-vyun\",\"name\":\"Aliens Tattoo\",\"companyId\":\"co-1788157763300\"}],\"businessUnits\":[{\"id\":\"bu-1788157820845-0q13\",\"kind\":\"network\",\"name\":\"LILA\",\"brandId\":\"br-1788157805529-kyim\",\"isGroup\":false,\"parentId\":null},{\"id\":\"bu-1788157842376-6lnd\",\"kind\":\"network\",\"name\":\"Aliens Tattoo School\",\"brandId\":\"br-1788157805529-kyim\",",
+    "body": "{\"ok\":true,\"applied\":[\"org\"],\"conflict\":[],\"skipped\":[\"plans\",\"months\",\"targets\"],\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"notebookUpdatedAt\":1790295498920}"
+   },
+   {
+    "t": 1790295506164,
+    "m": "POST",
+    "u": "/api/issued-logins",
+    "s": 200,
+    "req": "{\"rows\":[{\"username\":\"nikhil.pati\",\"password\":\"Jga24FKmmf\",\"personId\":\"p-1789386088551-ht5648\",\"name\":\"Nikhil Patil\",\"email\":\"adminteam@alienstattoos.com\"}]}",
+    "body": ""
+   },
+   {
+    "t": 1790295522672,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 409,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7q9ojx2ro\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":0,\"clientOpId\":\"ent-mug7qa7p-bcbv6h\"}",
+    "body": "{\"ok\":false,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":1,\"deleted\":false,\"error\":\"stale\"}"
+   },
+   {
+    "t": 1790295522704,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7q9ojx2ro\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":1,\"clientOpId\":\"ent-mug7qa7p-bcbv6h\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7q9ojx2ro\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":2,\"deleted\":false,\"seq\":22,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295522730,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7q9ojx2ro",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7q9ojx2ro\",\"name\":\"TL Link agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:41.923Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7qaa6-1oe77f\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7q9ojx2ro\",\"k1\":\"tn-m-mug7q9ojx2ro\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7q9ojx2ro\",\"name\":\"TL Link agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:41.923Z\"},\"rev\":1,\"deleted\":false,\"seq\":23,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295522832,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7q9ojx2ro%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7q9ojx2ro\",\"month\":\"2026-09\",\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7qaa6-z7bgiy\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7q9ojx2ro::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7q9ojx2ro\",\"month\":\"2026-09\",\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":24}"
+   },
+   {
+    "t": 1790295526615,
+    "m": "PATCH",
+    "u": "/api/reward-records/2026-09/p-1788353125641-e4k6ut",
+    "s": 200,
+    "req": "{\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{\"max\":4,\"min\":4},\"high\":{\"max\":4.5,\"min\":4}},\"target\":4.5,\"weight\":1,\"achieved\":null,\"children\":[],\"isCustom\":true,\"description\":\"Tattoo Art Score Evaluating Artistic Quality, Execution & Technique.\",\"isQualifier\":false,\"lowerIsBetter\":false}],\"name\":\"Art Score\",\"weight\":0.6,\"responsibilit",
+    "body": "{\"ok\":true,\"table\":\"reward_records\",\"period\":\"2026-09\",\"personId\":\"p-1788353125641-e4k6ut\",\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{"
+   },
+   {
+    "t": 1790295526615,
+    "m": "PATCH",
+    "u": "/api/reward-records/2026-09/p-1788353125713-lbkxtm",
+    "s": 200,
+    "req": "{\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{\"max\":4,\"min\":4},\"high\":{\"max\":4.5,\"min\":4}},\"target\":4.5,\"weight\":1,\"achieved\":null,\"children\":[],\"isCustom\":true,\"description\":\"Tattoo Art Score Evaluating Artistic Quality, Execution & Technique.\",\"isQualifier\":false,\"lowerIsBetter\":false}],\"name\":\"Art Score\",\"weight\":0.6,\"responsibilit",
+    "body": "{\"ok\":true,\"table\":\"reward_records\",\"period\":\"2026-09\",\"personId\":\"p-1788353125713-lbkxtm\",\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{"
+   },
+   {
+    "t": 1790295538032,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":2,\"clientOpId\":\"ent-mug7qm1c-kesyhi\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":3,\"deleted\":false,\"seq\":27,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295538058,
+    "m": "PATCH",
+    "u": "/api/e/trash/tr-1790295537250-9fyn",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tr-1790295537250-9fyn\",\"kind\":\"target\",\"label\":\"TL Link agx16 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:18:57.251Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-m-mug7q9ojx2ro:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-m-mug7q9ojx2ro::2026-09\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"nodeId\":\"tn-m-mug7q9ojx2ro\",\"status\":\"open\",\"id\":\"tn-m-mug7q9ojx2ro::2026-09\"}},\"targetMembers\":[],\"targetNodes\":{\"tn-m-mug7q9ojx2ro\":{\"id\":\"tn-m-mug7q9ojx2ro\",\"kind\":\"leaf\",\"name\":\"TL Link agx16\",\"sbuId\"",
+    "body": "{\"ok\":true,\"kind\":\"trash\",\"id\":\"tr-1790295537250-9fyn\",\"k1\":\"tr-1790295537250-9fyn\",\"k2\":null,\"payload\":{\"id\":\"tr-1790295537250-9fyn\",\"kind\":\"target\",\"label\":\"TL Link agx16 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:18:57.251Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-m-mug7q9ojx2ro:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-m-mug7q9ojx2ro::2026-09\":{\"mode\":\"set\",\"month\":\"2026-0"
+   },
+   {
+    "t": 1790295538058,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7q9ojx2ro%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"nodeId\":\"tn-m-mug7q9ojx2ro\",\"status\":\"open\",\"id\":\"tn-m-mug7q9ojx2ro::2026-09\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7qm2z-bwb4kr\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7q9ojx2ro::2026-09\",\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"nodeId\":\"tn-m-mug7q9ojx2ro\",\"status\":\"open\",\"id\":\"tn-m-mug7q9ojx2ro::2026-09\"},\"rev\":2,\"deleted\":true,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":29}"
+   },
+   {
+    "t": 1790295538058,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7q9ojx2ro",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7q9ojx2ro\",\"kind\":\"leaf\",\"name\":\"TL Link agx16\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:41.923Z\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7qm2z-zop5o5\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7q9ojx2ro\",\"k1\":\"tn-m-mug7q9ojx2ro\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7q9ojx2ro\",\"kind\":\"leaf\",\"name\":\"TL Link agx16\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:41.923Z\"},\"rev\":2,\"deleted\":true,\"seq\":30,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295539838,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7qmwptkkd\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":3,\"clientOpId\":\"ent-mug7qnfo-xbaz0d\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7qmwptkkd\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":4,\"deleted\":false,\"seq\":31,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295539884,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7qmwptkkd",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7qmwptkkd\",\"name\":\"TL Plain agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:59.065Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7qni1-yzle9r\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7qmwptkkd\",\"k1\":\"tn-m-mug7qmwptkkd\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7qmwptkkd\",\"name\":\"TL Plain agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:59.065Z\"},\"rev\":1,\"deleted\":false,\"seq\":32,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295539994,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7qmwptkkd%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7qmwptkkd\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7qni0-h8btsz\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7qmwptkkd::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7qmwptkkd\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":33}"
+   },
+   {
+    "t": 1790295542063,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":4,\"clientOpId\":\"ent-mug7qp5b-mt1ycg\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":5,\"deleted\":false,\"seq\":34,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295542100,
+    "m": "PATCH",
+    "u": "/api/e/trash/tr-1790295541283-nyvi",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tr-1790295541283-nyvi\",\"kind\":\"target\",\"label\":\"TL Plain agx16 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:19:01.283Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-m-mug7qmwptkkd:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-m-mug7qmwptkkd::2026-09\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"nodeId\":\"tn-m-mug7qmwptkkd\",\"status\":\"open\",\"id\":\"tn-m-mug7qmwptkkd::2026-09\"}},\"targetMembers\":[],\"targetNodes\":{\"tn-m-mug7qmwptkkd\":{\"id\":\"tn-m-mug7qmwptkkd\",\"kind\":\"leaf\",\"name\":\"TL Plain agx16\",\"sbuI",
+    "body": "{\"ok\":true,\"kind\":\"trash\",\"id\":\"tr-1790295541283-nyvi\",\"k1\":\"tr-1790295541283-nyvi\",\"k2\":null,\"payload\":{\"id\":\"tr-1790295541283-nyvi\",\"kind\":\"target\",\"label\":\"TL Plain agx16 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:19:01.283Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-m-mug7qmwptkkd:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-m-mug7qmwptkkd::2026-09\":{\"mode\":\"set\",\"month\":\"2026-"
+   },
+   {
+    "t": 1790295542100,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7qmwptkkd%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"nodeId\":\"tn-m-mug7qmwptkkd\",\"status\":\"open\",\"id\":\"tn-m-mug7qmwptkkd::2026-09\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7qp7q-9voy6r\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7qmwptkkd::2026-09\",\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"nodeId\":\"tn-m-mug7qmwptkkd\",\"status\":\"open\",\"id\":\"tn-m-mug7qmwptkkd::2026-09\"},\"rev\":2,\"deleted\":true,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":36}"
+   },
+   {
+    "t": 1790295542100,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7qmwptkkd",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7qmwptkkd\",\"kind\":\"leaf\",\"name\":\"TL Plain agx16\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:59.065Z\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7qp7r-1a6on1\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7qmwptkkd\",\"k1\":\"tn-m-mug7qmwptkkd\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7qmwptkkd\",\"kind\":\"leaf\",\"name\":\"TL Plain agx16\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:18:59.065Z\"},\"rev\":2,\"deleted\":true,\"seq\":37,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295578205,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7rghyc4xg\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":5,\"clientOpId\":\"ent-mug7rh18-npviuk\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7rghyc4xg\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":6,\"deleted\":false,\"seq\":40,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295578238,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7rghyc4xg",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7rghyc4xg\",\"name\":\"TL Link agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:19:37.415Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7rh3p-s43y7m\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7rghyc4xg\",\"k1\":\"tn-m-mug7rghyc4xg\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7rghyc4xg\",\"name\":\"TL Link agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:19:37.415Z\"},\"rev\":1,\"deleted\":false,\"seq\":41,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295578280,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7rghyc4xg%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7rghyc4xg\",\"month\":\"2026-09\",\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7rh3p-ivmqqb\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7rghyc4xg::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7rghyc4xg\",\"month\":\"2026-09\",\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":42}"
+   },
+   {
+    "t": 1790295581914,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":6,\"clientOpId\":\"ent-mug7rjyh-1sdqat\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":7,\"deleted\":false,\"seq\":43,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295581928,
+    "m": "PATCH",
+    "u": "/api/e/trash/tr-1790295581214-8l6c",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tr-1790295581214-8l6c\",\"kind\":\"target\",\"label\":\"TL Link agx16 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:19:41.214Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-m-mug7rghyc4xg:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-m-mug7rghyc4xg::2026-09\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"nodeId\":\"tn-m-mug7rghyc4xg\",\"status\":\"open\",\"id\":\"tn-m-mug7rghyc4xg::2026-09\"}},\"targetMembers\":[],\"targetNodes\":{\"tn-m-mug7rghyc4xg\":{\"id\":\"tn-m-mug7rghyc4xg\",\"kind\":\"leaf\",\"name\":\"TL Link agx16\",\"sbuId\"",
+    "body": "{\"ok\":true,\"kind\":\"trash\",\"id\":\"tr-1790295581214-8l6c\",\"k1\":\"tr-1790295581214-8l6c\",\"k2\":null,\"payload\":{\"id\":\"tr-1790295581214-8l6c\",\"kind\":\"target\",\"label\":\"TL Link agx16 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:19:41.214Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-m-mug7rghyc4xg:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-m-mug7rghyc4xg::2026-09\":{\"mode\":\"set\",\"month\":\"2026-0"
+   },
+   {
+    "t": 1790295581929,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7rghyc4xg%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"nodeId\":\"tn-m-mug7rghyc4xg\",\"status\":\"open\",\"id\":\"tn-m-mug7rghyc4xg::2026-09\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7rjyu-1uayyt\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7rghyc4xg::2026-09\",\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"nodeId\":\"tn-m-mug7rghyc4xg\",\"status\":\"open\",\"id\":\"tn-m-mug7rghyc4xg::2026-09\"},\"rev\":2,\"deleted\":true,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":45}"
+   },
+   {
+    "t": 1790295581952,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7rghyc4xg",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7rghyc4xg\",\"kind\":\"leaf\",\"name\":\"TL Link agx16\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:19:37.415Z\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7rjyv-hdlkea\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7rghyc4xg\",\"k1\":\"tn-m-mug7rghyc4xg\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7rghyc4xg\",\"kind\":\"leaf\",\"name\":\"TL Link agx16\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:19:37.415Z\"},\"rev\":2,\"deleted\":true,\"seq\":46,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295583653,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":7,\"clientOpId\":\"ent-mug7rl8t-ldauot\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":8,\"deleted\":false,\"seq\":47,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295583708,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7rkpt1fr2",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7rkpt1fr2\",\"name\":\"TL Link agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:19:42.881Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7rlb7-mhsr2e\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7rkpt1fr2\",\"k1\":\"tn-m-mug7rkpt1fr2\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7rkpt1fr2\",\"name\":\"TL Link agx16\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:19:42.881Z\"},\"rev\":1,\"deleted\":false,\"seq\":48,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295583965,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7rkpt1fr2%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7rkpt1fr2\",\"month\":\"2026-09\",\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7rlb6-rw0r9z\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7rkpt1fr2::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7rkpt1fr2\",\"month\":\"2026-09\",\"ladder\":{\"M1\":400000,\"M2\":450000,\"M3\":500000,\"M4\":550000,\"M5\":600000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":49}"
+   },
+   {
+    "t": 1790295584722,
+    "m": "PATCH",
+    "u": "/api/reward-records/2026-09/p-1788353125713-lbkxtm",
+    "s": 200,
+    "req": "{\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{\"max\":4,\"min\":4},\"high\":{\"max\":4.5,\"min\":4}},\"target\":4.5,\"weight\":1,\"achieved\":null,\"children\":[],\"isCustom\":true,\"description\":\"Tattoo Art Score Evaluating Artistic Quality, Execution & Technique.\",\"isQualifier\":false,\"lowerIsBetter\":false}],\"name\":\"Art Score\",\"weight\":0.6,\"responsibilit",
+    "body": "{\"ok\":true,\"table\":\"reward_records\",\"period\":\"2026-09\",\"personId\":\"p-1788353125713-lbkxtm\",\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{"
+   },
+   {
+    "t": 1790295591590,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-3-63t328%3A%3A2026-09",
+    "s": 409,
+    "req": "{\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"nodeId\":\"tn-imp-3-63t328\",\"status\":\"locked\",\"snapshot\":{\"at\":\"2026-09-17T05:48:56.646Z\",\"by\":\"p-1788350767356-zncdvn\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"memberIds\":[]},\"updatedAt\":1789624136646,\"brands\":[],\"kras\":[],\"priorities\":[],\"values\":[],\"rewardFlags\":[],\"authors\":[],\"behaviours\":[]},\"baseRev\":0,\"clientOpId\":\"ent-mug7rrfi-uh7g48\",\"deleted\":true}",
+    "body": "{\"ok\":false,\"table\":\"target_cells\",\"id\":\"tn-imp-3-63t328::2026-09\",\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"nodeId\":\"tn-imp-3-63t328\",\"status\":\"locked\",\"snapshot\":{\"at\":\"2026-09-17T05:48:56.646Z\",\"by\":\"p-1788350767356-zncdvn\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1"
+   },
+   {
+    "t": 1790295591597,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-3-63t328%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"nodeId\":\"tn-imp-3-63t328\",\"status\":\"locked\",\"snapshot\":{\"at\":\"2026-09-17T05:48:56.646Z\",\"by\":\"p-1788350767356-zncdvn\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"memberIds\":[]},\"updatedAt\":1789624136646,\"brands\":[],\"kras\":[],\"priorities\":[],\"values\":[],\"rewardFlags\":[],\"authors\":[],\"behaviours\":[]},\"baseRev\":1,\"clientOpId\":\"ent-mug7rrfi-uh7g48\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-imp-3-63t328::2026-09\",\"payload\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"nodeId\":\"tn-imp-3-63t328\",\"status\":\"locked\",\"snapshot\":{\"at\":\"2026-09-17T05:48:56.646Z\",\"by\":\"p-1788350767356-zncdvn\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":16"
+   },
+   {
+    "t": 1790295591602,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-imp-19-y8xqph%1Ftn-imp-3-63t328%1F2026-09",
+    "s": 409,
+    "req": "{\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-imp-19-y8xqph\",\"memberId\":\"tn-imp-3-63t328\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7rrfv-27fjhs\",\"deleted\":true}",
+    "body": "{\"ok\":false,\"kind\":\"target-members\",\"id\":\"tn-imp-19-y8xqph\\u001ftn-imp-3-63t328\\u001f2026-09\",\"k1\":\"tn-imp-19-y8xqph\\u001ftn-imp-3-63t328\\u001f2026-09\",\"k2\":null,\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-imp-19-y8xqph\",\"memberId\":\"tn-imp-3-63t328\"},\"rev\":1,\"deleted\":false,\"error\":\"stale\"}"
+   },
+   {
+    "t": 1790295591607,
+    "m": "PATCH",
+    "u": "/api/e/trash/tr-1790295590896-il4g",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tr-1790295590896-il4g\",\"kind\":\"target\",\"label\":\"Goa · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:19:50.896Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-imp-3-63t328:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-imp-3-63t328::2026-09\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"nodeId\":\"tn-imp-3-63t328\",\"status\":\"locked\",\"snapshot\":{\"at\":\"2026-09-17T05:48:56.646Z\",\"by\":\"p-1788350767356-zncdvn\",\"actual\":null,\"ladder\":{\"M1\":1100000,\"M2\":1240006,\"M3\":1380013,\"M4\":1520020,\"M5\":1660026},\"memb",
+    "body": "{\"ok\":true,\"kind\":\"trash\",\"id\":\"tr-1790295590896-il4g\",\"k1\":\"tr-1790295590896-il4g\",\"k2\":null,\"payload\":{\"id\":\"tr-1790295590896-il4g\",\"kind\":\"target\",\"label\":\"Goa · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:19:50.896Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-imp-3-63t328:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-imp-3-63t328::2026-09\":{\"mode\":\"set\",\"month\":\"2026-09\",\"actual\":nu"
+   },
+   {
+    "t": 1790295591627,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-imp-19-y8xqph%1Ftn-imp-3-63t328%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-imp-19-y8xqph\",\"memberId\":\"tn-imp-3-63t328\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7rrfv-27fjhs\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-imp-19-y8xqph\\u001ftn-imp-3-63t328\\u001f2026-09\",\"k1\":\"tn-imp-19-y8xqph\\u001ftn-imp-3-63t328\\u001f2026-09\",\"k2\":null,\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-imp-19-y8xqph\",\"memberId\":\"tn-imp-3-63t328\"},\"rev\":2,\"deleted\":true,\"seq\":53,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295593368,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":8,\"clientOpId\":\"ent-mug7rsqs-aap6d0\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":9,\"deleted\":false,\"seq\":54,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295593388,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-3-63t328%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-imp-3-63t328\",\"month\":\"2026-09\",\"ladder\":{\"M1\":1000000,\"M2\":1125000,\"M3\":1250000,\"M4\":1375000,\"M5\":1500000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":2,\"clientOpId\":\"ent-mug7rst2-r9vxra\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-imp-3-63t328::2026-09\",\"payload\":{\"nodeId\":\"tn-imp-3-63t328\",\"month\":\"2026-09\",\"ladder\":{\"M1\":1000000,\"M2\":1125000,\"M3\":1250000,\"M4\":1375000,\"M5\":1500000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":3,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":55}"
+   },
+   {
+    "t": 1790295615017,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":9,\"clientOpId\":\"ent-mug7s9hq-jjbb4c\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":10,\"deleted\":false,\"seq\":56,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295615100,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7s8y0ol25",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7s8y0ol25\",\"name\":\"SG A1 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:14.280Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7s9ib-bilssz\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7s8y0ol25\",\"k1\":\"tn-m-mug7s8y0ol25\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7s8y0ol25\",\"name\":\"SG A1 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:14.280Z\"},\"rev\":1,\"deleted\":false,\"seq\":57,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295615187,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7s8y0ol25%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7s8y0ol25\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7s9i9-1ehdfe\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7s8y0ol25::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7s8y0ol25\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":58}"
+   },
+   {
+    "t": 1790295616015,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7s9q8ct38\",\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":10,\"clientOpId\":\"ent-mug7sa9h-jmku4l\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7s9q8ct38\",\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":11,\"deleted\":false,\"seq\":59,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295616102,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7s9q8ct38",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7s9q8ct38\",\"name\":\"SG A2 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:15.296Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sa9w-s20nj7\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7s9q8ct38\",\"k1\":\"tn-m-mug7s9q8ct38\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7s9q8ct38\",\"name\":\"SG A2 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:15.296Z\"},\"rev\":1,\"deleted\":false,\"seq\":60,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295616103,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7s9q8ct38%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7s9q8ct38\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sa9v-iebtlw\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7s9q8ct38::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7s9q8ct38\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":61}"
+   },
+   {
+    "t": 1790295617035,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7saihn86q\",\"tn-m-mug7s9q8ct38\",\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":11,\"clientOpId\":\"ent-mug7sb1v-9g9s0e\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7saihn86q\",\"tn-m-mug7s9q8ct38\",\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":12,\"deleted\":false,\"seq\":62,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295617069,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7saihn86q",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7saihn86q\",\"name\":\"SG B1 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:16.313Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sb2f-pn6l2x\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7saihn86q\",\"k1\":\"tn-m-mug7saihn86q\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7saihn86q\",\"name\":\"SG B1 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:16.313Z\"},\"rev\":1,\"deleted\":false,\"seq\":63,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295617145,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7saihn86q%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7saihn86q\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sb2f-rl8696\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7saihn86q::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7saihn86q\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":64}"
+   },
+   {
+    "t": 1790295618147,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7sbbpdoad\",\"tn-m-mug7saihn86q\",\"tn-m-mug7s9q8ct38\",\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":12,\"clientOpId\":\"ent-mug7sbuv-4qeool\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7sbbpdoad\",\"tn-m-mug7saihn86q\",\"tn-m-mug7s9q8ct38\",\"tn-m-mug7s8y0ol25\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":13,\"deleted\":false,\"seq\":65,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295618160,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-m-mug7sbbpdoad",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-m-mug7sbbpdoad\",\"name\":\"SG B2 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:17.365Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sbxa-68302m\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-m-mug7sbbpdoad\",\"k1\":\"tn-m-mug7sbbpdoad\",\"k2\":null,\"payload\":{\"id\":\"tn-m-mug7sbbpdoad\",\"name\":\"SG B2 gx18\",\"metric\":\"rupees\",\"kind\":\"leaf\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:17.365Z\"},\"rev\":1,\"deleted\":false,\"seq\":66,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295618178,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-m-mug7sbbpdoad%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-m-mug7sbbpdoad\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sbxa-kr22yk\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-m-mug7sbbpdoad::2026-09\",\"payload\":{\"nodeId\":\"tn-m-mug7sbbpdoad\",\"month\":\"2026-09\",\"ladder\":{\"M1\":100000,\"M2\":125000,\"M3\":150000,\"M4\":175000,\"M5\":200000},\"actual\":null,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":67}"
+   },
+   {
+    "t": 1790295620239,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-m-mug7sbbpdoad\",\"tn-m-mug7saihn86q\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\",\"tn-g-mug7sczzzkpp\"]},\"baseRev\":13,\"clientOpId\":\"ent-mug7sdj5-ddbg9o\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-m-mug7sbbpdoad\",\"tn-m-mug7saihn86q\",\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\",\"tn-g-mug7sczzzkpp\"]},\"rev\":14,\"deleted\":false,\"seq\":68,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295620308,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-g-mug7sczzzkpp%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-g-mug7sczzzkpp\",\"month\":\"2026-09\",\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"actual\":null,\"mode\":\"roll\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sdji-ocqhre\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-g-mug7sczzzkpp::2026-09\",\"payload\":{\"nodeId\":\"tn-g-mug7sczzzkpp\",\"month\":\"2026-09\",\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"actual\":null,\"mode\":\"roll\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":69}"
+   },
+   {
+    "t": 1790295620342,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sczzzkpp%1Ftn-m-mug7s8y0ol25%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s8y0ol25\",\"month\":\"2026-09\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sdlc-0bfval\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s8y0ol25\\u001f2026-09\",\"k1\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s8y0ol25\\u001f2026-09\",\"k2\":null,\"payload\":{\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s8y0ol25\",\"month\":\"2026-09\"},\"rev\":1,\"deleted\":false,\"seq\":70,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295620342,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-g-mug7sczzzkpp",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-g-mug7sczzzkpp\",\"name\":\"SG G1 gx18\",\"metric\":\"rupees\",\"kind\":\"group\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:19.535Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sdlc-gk7p7i\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-g-mug7sczzzkpp\",\"k1\":\"tn-g-mug7sczzzkpp\",\"k2\":null,\"payload\":{\"id\":\"tn-g-mug7sczzzkpp\",\"name\":\"SG G1 gx18\",\"metric\":\"rupees\",\"kind\":\"group\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:19.535Z\"},\"rev\":1,\"deleted\":false,\"seq\":71,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295620343,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sczzzkpp%1Ftn-m-mug7s9q8ct38%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s9q8ct38\",\"month\":\"2026-09\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sdld-klivvx\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s9q8ct38\\u001f2026-09\",\"k1\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s9q8ct38\\u001f2026-09\",\"k2\":null,\"payload\":{\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s9q8ct38\",\"month\":\"2026-09\"},\"rev\":1,\"deleted\":false,\"seq\":72,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295637341,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\",\"tn-g-mug7sczzzkpp\"]},\"baseRev\":15,\"clientOpId\":\"ent-mug7sqpy-6ck8ag\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\",\"tn-g-mug7sczzzkpp\"]},\"rev\":16,\"deleted\":false,\"seq\":78,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295637349,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-g-mug7sdtxgx0e%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"mode\":\"roll\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"nodeId\":\"tn-g-mug7sdtxgx0e\",\"status\":\"open\",\"id\":\"tn-g-mug7sdtxgx0e::2026-09\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7sqqj-gts7iq\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-g-mug7sdtxgx0e::2026-09\",\"payload\":{\"mode\":\"roll\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"nodeId\":\"tn-g-mug7sdtxgx0e\",\"status\":\"open\",\"id\":\"tn-g-mug7sdtxgx0e::2026-09\"},\"rev\":2,\"deleted\":true,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":79}"
+   },
+   {
+    "t": 1790295637364,
+    "m": "PATCH",
+    "u": "/api/e/trash/tr-1790295636595-hxcl",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tr-1790295636595-hxcl\",\"kind\":\"target\",\"label\":\"SG G2 gx18 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:20:36.595Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-g-mug7sdtxgx0e:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-g-mug7sdtxgx0e::2026-09\":{\"mode\":\"roll\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"nodeId\":\"tn-g-mug7sdtxgx0e\",\"status\":\"open\",\"id\":\"tn-g-mug7sdtxgx0e::2026-09\"}},\"targetMembers\":[{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7sbbpdoad\"},{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sdtxgx0e\",\"mem",
+    "body": "{\"ok\":true,\"kind\":\"trash\",\"id\":\"tr-1790295636595-hxcl\",\"k1\":\"tr-1790295636595-hxcl\",\"k2\":null,\"payload\":{\"id\":\"tr-1790295636595-hxcl\",\"kind\":\"target\",\"label\":\"SG G2 gx18 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:20:36.595Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-g-mug7sdtxgx0e:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-g-mug7sdtxgx0e::2026-09\":{\"mode\":\"roll\",\"month\":\"2026-09\""
+   },
+   {
+    "t": 1790295637374,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-g-mug7sdtxgx0e",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-g-mug7sdtxgx0e\",\"kind\":\"group\",\"name\":\"SG G2 gx18\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:20.613Z\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7sqqr-zxt5fg\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-g-mug7sdtxgx0e\",\"k1\":\"tn-g-mug7sdtxgx0e\",\"k2\":null,\"payload\":{\"id\":\"tn-g-mug7sdtxgx0e\",\"kind\":\"group\",\"name\":\"SG G2 gx18\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:20.613Z\"},\"rev\":2,\"deleted\":true,\"seq\":81,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295637404,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sdtxgx0e%1Ftn-m-mug7saihn86q%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7saihn86q\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7sqqr-zfwl4v\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7saihn86q\\u001f2026-09\",\"k1\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7saihn86q\\u001f2026-09\",\"k2\":null,\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7saihn86q\"},\"rev\":2,\"deleted\":true,\"seq\":83,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295637452,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sdtxgx0e%1Ftn-m-mug7sbbpdoad%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7sbbpdoad\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7sqqr-j7f9ud\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7sbbpdoad\\u001f2026-09\",\"k1\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7sbbpdoad\\u001f2026-09\",\"k2\":null,\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7sbbpdoad\"},\"rev\":2,\"deleted\":true,\"seq\":82,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295638694,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"baseRev\":16,\"clientOpId\":\"ent-mug7srrl-kn6ucv\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\"]},\"rev\":17,\"deleted\":false,\"seq\":84,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295638711,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-g-mug7sczzzkpp%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"mode\":\"roll\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"nodeId\":\"tn-g-mug7sczzzkpp\",\"status\":\"open\",\"id\":\"tn-g-mug7sczzzkpp::2026-09\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7srs4-04w1j2\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-g-mug7sczzzkpp::2026-09\",\"payload\":{\"mode\":\"roll\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"nodeId\":\"tn-g-mug7sczzzkpp\",\"status\":\"open\",\"id\":\"tn-g-mug7sczzzkpp::2026-09\"},\"rev\":2,\"deleted\":true,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":85}"
+   },
+   {
+    "t": 1790295638787,
+    "m": "PATCH",
+    "u": "/api/e/trash/tr-1790295637977-ha78",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tr-1790295637977-ha78\",\"kind\":\"target\",\"label\":\"SG G1 gx18 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:20:37.977Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-g-mug7sczzzkpp:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-g-mug7sczzzkpp::2026-09\":{\"mode\":\"roll\",\"month\":\"2026-09\",\"actual\":null,\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"nodeId\":\"tn-g-mug7sczzzkpp\",\"status\":\"open\",\"id\":\"tn-g-mug7sczzzkpp::2026-09\"}},\"targetMembers\":[{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s8y0ol25\"},{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sczzzkpp\",\"mem",
+    "body": "{\"ok\":true,\"kind\":\"trash\",\"id\":\"tr-1790295637977-ha78\",\"k1\":\"tr-1790295637977-ha78\",\"k2\":null,\"payload\":{\"id\":\"tr-1790295637977-ha78\",\"kind\":\"target\",\"label\":\"SG G1 gx18 · 2026-09 · Targets\",\"deletedAt\":\"2026-09-25T00:20:37.977Z\",\"deletedBy\":\"p-admin\",\"deletedByName\":\"Sunny\",\"ids\":[\"tn-g-mug7sczzzkpp:2026-09\"],\"snapshot\":{\"targetCells\":{\"tn-g-mug7sczzzkpp::2026-09\":{\"mode\":\"roll\",\"month\":\"2026-09\""
+   },
+   {
+    "t": 1790295638788,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sczzzkpp%1Ftn-m-mug7s9q8ct38%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s9q8ct38\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7srsj-j1maip\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s9q8ct38\\u001f2026-09\",\"k1\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s9q8ct38\\u001f2026-09\",\"k2\":null,\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s9q8ct38\"},\"rev\":2,\"deleted\":true,\"seq\":88,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295638788,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sczzzkpp%1Ftn-m-mug7s8y0ol25%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s8y0ol25\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7srsj-9gxm4p\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s8y0ol25\\u001f2026-09\",\"k1\":\"tn-g-mug7sczzzkpp\\u001ftn-m-mug7s8y0ol25\\u001f2026-09\",\"k2\":null,\"payload\":{\"month\":\"2026-09\",\"groupId\":\"tn-g-mug7sczzzkpp\",\"memberId\":\"tn-m-mug7s8y0ol25\"},\"rev\":2,\"deleted\":true,\"seq\":89,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295638788,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-g-mug7sczzzkpp",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-g-mug7sczzzkpp\",\"kind\":\"group\",\"name\":\"SG G1 gx18\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:19.535Z\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7srsj-e0vw4p\",\"deleted\":true}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-g-mug7sczzzkpp\",\"k1\":\"tn-g-mug7sczzzkpp\",\"k2\":null,\"payload\":{\"id\":\"tn-g-mug7sczzzkpp\",\"kind\":\"group\",\"name\":\"SG G1 gx18\",\"sbuId\":null,\"metric\":\"rupees\",\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:19.535Z\"},\"rev\":2,\"deleted\":true,\"seq\":86,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295650432,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2027-05",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-1-vemeqv\",\"tn-imp-2-1h2wj9\"]},\"baseRev\":0,\"clientOpId\":\"ent-mug7t0th-d2pzz4\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2027-05\",\"k1\":\"2027-05\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-1-vemeqv\",\"tn-imp-2-1h2wj9\"]},\"rev\":1,\"deleted\":false,\"seq\":90,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295650509,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-imp-1-vemeqv",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-imp-1-vemeqv\",\"name\":\"IB One gx18\",\"kind\":\"leaf\",\"metric\":\"rupees\",\"sbuId\":null,\"brandId\":\"\",\"companyId\":null,\"createdAt\":\"2026-09-25T00:20:49.726Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7t0u6-c65uoi\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-imp-1-vemeqv\",\"k1\":\"tn-imp-1-vemeqv\",\"k2\":null,\"payload\":{\"id\":\"tn-imp-1-vemeqv\",\"name\":\"IB One gx18\",\"kind\":\"leaf\",\"metric\":\"rupees\",\"sbuId\":null,\"brandId\":\"\",\"companyId\":null,\"createdAt\":\"2026-09-25T00:20:49.726Z\"},\"rev\":1,\"deleted\":false,\"seq\":91,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295650509,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-2-1h2wj9%3A%3A2027-05",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-imp-2-1h2wj9\",\"month\":\"2027-05\",\"ladder\":{\"M1\":200000,\"M2\":210000,\"M3\":220000,\"M4\":230000,\"M5\":240000},\"actual\":5000,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7t0u5-b12379\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-imp-2-1h2wj9::2027-05\",\"payload\":{\"nodeId\":\"tn-imp-2-1h2wj9\",\"month\":\"2027-05\",\"ladder\":{\"M1\":200000,\"M2\":210000,\"M3\":220000,\"M4\":230000,\"M5\":240000},\"actual\":5000,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":93}"
+   },
+   {
+    "t": 1790295650524,
+    "m": "PATCH",
+    "u": "/api/e/target-month-status/2027-05",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":\"plan_open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7t0u6-8wdvq1\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-month-status\",\"id\":\"2027-05\",\"k1\":\"2027-05\",\"k2\":null,\"payload\":{\"value\":\"plan_open\"},\"rev\":1,\"deleted\":false,\"seq\":94,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295650524,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-1-vemeqv%3A%3A2027-05",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-imp-1-vemeqv\",\"month\":\"2027-05\",\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":120000,\"M4\":130000,\"M5\":140000},\"actual\":90000,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7t0u5-4dxi3x\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-imp-1-vemeqv::2027-05\",\"payload\":{\"nodeId\":\"tn-imp-1-vemeqv\",\"month\":\"2027-05\",\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":120000,\"M4\":130000,\"M5\":140000},\"actual\":90000,\"mode\":\"set\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":92}"
+   },
+   {
+    "t": 1790295650524,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-imp-2-1h2wj9",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-imp-2-1h2wj9\",\"name\":\"IB Two gx18\",\"kind\":\"leaf\",\"metric\":\"rupees\",\"sbuId\":null,\"brandId\":\"\",\"companyId\":null,\"createdAt\":\"2026-09-25T00:20:49.726Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7t0u6-dngivh\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-imp-2-1h2wj9\",\"k1\":\"tn-imp-2-1h2wj9\",\"k2\":null,\"payload\":{\"id\":\"tn-imp-2-1h2wj9\",\"name\":\"IB Two gx18\",\"kind\":\"leaf\",\"metric\":\"rupees\",\"sbuId\":null,\"brandId\":\"\",\"companyId\":null,\"createdAt\":\"2026-09-25T00:20:49.726Z\"},\"rev\":1,\"deleted\":false,\"seq\":95,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295665860,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-2-1h2wj9%3A%3A2027-05",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-imp-2-1h2wj9\",\"month\":\"2027-05\",\"ladder\":{\"M1\":200000,\"M2\":210000,\"M3\":220000,\"M4\":230000,\"M5\":240000},\"actual\":0,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7tcps-912a4m\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-imp-2-1h2wj9::2027-05\",\"payload\":{\"nodeId\":\"tn-imp-2-1h2wj9\",\"month\":\"2027-05\",\"ladder\":{\"M1\":200000,\"M2\":210000,\"M3\":220000,\"M4\":230000,\"M5\":240000},\"actual\":0,\"mode\":\"set\",\"status\":\"open\"},\"rev\":2,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":96}"
+   },
+   {
+    "t": 1790295665860,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-1-vemeqv%3A%3A2027-05",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-imp-1-vemeqv\",\"month\":\"2027-05\",\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":125000,\"M4\":130000,\"M5\":140000},\"actual\":90000,\"mode\":\"set\",\"status\":\"open\"},\"baseRev\":1,\"clientOpId\":\"ent-mug7tcpr-mr84oo\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-imp-1-vemeqv::2027-05\",\"payload\":{\"nodeId\":\"tn-imp-1-vemeqv\",\"month\":\"2027-05\",\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":125000,\"M4\":130000,\"M5\":140000},\"actual\":90000,\"mode\":\"set\",\"status\":\"open\"},\"rev\":2,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":97}"
+   }
+  ],
+  "B": [
+   {
+    "t": 1790295283586,
+    "m": "POST",
+    "u": "/api/auth/sign-in/username",
+    "s": 200,
+    "req": "{\"username\":\"floyd.dsil\",\"password\":\"Floyd-e2e-1\"}",
+    "body": "{\"session\":{\"id\":\"sess-p-1788350767356-zncdvn\",\"token\":\"apms-s.7A42qy8RIl3LeDtZNFExqPDc4MCiC27GPzUF_PAwjDw\",\"userId\":\"p-1788350767356-zncdvn\",\"expiresAt\":\"2026-10-25T00:14:43.577Z\"},\"user\":{\"id\":\"p-1788350767356-zncdvn\",\"name\":\"Floyd Dsilva\",\"email\":\"floyd@alienstattoos.com\",\"username\":\"floyd.dsil\",\"emailVerified\":true,\"mustResetPassword\":false,\"createdAt\":\"2026-09-25T00:14:43.577Z\",\"updatedAt\":\"2"
+   },
+   {
+    "t": 1790295283612,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 401,
+    "req": "{\"bootstrap\":true}",
+    "body": ""
+   },
+   {
+    "t": 1790295283612,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 401,
+    "req": "{\"bootstrap\":true}",
+    "body": ""
+   },
+   {
+    "t": 1790295313687,
+    "m": "POST",
+    "u": "/api/login-locks",
+    "s": 200,
+    "req": "{\"username\":\"hetal.soni\"}",
+    "body": ""
+   },
+   {
+    "t": 1790295560184,
+    "m": "PATCH",
+    "u": "/api/people/p-1788353125641-e4k6ut",
+    "s": 409,
+    "req": "{\"payload\":{\"id\":\"p-1788353125641-e4k6ut\",\"dob\":\"2001-04-23\",\"buId\":\"bu-1788158215330-akn9\",\"name\":\"Rohan Jadhav\",\"buIds\":[\"bu-1788158215330-akn9\"],\"email\":\"rj9084834@gmail.com\",\"phone\":\"8657308809\",\"title\":\"Expert Artist\",\"access\":\"employee\",\"roleId\":\"role-1788416512759-tvtl\",\"salary\":600000,\"status\":\"active\",\"brandId\":\"br-1788157786313-vyun\",\"brandIds\":[\"br-1788157786313-vyun\"],\"joinDate\":\"2023-10-02\",\"lastName\":\"Jadhav\",\"location\":\"Ahmedabad\",\"username\":\"rohan.jadh\",\"companyId\":\"co-1788157763300\",\"createdAt\":\"2026-09-02T12:45:25.641Z\",\"firstName\":\"Rohan\",\"managerId\":\"p-1788353125697-i2ke0d\"",
+    "body": "{\"ok\":false,\"table\":\"people\",\"id\":\"p-1788353125641-e4k6ut\",\"payload\":{\"id\":\"p-1788353125641-e4k6ut\",\"dob\":\"2001-04-23\",\"buId\":\"bu-1788158215330-akn9\",\"name\":\"Rohan Jadhav\",\"buIds\":[\"bu-1788158215330-akn9\"],\"email\":\"rj9084834@gmail.com\",\"phone\":\"8657308809\",\"title\":\"Expert Artist\",\"access\":\"employee\",\"roleId\":\"role-1788416512759-tvtl\",\"salary\":600000,\"status\":\"active\",\"brandId\":\"br-1788157786313-vy"
+   },
+   {
+    "t": 1790295560305,
+    "m": "PATCH",
+    "u": "/api/reward-records/2026-09/p-1788353125641-e4k6ut",
+    "s": 200,
+    "req": "{\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{\"max\":4,\"min\":4},\"high\":{\"max\":4.5,\"min\":4}},\"target\":4.5,\"weight\":1,\"achieved\":null,\"children\":[],\"isCustom\":true,\"description\":\"Tattoo Art Score Evaluating Artistic Quality, Execution & Technique.\",\"isQualifier\":false,\"lowerIsBetter\":false}],\"name\":\"Art Score\",\"weight\":0.6,\"responsibilit",
+    "body": "{\"ok\":true,\"table\":\"reward_records\",\"period\":\"2026-09\",\"personId\":\"p-1788353125641-e4k6ut\",\"payload\":{\"dq\":null,\"mix\":{\"kpi\":50,\"exec\":30,\"values\":20},\"kras\":[],\"notes\":\"\",\"brands\":[{\"id\":\"bb-1789629850790\",\"kras\":[{\"id\":\"kra-1789629894856\",\"kpis\":[{\"id\":\"kpi-1789630004987-1cmz\",\"name\":\"Tattoo Art Score\",\"unit\":\"score\",\"floor\":4,\"kpiId\":\"kpi-mu57hl23-r32y\",\"ranges\":{\"low\":{\"max\":4,\"min\":0},\"mid\":{"
+   },
+   {
+    "t": 1790295560305,
+    "m": "PATCH",
+    "u": "/api/people/p-1788353125641-e4k6ut",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"p-1788353125641-e4k6ut\",\"dob\":\"2001-04-23\",\"buId\":\"bu-1788158215330-akn9\",\"name\":\"Rohan Jadhav\",\"buIds\":[\"bu-1788158215330-akn9\"],\"email\":\"rj9084834@gmail.com\",\"phone\":\"8657308809\",\"title\":\"Expert Artist\",\"access\":\"employee\",\"roleId\":\"role-1788416512759-tvtl\",\"salary\":600000,\"status\":\"active\",\"brandId\":\"br-1788157786313-vyun\",\"brandIds\":[\"br-1788157786313-vyun\"],\"joinDate\":\"2023-10-02\",\"lastName\":\"Jadhav\",\"location\":\"Ahmedabad\",\"username\":\"rohan.jadh\",\"companyId\":\"co-1788157763300\",\"createdAt\":\"2026-09-02T12:45:25.641Z\",\"firstName\":\"Rohan\",\"managerId\":\"p-1788353125697-i2ke0d\"",
+    "body": "{\"ok\":true,\"table\":\"people\",\"id\":\"p-1788353125641-e4k6ut\",\"payload\":{\"id\":\"p-1788353125641-e4k6ut\",\"dob\":\"2001-04-23\",\"buId\":\"bu-1788158215330-akn9\",\"name\":\"Rohan Jadhav\",\"buIds\":[\"bu-1788158215330-akn9\"],\"email\":\"rj9084834@gmail.com\",\"phone\":\"8657308809\",\"title\":\"Expert Artist\",\"access\":\"employee\",\"roleId\":\"role-1788416512759-tvtl\",\"salary\":600000,\"status\":\"active\",\"brandId\":\"br-1788157786313-vyu"
+   },
+   {
+    "t": 1790295560434,
+    "m": "PATCH",
+    "u": "/api/company",
+    "s": 200,
+    "req": "{\"books\":{\"org\":{\"companies\":[{\"id\":\"co-1788157763300\",\"name\":\"Aliens\"}],\"brands\":[{\"id\":\"br-1788157805529-kyim\",\"name\":\"Aliens Tattoo School\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157792728-9704\",\"name\":\"Aliens Home\",\"companyId\":\"co-1788157763300\"},{\"id\":\"br-1788157786313-vyun\",\"name\":\"Aliens Tattoo\",\"companyId\":\"co-1788157763300\"}],\"businessUnits\":[{\"id\":\"bu-1788157820845-0q13\",\"kind\":\"network\",\"name\":\"LILA\",\"brandId\":\"br-1788157805529-kyim\",\"isGroup\":false,\"parentId\":null},{\"id\":\"bu-1788157842376-6lnd\",\"kind\":\"network\",\"name\":\"Aliens Tattoo School\",\"brandId\":\"br-1788157805529-kyim\",",
+    "body": "{\"ok\":true,\"applied\":[\"org\"],\"conflict\":[],\"skipped\":[\"plans\",\"months\",\"targets\"],\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"notebookUpdatedAt\":1790295560332}"
+   },
+   {
+    "t": 1790295621320,
+    "m": "PATCH",
+    "u": "/api/e/target-root-order/2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\",\"tn-g-mug7sczzzkpp\",\"tn-g-mug7sdtxgx0e\"]},\"baseRev\":14,\"clientOpId\":\"ent-mug7sed2-bxk98q\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-root-order\",\"id\":\"2026-09\",\"k1\":\"2026-09\",\"k2\":null,\"payload\":{\"value\":[\"tn-imp-3-63t328\",\"tn-m-mug7rkpt1fr2\",\"tn-imp-11-l1f8f8\",\"tn-imp-12-dhplsy\",\"tn-imp-16-uqp496\",\"tn-g-mug7sczzzkpp\",\"tn-g-mug7sdtxgx0e\"]},\"rev\":15,\"deleted\":false,\"seq\":73,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295621331,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-g-mug7sdtxgx0e%3A%3A2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"nodeId\":\"tn-g-mug7sdtxgx0e\",\"month\":\"2026-09\",\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"actual\":null,\"mode\":\"roll\",\"status\":\"open\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sedi-s0r0wj\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-g-mug7sdtxgx0e::2026-09\",\"payload\":{\"nodeId\":\"tn-g-mug7sdtxgx0e\",\"month\":\"2026-09\",\"ladder\":{\"M1\":0,\"M2\":0,\"M3\":0,\"M4\":0,\"M5\":0},\"actual\":null,\"mode\":\"roll\",\"status\":\"open\"},\"rev\":1,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":74}"
+   },
+   {
+    "t": 1790295621342,
+    "m": "PATCH",
+    "u": "/api/e/target-nodes/tn-g-mug7sdtxgx0e",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"tn-g-mug7sdtxgx0e\",\"name\":\"SG G2 gx18\",\"metric\":\"rupees\",\"kind\":\"group\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:20.613Z\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7seds-gaqjmj\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-nodes\",\"id\":\"tn-g-mug7sdtxgx0e\",\"k1\":\"tn-g-mug7sdtxgx0e\",\"k2\":null,\"payload\":{\"id\":\"tn-g-mug7sdtxgx0e\",\"name\":\"SG G2 gx18\",\"metric\":\"rupees\",\"kind\":\"group\",\"sbuId\":null,\"brandId\":\"br-1788157805529-kyim\",\"createdAt\":\"2026-09-25T00:20:20.613Z\"},\"rev\":1,\"deleted\":false,\"seq\":75,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295621344,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sdtxgx0e%1Ftn-m-mug7sbbpdoad%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7sbbpdoad\",\"month\":\"2026-09\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7sedt-37lyft\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7sbbpdoad\\u001f2026-09\",\"k1\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7sbbpdoad\\u001f2026-09\",\"k2\":null,\"payload\":{\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7sbbpdoad\",\"month\":\"2026-09\"},\"rev\":1,\"deleted\":false,\"seq\":76,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295621367,
+    "m": "PATCH",
+    "u": "/api/e/target-members/tn-g-mug7sdtxgx0e%1Ftn-m-mug7saihn86q%1F2026-09",
+    "s": 200,
+    "req": "{\"payload\":{\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7saihn86q\",\"month\":\"2026-09\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7seds-cwtmfj\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-members\",\"id\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7saihn86q\\u001f2026-09\",\"k1\":\"tn-g-mug7sdtxgx0e\\u001ftn-m-mug7saihn86q\\u001f2026-09\",\"k2\":null,\"payload\":{\"groupId\":\"tn-g-mug7sdtxgx0e\",\"memberId\":\"tn-m-mug7saihn86q\",\"month\":\"2026-09\"},\"rev\":1,\"deleted\":false,\"seq\":77,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1}}"
+   },
+   {
+    "t": 1790295665994,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-1-vemeqv%3A%3A2027-05",
+    "s": 409,
+    "req": "{\"payload\":{\"mode\":\"set\",\"month\":\"2027-05\",\"actual\":95000,\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":120000,\"M4\":130000,\"M5\":140000},\"nodeId\":\"tn-imp-1-vemeqv\",\"status\":\"open\",\"id\":\"tn-imp-1-vemeqv::2027-05\",\"updatedAt\":1790295665184},\"baseRev\":1,\"clientOpId\":\"ent-mug7tcs5-k56pye\"}",
+    "body": "{\"ok\":false,\"table\":\"target_cells\",\"id\":\"tn-imp-1-vemeqv::2027-05\",\"payload\":{\"mode\":\"set\",\"month\":\"2027-05\",\"actual\":90000,\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":125000,\"M4\":130000,\"M5\":140000},\"nodeId\":\"tn-imp-1-vemeqv\",\"status\":\"open\"},\"rev\":2,\"deleted\":false,\"error\":\"stale\"}"
+   },
+   {
+    "t": 1790295665994,
+    "m": "PATCH",
+    "u": "/api/e/target-history/th-1790295665184-czrd",
+    "s": 200,
+    "req": "{\"payload\":{\"id\":\"th-1790295665184-czrd\",\"at\":\"2026-09-25T00:21:05.184Z\",\"by\":\"p-1788350767356-zncdvn\",\"byName\":\"Floyd Dsilva\",\"nodeId\":\"tn-imp-1-vemeqv\",\"nodeName\":\"IB One gx18\",\"sbuName\":\"IB One gx18\",\"month\":\"2027-05\",\"metric\":\"rupees\",\"field\":\"actual\",\"from\":\"90000\",\"to\":\"95000\",\"surface\":\"targets\"},\"baseRev\":0,\"clientOpId\":\"ent-mug7tcs6-1ucgr4\"}",
+    "body": "{\"ok\":true,\"kind\":\"target-history\",\"id\":\"th-1790295665184-czrd\",\"k1\":\"th-1790295665184-czrd\",\"k2\":null,\"payload\":{\"id\":\"th-1790295665184-czrd\",\"at\":\"2026-09-25T00:21:05.184Z\",\"by\":\"p-1788350767356-zncdvn\",\"byName\":\"Floyd Dsilva\",\"nodeId\":\"tn-imp-1-vemeqv\",\"nodeName\":\"IB One gx18\",\"sbuName\":\"IB One gx18\",\"month\":\"2027-05\",\"metric\":\"rupees\",\"field\":\"actual\",\"from\":\"90000\",\"to\":\"95000\",\"surface\":\"tar"
+   },
+   {
+    "t": 1790295665994,
+    "m": "PATCH",
+    "u": "/api/target-cells/tn-imp-1-vemeqv%3A%3A2027-05",
+    "s": 200,
+    "req": "{\"payload\":{\"mode\":\"set\",\"month\":\"2027-05\",\"actual\":95000,\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":125000,\"M4\":130000,\"M5\":140000},\"nodeId\":\"tn-imp-1-vemeqv\",\"status\":\"open\",\"updatedAt\":1790295665184},\"baseRev\":2,\"clientOpId\":\"ent-mug7tcs5-k56pye\"}",
+    "body": "{\"ok\":true,\"table\":\"target_cells\",\"id\":\"tn-imp-1-vemeqv::2027-05\",\"payload\":{\"mode\":\"set\",\"month\":\"2027-05\",\"actual\":95000,\"ladder\":{\"M1\":100000,\"M2\":110000,\"M3\":125000,\"M4\":130000,\"M5\":140000},\"nodeId\":\"tn-imp-1-vemeqv\",\"status\":\"open\",\"updatedAt\":1790295665184},\"rev\":3,\"deleted\":false,\"bookGens\":{\"org\":2,\"plans\":1,\"months\":1,\"targets\":1},\"seq\":99}"
+   }
+  ],
+  "C": [
+   {
+    "t": 1790295283698,
+    "m": "POST",
+    "u": "/api/auth/sign-in/username",
+    "s": 200,
+    "req": "{\"username\":\"ronlind.mene\",\"password\":\"Ronlind-e2e-1\"}",
+    "body": "{\"session\":{\"id\":\"sess-p-1788156420676\",\"token\":\"apms-s.Jjt98zBDXBvhJOpKufW1y7h-mi1YbVqrZQsRF-vg880\",\"userId\":\"p-1788156420676\",\"expiresAt\":\"2026-10-25T00:14:43.691Z\"},\"user\":{\"id\":\"p-1788156420676\",\"name\":\"Ronlind Menezes\",\"email\":\"ronlind@alienstattoos.com\",\"username\":\"ronlind.mene\",\"emailVerified\":true,\"mustResetPassword\":false,\"createdAt\":\"2026-09-25T00:14:43.691Z\",\"updatedAt\":\"2026-09-25T00:1"
+   },
+   {
+    "t": 1790295283724,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 401,
+    "req": "{\"bootstrap\":true}",
+    "body": ""
+   },
+   {
+    "t": 1790295283724,
+    "m": "POST",
+    "u": "/api/provision-logins",
+    "s": 401,
+    "req": "{\"bootstrap\":true}",
+    "body": ""
+   }
+  ]
+ }
+}
