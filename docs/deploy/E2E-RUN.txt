@@ -1,0 +1,743 @@
+# deploy/test/e2e.sh on a throwaway VPS — commit 30a868f, 2026-09-26
+# (sim URLs: live http://127.0.0.1:3003, staging http://127.0.0.1:3013; paths shortened)
+
+######## setting up the throwaway VPS
+SIM_READY site=alienstattoo-apms live=/home/alienstattoo-apms/htdocs/apms.alienstattoo.in ssh=127.0.0.1:2222 key=<scratch>/e2e/sim/id_ed25519
+PASS  sim live answers sign-in for the deploy-check login
+
+================ 01-refresh-staging-before-any-build
+    === Refresh staging data / refresh  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Live dump -> staging DB, passwords reset, emails blanked
+    [apms-deploy 17:21:45] adding a random BETTER_AUTH_SECRET to /home/alienstattoo-apms/apms-deploy/shared/staging.env (generated here, never leaves the server)
+    [apms-deploy 17:21:45] pg_dump of the live database (read-only)
+    [apms-deploy 17:21:46] emptying aliens_apms_stage2 (objects owned by the staging role only)
+    [apms-deploy 17:21:46] restoring into aliens_apms_stage2
+    [apms-deploy 17:21:46] sanitising aliens_apms_stage2
+    [sanitize] aliens_apms_stage2: 20 tables scanned, 9 rows rewritten, all 3 people now sign in with the staging password only; emails blanked, sessions cleared
+    REFRESHED=1
+    [apms-deploy 17:21:46] no staging build yet — push to the staging branch to start it
+    --- run    Health check (sign in with the staging password)
+    === job SUCCESS
+PASS  01-refresh-staging-before-any-build: workflow exit 0 as expected
+
+================ 02-deploy-staging
+    === Deploy to staging / deploy  event=push ref=staging sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Preflight
+    [apms-deploy 17:21:50] staging: folder /home/alienstattoo-apms/apms-deploy/staging/current, PM2 'apms-staging' not started yet
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:21:56] received 20260925-172149-30a868fd (181M)
+    --- run    Install + build on the VPS
+    [apms-deploy 17:21:56] npm install --include=dev
+    [apms-deploy 17:22:04] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:22:12] built 20260925-172149-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Switch staging to this build + restart apms-staging
+    PREVIOUS=
+    [apms-deploy 17:22:12] switching staging: <none> -> 20260925-172149-30a868fd (stamp p0as83)
+    [apms-deploy 17:22:18] healthy: apms-staging online, http://127.0.0.1:3013/ -> 200, stamp p0as83
+    ACTIVE=20260925-172149-30a868fd
+    [apms-deploy 17:22:18] staging is on 20260925-172149-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    --- run    Health check (public URL)
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3013
+    --- run    Record as known-good + keep the last 5 builds
+    CONFIRMED=20260925-172149-30a868fd
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### Staging: success
+PASS  02-deploy-staging: workflow exit 0 as expected
+PASS  staging: staging password signs in (asha.rao)
+PASS  staging: asha.rao's LIVE password is refused
+PASS  staging: 0000 is refused (APMS_DEFAULT_PIN=off)
+PASS  staging: no email address left anywhere in its database
+PASS  staging: plain-text password backup table not copied
+PASS  staging: backup copies thinned to 3
+PASS  staging: PM2 env has no SMTP_PASS and the stage2 DATABASE_URL
+PASS  staging: its DB login cannot write live tables
+PASS  live DB untouched by the refresh (emails still there)
+
+================ 03-deploy-live-first-dispatch-staging
+    === Deploy to live / deploy  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Is this the commit staging runs?
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:22:25] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (not yet adopted — first deploy moves it into releases/)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:22:30] received 20260925-172223-30a868fd (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:22:30] npm install --include=dev
+    [apms-deploy 17:22:38] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:22:46] built 20260925-172223-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:22:46] backing up app folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (without node_modules)
+    [apms-deploy 17:22:57] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:22:57] backup 20260925-172246: app 95M, db 120K
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    [apms-deploy 17:22:58] first pipeline deploy: moving the current live folder to releases/20260925-172130-pre-pipeline (it stays a rollback target)
+    PREVIOUS=20260925-172130-pre-pipeline
+    [apms-deploy 17:22:58] switching live: 20260925-172130-pre-pipeline -> 20260925-172223-30a868fd (stamp p0as83)
+    [apms-deploy 17:23:08] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy 17:23:08] live is on 20260925-172223-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    ACTIVE=20260925-172223-30a868fd
+    --- run    Health check — home 200, stamp, real sign-in
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- skip   ROLLBACK — health check failed
+    --- run    Record as known-good + keep the last 5 builds
+    CONFIRMED=20260925-172223-30a868fd
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### ✅ Live is on `30a868fd` (stamp `p0as83`)
+PASS  03-deploy-live-first-dispatch-staging: workflow exit 0 as expected
+PASS  live folder is now a symlink into releases/
+PASS  old live folder kept as *-pre-pipeline (with its stray server.js)
+PASS  new live build has no stray server.js
+PASS  running process lives in the new release
+PASS  backup: app.tar.gz + a readable db.dump
+PASS  live serves the new stamp
+
+================ 04-deploy-live-crash-on-boot
+    === Deploy to live / deploy  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Is this the commit staging runs?
+    ::warning title=Not the staging build::Shipping d56d7bbc, but staging runs '30a868fd781987962a0b4ea9e1377bfb15745d49'. It was not checked on staging.
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:23:14] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-172223-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:23:19] received 20260925-172313-d56d7bbc (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:23:20] npm install --include=dev
+    [apms-deploy 17:23:28] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:23:35] built 20260925-172313-d56d7bbc: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:23:36] backing up app folder /home/alienstattoo-apms/apms-deploy/live/releases/20260925-172223-30a868fd (without node_modules)
+    [apms-deploy 17:23:47] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:23:47] backup 20260925-172336: app 95M, db 120K
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    PREVIOUS=20260925-172223-30a868fd
+    [apms-deploy 17:23:47] switching live: 20260925-172223-30a868fd -> 20260925-172313-d56d7bbc (stamp p0as83)
+    [apms-deploy 17:25:49] not healthy after 120s (pm2 status 'online', http 000)
+    [apms-deploy 17:25:49] ROLLING BACK live to 20260925-172223-30a868fd
+    [apms-deploy 17:25:58] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy] ERROR: 20260925-172313-d56d7bbc failed its health check on the server; live was rolled back to 20260925-172223-30a868fd and is healthy.
+    ::error::20260925-172313-d56d7bbc failed its health check on the server; live was rolled back to 20260925-172223-30a868fd and is healthy.
+    !!! FAILED Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    --- skip   Health check — home 200, stamp, real sign-in
+    --- skip   ROLLBACK — health check failed
+    --- skip   Record as known-good + keep the last 5 builds
+    --- run    Summary
+    === job FAILURE
+    --- step summary ---
+    ### ❌ Live deploy of `d56d7bbc` FAILED
+PASS  04-deploy-live-crash-on-boot: workflow exit 1 as expected
+PASS  crash build: live is back on the good build
+PASS  crash build: marked bad
+
+================ 05-deploy-live-broken-signin
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:26:02] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-172223-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:26:07] received 20260925-172600-8adbaafe (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:26:07] npm install --include=dev
+    [apms-deploy 17:26:16] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:26:23] built 20260925-172600-8adbaafe: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:26:23] backing up app folder /home/alienstattoo-apms/apms-deploy/live/releases/20260925-172223-30a868fd (without node_modules)
+    [apms-deploy 17:26:35] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:26:35] backup 20260925-172623: app 95M, db 120K
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    PREVIOUS=20260925-172223-30a868fd
+    [apms-deploy 17:26:36] switching live: 20260925-172223-30a868fd -> 20260925-172600-8adbaafe (stamp p0as83)
+    [apms-deploy 17:26:46] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy 17:26:46] live is on 20260925-172600-8adbaafe (server-side check passed; 'confirm' records it as good after the public check)
+    ACTIVE=20260925-172600-8adbaafe
+    --- run    Health check — home 200, stamp, real sign-in
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+    ::error title=Health check failed::sign-in as the deploy-check login answered 503 (SIM: sign-in broken)
+    HEALTH CHECK FAILED: sign-in as the deploy-check login answered 503 (SIM: sign-in broken)
+    !!! FAILED Health check — home 200, stamp, real sign-in
+    --- run    ROLLBACK — health check failed
+    ::error title=Live deploy failed — rolling back::8adbaafe failed the public health check. Rolling back to 20260925-172223-30a868fd.
+    [apms-deploy 17:26:46] rolling live back: 20260925-172600-8adbaafe -> 20260925-172223-30a868fd
+    [apms-deploy 17:26:57] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    ACTIVE=20260925-172223-30a868fd
+    STAMP=p0as83
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    ::error title=Rolled back::Live is back on 20260925-172223-30a868fd and healthy. Nothing was changed in the database.
+    !!! FAILED ROLLBACK — health check failed
+    --- skip   Record as known-good + keep the last 5 builds
+    --- run    Summary
+    === job FAILURE
+    --- step summary ---
+    ### ❌ Live deploy of `8adbaafe` FAILED
+PASS  05-deploy-live-broken-signin: workflow exit 1 as expected
+PASS  broken sign-in: workflow rolled live back to the good build
+PASS  broken sign-in: 'Rolled back … healthy' reported
+
+================ 06-deploy-live-build-fails
+    === Deploy to live / deploy  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Is this the commit staging runs?
+    ::warning title=Not the staging build::Shipping 04a8d666, but staging runs '30a868fd781987962a0b4ea9e1377bfb15745d49'. It was not checked on staging.
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:27:03] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-172223-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:27:08] received 20260925-172701-04a8d666 (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:27:08] npm install --include=dev
+    [apms-deploy 17:27:17] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy] ERROR: build failed for 20260925-172701-04a8d666
+    ::error::build failed for 20260925-172701-04a8d666
+    !!! FAILED Install + build in the new folder (live keeps running)
+    --- skip   Back up app folder + live database (pg_dump)
+    --- skip   Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    --- skip   Health check — home 200, stamp, real sign-in
+    --- skip   ROLLBACK — health check failed
+    --- skip   Record as known-good + keep the last 5 builds
+    --- run    Summary
+    === job FAILURE
+    --- step summary ---
+    ### ❌ Live deploy of `04a8d666` FAILED
+PASS  06-deploy-live-build-fails: workflow exit 1 as expected
+PASS  build failure: live untouched
+PASS  build failure: no backup, no swap attempted
+
+================ 07-deploy-live-push-release
+    === Deploy to live / deploy  event=push ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Is this the commit staging runs?
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:27:28] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-172223-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:27:33] received 20260925-172727-30a868fd (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:27:34] npm install --include=dev
+    [apms-deploy 17:27:44] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:27:52] built 20260925-172727-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:27:52] backing up app folder /home/alienstattoo-apms/apms-deploy/live/releases/20260925-172223-30a868fd (without node_modules)
+    [apms-deploy 17:28:03] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:28:03] backup 20260925-172752: app 95M, db 120K
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    PREVIOUS=20260925-172223-30a868fd
+    [apms-deploy 17:28:04] switching live: 20260925-172223-30a868fd -> 20260925-172727-30a868fd (stamp p0as83)
+    [apms-deploy 17:28:11] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy 17:28:11] live is on 20260925-172727-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    ACTIVE=20260925-172727-30a868fd
+    --- run    Health check — home 200, stamp, real sign-in
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- skip   ROLLBACK — health check failed
+    --- run    Record as known-good + keep the last 5 builds
+    CONFIRMED=20260925-172727-30a868fd
+    [apms-deploy 17:28:12] removing unbuilt live release 20260925-172701-04a8d666
+    [apms-deploy 17:28:13] slimmed 20260925-172223-30a868fd (node_modules removed; .output kept for rollback)
+    [apms-deploy 17:28:13] slimmed 20260925-172313-d56d7bbc (node_modules removed; .output kept for rollback)
+    [apms-deploy 17:28:14] slimmed 20260925-172600-8adbaafe (node_modules removed; .output kept for rollback)
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### ✅ Live is on `30a868fd` (stamp `p0as83`)
+PASS  07-deploy-live-push-release: workflow exit 0 as expected
+PASS  second deploy is live
+
+================ 08-rollback-live-default
+    === Rollback live / rollback  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Builds kept on the VPS (before)
+    --- run    Roll back
+    [apms-deploy 17:28:18] rolling live back: 20260925-172727-30a868fd -> 20260925-172223-30a868fd
+    [apms-deploy 17:28:25] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    ACTIVE=20260925-172223-30a868fd
+    STAMP=p0as83
+    --- run    Health check
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- run    Record as known-good
+    CONFIRMED=20260925-172223-30a868fd
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### Rollback: success — live is on `20260925-172223-30a868fd` (stamp `p0as83`)
+PASS  08-rollback-live-default: workflow exit 0 as expected
+PASS  default rollback skips the bad builds and lands on the previous good one
+PASS  the build rolled back from is marked bad
+
+================ 09-rollback-live-default-again
+    === Rollback live / rollback  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Builds kept on the VPS (before)
+    --- run    Roll back
+    [apms-deploy] ERROR: no earlier known-good live release to roll back to (see: apms-deploy.sh list live)
+    ::error::no earlier known-good live release to roll back to (see: apms-deploy.sh list live)
+    !!! FAILED Roll back
+    --- skip   Health check
+    --- skip   Record as known-good
+    --- run    Summary
+    === job FAILURE
+    --- step summary ---
+    ### Rollback: failure — live is on `?` (stamp `?`)
+PASS  09-rollback-live-default-again: workflow exit 1 as expected
+PASS  default rollback never picks the pre-pipeline folder (says why)
+PASS  live unchanged by the refused rollback
+
+================ 09b-rollback-live-named-pre-pipeline
+    === Rollback live / rollback  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Builds kept on the VPS (before)
+    --- run    Roll back
+    [apms-deploy 17:28:36] note: 20260925-172130-pre-pipeline is the old live folder from before the pipeline (pre BATCH-3). After the BATCH-3 cut it cannot check hashed passwords: people already signed in keep working, new sign-ins fail. See REPORT-DEPLOY-PIPELINE.md §7.
+    [apms-deploy 17:28:36] rolling live back: 20260925-172223-30a868fd -> 20260925-172130-pre-pipeline
+    [apms-deploy 17:28:46] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as39old
+    ACTIVE=20260925-172130-pre-pipeline
+    STAMP=p0as39old
+    --- run    Health check
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as39old matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- run    Record as known-good
+    CONFIRMED=20260925-172130-pre-pipeline
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### Rollback: success — live is on `20260925-172130-pre-pipeline` (stamp `p0as39old`)
+PASS  09b-rollback-live-named-pre-pipeline: workflow exit 0 as expected
+PASS  named rollback to the old folder works and warns about BATCH-3 passwords
+PASS  the old folder serves its own stamp again
+
+================ 10-rollback-live-named
+    === Rollback live / rollback  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Builds kept on the VPS (before)
+    --- run    Roll back
+    [apms-deploy 17:28:51] note: 20260925-172727-30a868fd was rolled back from before (2026-09-25T17:28:18Z rolled back from (Rollback live button)) — going there because it was asked for by name
+    [apms-deploy 17:28:51] rolling live back: 20260925-172130-pre-pipeline -> 20260925-172727-30a868fd
+    [apms-deploy 17:29:02] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    ACTIVE=20260925-172727-30a868fd
+    STAMP=p0as83
+    --- run    Health check
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- run    Record as known-good
+    CONFIRMED=20260925-172727-30a868fd
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### Rollback: success — live is on `20260925-172727-30a868fd` (stamp `p0as83`)
+PASS  10-rollback-live-named: workflow exit 0 as expected
+PASS  rollback to a named build works
+
+================ 11-deploy-live-wrong-check-secret
+    --- run    Is this the commit staging runs?
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:29:08] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-172727-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:29:13] received 20260925-172906-30a868fd (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:29:13] npm install --include=dev
+    [apms-deploy 17:29:23] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:29:30] built 20260925-172906-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:29:30] backing up app folder /home/alienstattoo-apms/apms-deploy/live/releases/20260925-172727-30a868fd (without node_modules)
+    [apms-deploy 17:29:42] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:29:42] backup 20260925-172930: app 95M, db 120K
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    PREVIOUS=20260925-172727-30a868fd
+    [apms-deploy 17:29:43] switching live: 20260925-172727-30a868fd -> 20260925-172906-30a868fd (stamp p0as83)
+    [apms-deploy 17:29:53] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy 17:29:53] live is on 20260925-172906-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    ACTIVE=20260925-172906-30a868fd
+    --- run    Health check — home 200, stamp, real sign-in
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+    ::error title=Health check failed::sign-in as the deploy-check login answered 401 (Invalid username or password)
+    HEALTH CHECK FAILED: sign-in as the deploy-check login answered 401 (Invalid username or password)
+    !!! FAILED Health check — home 200, stamp, real sign-in
+    --- run    ROLLBACK — health check failed
+    ::error title=Live deploy failed — rolling back::30a868fd failed the public health check. Rolling back to 20260925-172727-30a868fd.
+    [apms-deploy 17:29:54] rolling live back: 20260925-172906-30a868fd -> 20260925-172727-30a868fd
+    [apms-deploy 17:30:04] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    ACTIVE=20260925-172727-30a868fd
+    STAMP=p0as83
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+    ::error title=Health check failed::sign-in as the deploy-check login answered 401 (Invalid username or password)
+    HEALTH CHECK FAILED: sign-in as the deploy-check login answered 401 (Invalid username or password)
+    ::error title=ROLLBACK ALSO UNHEALTHY::Live did not pass the health check after the rollback either. Check 'pm2 logs apms-rewrite' on the VPS now.
+    !!! FAILED ROLLBACK — health check failed
+    --- skip   Record as known-good + keep the last 5 builds
+    --- run    Summary
+    === job FAILURE
+    --- step summary ---
+    ### ❌ Live deploy of `30a868fd` FAILED
+PASS  11-deploy-live-wrong-check-secret: workflow exit 1 as expected
+PASS  wrong secret: rolled back to the build that was live
+PASS  wrong secret: says loudly the rollback could not be verified either
+
+================ 12-deploy-live-more-1
+    === Deploy to live / deploy  event=push ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Is this the commit staging runs?
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:30:09] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-172727-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:30:14] received 20260925-173007-30a868fd (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:30:14] npm install --include=dev
+    [apms-deploy 17:30:23] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:30:30] built 20260925-173007-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:30:30] backing up app folder /home/alienstattoo-apms/apms-deploy/live/releases/20260925-172727-30a868fd (without node_modules)
+    [apms-deploy 17:30:42] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:30:42] backup 20260925-173030: app 95M, db 120K
+    [apms-deploy 17:30:42] removing old backup 20260925-172246
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    PREVIOUS=20260925-172727-30a868fd
+    [apms-deploy 17:30:43] switching live: 20260925-172727-30a868fd -> 20260925-173007-30a868fd (stamp p0as83)
+    [apms-deploy 17:30:53] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy 17:30:53] live is on 20260925-173007-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    ACTIVE=20260925-173007-30a868fd
+    --- run    Health check — home 200, stamp, real sign-in
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- skip   ROLLBACK — health check failed
+    --- run    Record as known-good + keep the last 5 builds
+    CONFIRMED=20260925-173007-30a868fd
+    [apms-deploy 17:30:54] pruning live release 20260925-172130-pre-pipeline
+    [apms-deploy 17:30:54] pruning live release 20260925-172223-30a868fd
+    [apms-deploy 17:30:55] slimmed 20260925-172727-30a868fd (node_modules removed; .output kept for rollback)
+    [apms-deploy 17:30:55] slimmed 20260925-172906-30a868fd (node_modules removed; .output kept for rollback)
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### ✅ Live is on `30a868fd` (stamp `p0as83`)
+PASS  12-deploy-live-more-1: workflow exit 0 as expected
+
+================ 12-deploy-live-more-2
+    === Deploy to live / deploy  event=push ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Is this the commit staging runs?
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:31:00] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-173007-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:31:05] received 20260925-173058-30a868fd (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:31:05] npm install --include=dev
+    [apms-deploy 17:31:14] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:31:22] built 20260925-173058-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:31:22] backing up app folder /home/alienstattoo-apms/apms-deploy/live/releases/20260925-173007-30a868fd (without node_modules)
+    [apms-deploy 17:31:33] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:31:34] backup 20260925-173122: app 95M, db 172K
+    [apms-deploy 17:31:34] removing old backup 20260925-172336
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    PREVIOUS=20260925-173007-30a868fd
+    [apms-deploy 17:31:34] switching live: 20260925-173007-30a868fd -> 20260925-173058-30a868fd (stamp p0as83)
+    [apms-deploy 17:31:44] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy 17:31:44] live is on 20260925-173058-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    ACTIVE=20260925-173058-30a868fd
+    --- run    Health check — home 200, stamp, real sign-in
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- skip   ROLLBACK — health check failed
+    --- run    Record as known-good + keep the last 5 builds
+    CONFIRMED=20260925-173058-30a868fd
+    [apms-deploy 17:31:45] pruning live release 20260925-172313-d56d7bbc
+    [apms-deploy 17:31:46] slimmed 20260925-173007-30a868fd (node_modules removed; .output kept for rollback)
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### ✅ Live is on `30a868fd` (stamp `p0as83`)
+PASS  12-deploy-live-more-2: workflow exit 0 as expected
+
+================ 12-deploy-live-more-3
+    === Deploy to live / deploy  event=push ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Is this the commit staging runs?
+    --- run    Preflight (PM2, folder, disk, database access)
+    [apms-deploy 17:31:51] live: PM2 'apms-rewrite' online, folder /home/alienstattoo-apms/htdocs/apms.alienstattoo.in (release 20260925-173058-30a868fd)
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:31:56] received 20260925-173149-30a868fd (181M)
+    --- run    Install + build in the new folder (live keeps running)
+    [apms-deploy 17:31:57] npm install --include=dev
+    [apms-deploy 17:32:07] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:32:14] built 20260925-173149-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Back up app folder + live database (pg_dump)
+    [apms-deploy 17:32:15] backing up app folder /home/alienstattoo-apms/apms-deploy/live/releases/20260925-173058-30a868fd (without node_modules)
+    [apms-deploy 17:32:26] pg_dump of the live database aliens_apms_staging (read-only)
+    [apms-deploy 17:32:26] backup 20260925-173215: app 95M, db 172K
+    [apms-deploy 17:32:26] removing old backup 20260925-172623
+    --- run    Swap + pm2 restart apms-rewrite (server rolls back by itself if it does not come up)
+    PREVIOUS=20260925-173058-30a868fd
+    [apms-deploy 17:32:27] switching live: 20260925-173058-30a868fd -> 20260925-173149-30a868fd (stamp p0as83)
+    [apms-deploy 17:32:37] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    [apms-deploy 17:32:37] live is on 20260925-173149-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    ACTIVE=20260925-173149-30a868fd
+    --- run    Health check — home 200, stamp, real sign-in
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- skip   ROLLBACK — health check failed
+    --- run    Record as known-good + keep the last 5 builds
+    CONFIRMED=20260925-173149-30a868fd
+    [apms-deploy 17:32:38] pruning live release 20260925-172600-8adbaafe
+    [apms-deploy 17:32:39] slimmed 20260925-173058-30a868fd (node_modules removed; .output kept for rollback)
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### ✅ Live is on `30a868fd` (stamp `p0as83`)
+PASS  12-deploy-live-more-3: workflow exit 0 as expected
+PASS  at most 5 builds kept + the running one
+PASS  inactive builds slimmed (no node_modules), running one intact
+PASS  at most 5 backups kept
+
+================ 13-rollback-after-prune
+    === Rollback live / rollback  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Builds kept on the VPS (before)
+    --- run    Roll back
+    [apms-deploy 17:32:42] rolling live back: 20260925-173149-30a868fd -> 20260925-173058-30a868fd
+    [apms-deploy 17:32:49] healthy: apms-rewrite online, http://127.0.0.1:3003/ -> 200, stamp p0as83
+    ACTIVE=20260925-173058-30a868fd
+    STAMP=p0as83
+    --- run    Health check
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3003
+    --- run    Record as known-good
+    CONFIRMED=20260925-173058-30a868fd
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### Rollback: success — live is on `20260925-173058-30a868fd` (stamp `p0as83`)
+PASS  13-rollback-after-prune: workflow exit 0 as expected
+PASS  rollback to a slimmed (.output only) build is healthy
+
+================ 14-staging-pointed-at-live-db-refused
+    === Deploy to staging / deploy  event=push ref=staging sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Preflight
+    ::error::staging DATABASE_URL points at 'aliens_apms_staging', must be 'aliens_apms_stage2'. Refusing.
+    [apms-deploy] ERROR: staging DATABASE_URL points at 'aliens_apms_staging', must be 'aliens_apms_stage2'. Refusing.
+    !!! FAILED Preflight
+    --- skip   Upload source (clean folder, never unzip-over)
+    --- skip   Install + build on the VPS
+    --- skip   Switch staging to this build + restart apms-staging
+    --- skip   Health check (public URL)
+    --- skip   Record as known-good + keep the last 5 builds
+    --- run    Summary
+    === job FAILURE
+    --- step summary ---
+    ### Staging: failure
+PASS  14-staging-pointed-at-live-db-refused: workflow exit 1 as expected
+PASS  refusal names the database
+
+================ 15-refresh-pointed-at-live-db-refused
+    === Refresh staging data / refresh  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Live dump -> staging DB, passwords reset, emails blanked
+    ::error::staging DATABASE_URL points at 'aliens_apms_staging', must be 'aliens_apms_stage2'. Refusing.
+    [apms-deploy] ERROR: staging DATABASE_URL points at 'aliens_apms_staging', must be 'aliens_apms_stage2'. Refusing.
+    !!! FAILED Live dump -> staging DB, passwords reset, emails blanked
+    --- skip   Health check (sign in with the staging password)
+    === job FAILURE
+PASS  15-refresh-pointed-at-live-db-refused: workflow exit 1 as expected
+PASS  live DB still has its data after the refused refresh
+
+================ 16-staging-with-smtp-refused
+    === Deploy to staging / deploy  event=push ref=staging sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Preflight
+    ::error::/home/alienstattoo-apms/apms-deploy/shared/staging.env sets SMTP_PASS — staging must never send mail. Remove it.
+    [apms-deploy] ERROR: /home/alienstattoo-apms/apms-deploy/shared/staging.env sets SMTP_PASS — staging must never send mail. Remove it.
+    !!! FAILED Preflight
+    --- skip   Upload source (clean folder, never unzip-over)
+    --- skip   Install + build on the VPS
+    --- skip   Switch staging to this build + restart apms-staging
+    --- skip   Health check (public URL)
+    --- skip   Record as known-good + keep the last 5 builds
+    --- run    Summary
+    === job FAILURE
+    --- step summary ---
+    ### Staging: failure
+PASS  16-staging-with-smtp-refused: workflow exit 1 as expected
+
+================ 17-refresh-staging-while-running
+    === Refresh staging data / refresh  event=workflow_dispatch ref=release sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Live dump -> staging DB, passwords reset, emails blanked
+    [apms-deploy 17:33:07] pg_dump of the live database (read-only)
+    [apms-deploy 17:33:08] stopping apms-staging
+    [apms-deploy 17:33:09] emptying aliens_apms_stage2 (objects owned by the staging role only)
+    [apms-deploy 17:33:10] restoring into aliens_apms_stage2
+    [apms-deploy 17:33:10] sanitising aliens_apms_stage2
+    [sanitize] aliens_apms_stage2: 20 tables scanned, 9 rows rewritten, all 3 people now sign in with the staging password only; emails blanked, sessions cleared
+    REFRESHED=1
+    [apms-deploy 17:33:17] healthy: apms-staging online, http://127.0.0.1:3013/ -> 200, stamp p0as83
+    --- run    Health check (sign in with the staging password)
+    === job SUCCESS
+PASS  17-refresh-staging-while-running: workflow exit 0 as expected
+
+================ 18-deploy-staging-again
+    === Deploy to staging / deploy  event=push ref=staging sha=30a868fd
+    --- run    actions/checkout@v4
+    --- run    Release id
+    --- run    ./.github/actions/vps
+    --- run      ↳ SSH setup
+    --- run      ↳ Upload deploy helpers
+    --- run    Preflight
+    [apms-deploy 17:33:21] staging: folder /home/alienstattoo-apms/apms-deploy/staging/current, PM2 'apms-staging' online
+    --- run    Upload source (clean folder, never unzip-over)
+    [apms-deploy 17:33:26] received 20260925-173320-30a868fd (181M)
+    --- run    Install + build on the VPS
+    [apms-deploy 17:33:27] npm install --include=dev
+    [apms-deploy 17:33:37] NITRO_PRESET=node-server npm run build:app
+    [apms-deploy 17:33:43] built 20260925-173320-30a868fd: stamp p0as83, 792M
+    STAMP=p0as83
+    --- run    Switch staging to this build + restart apms-staging
+    PREVIOUS=20260925-172149-30a868fd
+    [apms-deploy 17:33:44] switching staging: 20260925-172149-30a868fd -> 20260925-173320-30a868fd (stamp p0as83)
+    [apms-deploy 17:33:51] healthy: apms-staging online, http://127.0.0.1:3013/ -> 200, stamp p0as83
+    ACTIVE=20260925-173320-30a868fd
+    [apms-deploy 17:33:51] staging is on 20260925-173320-30a868fd (server-side check passed; 'confirm' records it as good after the public check)
+    --- run    Health check (public URL)
+      ok  GET / -> 200
+      ok  apms-sync stamp p0as83 matches the build
+      ok  signed-out /api/company -> 401
+      ok  sign-in as the deploy-check login -> 200
+      ok  signed-in /api/company -> 200 (then signed out)
+    HEALTH CHECK PASSED for http://127.0.0.1:3013
+    --- run    Record as known-good + keep the last 5 builds
+    CONFIRMED=20260925-173320-30a868fd
+    [apms-deploy 17:33:53] slimmed 20260925-172149-30a868fd (node_modules removed; .output kept for rollback)
+    --- run    Summary
+    === job SUCCESS
+    --- step summary ---
+    ### Staging: success
+PASS  18-deploy-staging-again: workflow exit 0 as expected
+
+######## RESULT: 59 passed, 0 failed
+EXIT 0
